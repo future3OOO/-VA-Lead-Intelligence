@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class Job(BaseModel):
     """Job posting.."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
@@ -18,8 +19,10 @@ class Job(BaseModel):
     posted_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+
 class JobCreate(BaseModel):
     """Create request."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     ats_board_id: UUID
@@ -30,8 +33,10 @@ class JobCreate(BaseModel):
     remote_allowed: bool
     posted_at: datetime
 
+
 class JobUpdate(BaseModel):
     """Partial update request."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     ats_board_id: UUID | None = None
@@ -41,5 +46,6 @@ class JobUpdate(BaseModel):
     description_text: str | None = None
     remote_allowed: bool | None = None
     posted_at: datetime | None = None
+
 
 __all__ = ["Job", "JobCreate", "JobUpdate"]

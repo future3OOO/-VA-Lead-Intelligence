@@ -20,7 +20,12 @@ async def list_review_assignment(
     skip: int = 0,
     limit: int = 100,
 ) -> list[ReviewAssignment]:
-    result = await session.scalars(select(DBReviewAssignment).where(DBReviewAssignment.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBReviewAssignment)
+        .where(DBReviewAssignment.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [ReviewAssignment.model_validate(r) for r in result.all()]
 
 
@@ -30,7 +35,9 @@ async def create_review_assignment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ReviewAssignment:
-    record = DBReviewAssignment(**data.model_dump(exclude_unset=True), workspace_id=auth_workspace_id)
+    record = DBReviewAssignment(
+        **data.model_dump(exclude_unset=True), workspace_id=auth_workspace_id
+    )
     session.add(record)
     await session.commit()
     await session.refresh(record)
@@ -43,7 +50,12 @@ async def get_review_assignment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ReviewAssignment:
-    record = await session.scalar(select(DBReviewAssignment).where(DBReviewAssignment.id == review_assignment_id, DBReviewAssignment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBReviewAssignment).where(
+            DBReviewAssignment.id == review_assignment_id,
+            DBReviewAssignment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return ReviewAssignment.model_validate(record)
@@ -56,7 +68,12 @@ async def update_review_assignment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ReviewAssignment:
-    record = await session.scalar(select(DBReviewAssignment).where(DBReviewAssignment.id == review_assignment_id, DBReviewAssignment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBReviewAssignment).where(
+            DBReviewAssignment.id == review_assignment_id,
+            DBReviewAssignment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +89,12 @@ async def delete_review_assignment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBReviewAssignment).where(DBReviewAssignment.id == review_assignment_id, DBReviewAssignment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBReviewAssignment).where(
+            DBReviewAssignment.id == review_assignment_id,
+            DBReviewAssignment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

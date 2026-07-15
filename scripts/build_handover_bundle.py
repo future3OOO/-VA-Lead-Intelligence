@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Regenerate, validate, and bundle all release artifacts."""
+
 from __future__ import annotations
 
 import argparse
@@ -77,19 +78,74 @@ def main() -> int:
     env["PYTHONPATH"] = str(REPO_ROOT / "src")
 
     steps = [
-        ("contracts", [sys.executable, "scripts/export_openapi.py", "--output", "contracts/openapi/lead-intelligence-v1.openapi.json"]),
-        ("json schemas", [sys.executable, "scripts/export_json_schemas.py", "--output-dir", "contracts/jsonschema/"]),
+        (
+            "contracts",
+            [
+                sys.executable,
+                "scripts/export_openapi.py",
+                "--output",
+                "contracts/openapi/lead-intelligence-v1.openapi.json",
+            ],
+        ),
+        (
+            "json schemas",
+            [
+                sys.executable,
+                "scripts/export_json_schemas.py",
+                "--output-dir",
+                "contracts/jsonschema/",
+            ],
+        ),
         ("config validate", [sys.executable, "scripts/validate_configs.py"]),
         ("benchmark", [sys.executable, "scripts/build_benchmark.py"]),
-        ("erd", [sys.executable, "scripts/render_erd.py", "--output", "docs/erd/lead-intelligence.svg", "--from-metadata"]),
-        ("env catalogue", [sys.executable, "scripts/export_env_catalogue.py", "--output", "infra/terraform/ENVIRONMENT_CATALOGUE.md"]),
+        (
+            "erd",
+            [
+                sys.executable,
+                "scripts/render_erd.py",
+                "--output",
+                "docs/erd/lead-intelligence.svg",
+                "--from-metadata",
+            ],
+        ),
+        (
+            "env catalogue",
+            [
+                sys.executable,
+                "scripts/export_env_catalogue.py",
+                "--output",
+                "infra/terraform/ENVIRONMENT_CATALOGUE.md",
+            ],
+        ),
     ]
 
     if not args.skip_tests:
-        steps.append(("unit tests", [sys.executable, "-m", "pytest", "tests/", "-q", "--tb=short", "--junitxml=reports/junit.xml"]))
+        steps.append(
+            (
+                "unit tests",
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "tests/",
+                    "-q",
+                    "--tb=short",
+                    "--junitxml=reports/junit.xml",
+                ],
+            )
+        )
 
     if not args.skip_terraform:
-        steps.append(("terraform validate", ["bash", "-c", "cd infra/terraform && terraform init -backend=false && terraform validate"]))
+        steps.append(
+            (
+                "terraform validate",
+                [
+                    "bash",
+                    "-c",
+                    "cd infra/terraform && terraform init -backend=false && terraform validate",
+                ],
+            )
+        )
 
     for name, cmd in steps:
         result = run(cmd, env=env)

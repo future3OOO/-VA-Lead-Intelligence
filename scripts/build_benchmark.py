@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run frozen benchmark fixtures and produce a report."""
+
 from __future__ import annotations
 
 import json
@@ -78,7 +79,9 @@ To add a fixture:
         print("Failing fixtures:")
         for r in results:
             if not r["passed"]:
-                print(f"  - {r['fixture_id']}: expected {r['expected_pass']}, got {r['actual_pass']} (score {r['score']}, jurisdiction {r['jurisdiction_allowed']})")
+                print(
+                    f"  - {r['fixture_id']}: expected {r['expected_pass']}, got {r['actual_pass']} (score {r['score']}, jurisdiction {r['jurisdiction_allowed']})"
+                )
         return 1
     return 0
 

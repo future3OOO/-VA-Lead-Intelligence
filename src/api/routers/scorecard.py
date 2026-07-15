@@ -20,7 +20,12 @@ async def list_scorecard(
     skip: int = 0,
     limit: int = 100,
 ) -> list[Scorecard]:
-    result = await session.scalars(select(DBScorecard).where(DBScorecard.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBScorecard)
+        .where(DBScorecard.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [Scorecard.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,11 @@ async def get_scorecard(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Scorecard:
-    record = await session.scalar(select(DBScorecard).where(DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBScorecard).where(
+            DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return Scorecard.model_validate(record)
@@ -56,7 +65,11 @@ async def update_scorecard(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Scorecard:
-    record = await session.scalar(select(DBScorecard).where(DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBScorecard).where(
+            DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +85,11 @@ async def delete_scorecard(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBScorecard).where(DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBScorecard).where(
+            DBScorecard.id == scorecard_id, DBScorecard.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

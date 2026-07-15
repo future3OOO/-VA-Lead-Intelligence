@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate business YAML configuration files."""
+
 from __future__ import annotations
 
 import argparse

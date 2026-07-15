@@ -20,7 +20,12 @@ async def list_company(
     skip: int = 0,
     limit: int = 100,
 ) -> list[Company]:
-    result = await session.scalars(select(DBCompany).where(DBCompany.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBCompany)
+        .where(DBCompany.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [Company.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,11 @@ async def get_company(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Company:
-    record = await session.scalar(select(DBCompany).where(DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBCompany).where(
+            DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return Company.model_validate(record)
@@ -56,7 +65,11 @@ async def update_company(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Company:
-    record = await session.scalar(select(DBCompany).where(DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBCompany).where(
+            DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +85,11 @@ async def delete_company(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBCompany).where(DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBCompany).where(
+            DBCompany.id == company_id, DBCompany.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

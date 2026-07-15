@@ -20,7 +20,12 @@ async def list_lead_assessment(
     skip: int = 0,
     limit: int = 100,
 ) -> list[LeadAssessment]:
-    result = await session.scalars(select(DBLeadAssessment).where(DBLeadAssessment.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBLeadAssessment)
+        .where(DBLeadAssessment.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [LeadAssessment.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,12 @@ async def get_lead_assessment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> LeadAssessment:
-    record = await session.scalar(select(DBLeadAssessment).where(DBLeadAssessment.id == lead_assessment_id, DBLeadAssessment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBLeadAssessment).where(
+            DBLeadAssessment.id == lead_assessment_id,
+            DBLeadAssessment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return LeadAssessment.model_validate(record)
@@ -56,7 +66,12 @@ async def update_lead_assessment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> LeadAssessment:
-    record = await session.scalar(select(DBLeadAssessment).where(DBLeadAssessment.id == lead_assessment_id, DBLeadAssessment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBLeadAssessment).where(
+            DBLeadAssessment.id == lead_assessment_id,
+            DBLeadAssessment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +87,12 @@ async def delete_lead_assessment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBLeadAssessment).where(DBLeadAssessment.id == lead_assessment_id, DBLeadAssessment.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBLeadAssessment).where(
+            DBLeadAssessment.id == lead_assessment_id,
+            DBLeadAssessment.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

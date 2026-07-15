@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate ADR markdown files from a structured list."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -107,22 +108,22 @@ ADRS = [
 
 
 def render(adr: dict[str, Any]) -> str:
-    return f"""# {adr['id']} — {adr['title']}
+    return f"""# {adr["id"]} — {adr["title"]}
 
-**Status:** {adr['status']}<br />
+**Status:** {adr["status"]}<br />
 **Date:** 2026-07-15
 
 ## Context
 
-{adr['context']}
+{adr["context"]}
 
 ## Decision
 
-{adr['decision']}
+{adr["decision"]}
 
 ## Consequences
 
-{adr['consequences']}
+{adr["consequences"]}
 
 ## Related
 

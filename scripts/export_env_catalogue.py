@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate an environment variable catalogue from Settings and Terraform."""
+
 from __future__ import annotations
 
 import argparse
@@ -40,7 +41,7 @@ def parse_terraform_vars() -> list[dict[str, Any]]:
             name = match.group(1)
             body = match.group(2)
             desc_match = re.search(r'description\s*=\s*"([^"]*)"', body)
-            default_match = re.search(r'default\s*=\s*([^\n]+)', body)
+            default_match = re.search(r"default\s*=\s*([^\n]+)", body)
             rows.append(
                 {
                     "name": f"TF_VAR_{name}",

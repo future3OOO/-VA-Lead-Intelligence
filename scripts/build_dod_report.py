@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a requirement-to-test traceability (DOD) report."""
+
 from __future__ import annotations
 
 import argparse
@@ -59,9 +60,7 @@ def main() -> int:
                 status = "blocked"
                 blocking.append(f"{req['id']} ({test}: {statuses.get(test, 'missing')})")
         evidence = ", ".join(f"`{t}`" for t in tests)
-        lines.append(
-            f"| {req['id']} | {req['title']} | {len(tests)} | {status} | {evidence} |"
-        )
+        lines.append(f"| {req['id']} | {req['title']} | {len(tests)} | {status} | {evidence} |")
 
     lines.extend(["", "## Blockers"])
     if blocking:

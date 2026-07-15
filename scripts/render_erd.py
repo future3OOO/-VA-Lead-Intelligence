@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Render an ERD from the SQLAlchemy metadata and write it as an SVG."""
+
 from __future__ import annotations
 
 import argparse
@@ -46,12 +47,18 @@ def _stabilize_edge_ids(svg_path: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--from-metadata", action="store_true", help="Render from metadata without a live database.")
+    parser.add_argument(
+        "--from-metadata", action="store_true", help="Render from metadata without a live database."
+    )
     args = parser.parse_args()
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
-    source: Any = Base.metadata if args.from_metadata else Settings().database_url.replace("+asyncpg", "+psycopg2")
+    source: Any = (
+        Base.metadata
+        if args.from_metadata
+        else Settings().database_url.replace("+asyncpg", "+psycopg2")
+    )
 
     render_er(source, str(args.output))  # type: ignore[no-untyped-call]
     _stabilize_edge_ids(args.output)

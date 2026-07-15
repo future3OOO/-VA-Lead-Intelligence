@@ -8,10 +8,12 @@ from domain.events.base import BaseEvent
 
 class CrawlResult(BaseEvent):
     """Result of a crawl."""
+
     schema_version: str = "1.0.0"
     crawl_request: dict[str, Any] = Field(default_factory=dict)
     status: CrawlStatus
     content_text: str
     links: list[str] = Field(default_factory=list)
+
 
 __all__ = ["CrawlResult"]

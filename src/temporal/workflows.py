@@ -1,4 +1,5 @@
 """Temporal workflow definitions for campaign execution."""
+
 from __future__ import annotations
 
 from datetime import timedelta

@@ -1,4 +1,5 @@
 """Lead scoring engine driven by YAML scorecards and feature vectors."""
+
 from __future__ import annotations
 
 from pathlib import Path

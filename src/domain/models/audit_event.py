@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class AuditEvent(BaseModel):
     """AuditEvent."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
@@ -17,8 +18,10 @@ class AuditEvent(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+
 class AuditEventCreate(BaseModel):
     """Create request."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     actor_id: UUID
@@ -27,8 +30,10 @@ class AuditEventCreate(BaseModel):
     resource_id: UUID
     payload: dict[str, Any] = Field(default_factory=dict)
 
+
 class AuditEventUpdate(BaseModel):
     """Partial update request."""
+
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     actor_id: UUID | None = None
@@ -36,5 +41,6 @@ class AuditEventUpdate(BaseModel):
     resource_type: str | None = None
     resource_id: UUID | None = None
     payload: dict[str, Any] | None = None
+
 
 __all__ = ["AuditEvent", "AuditEventCreate", "AuditEventUpdate"]

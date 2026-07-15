@@ -1,4 +1,5 @@
 """Tests for the lead scoring engine."""
+
 from __future__ import annotations
 
 import pytest

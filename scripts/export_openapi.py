@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Export the FastAPI OpenAPI schema to a JSON file."""
+
 from __future__ import annotations
 
 import argparse
@@ -25,6 +26,7 @@ def main() -> int:
     args = parser.parse_args()
 
     import sys
+
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
     from api.app import app  # noqa: E402

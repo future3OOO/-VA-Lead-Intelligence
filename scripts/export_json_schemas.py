@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Export JSON Schemas for all Pydantic event/domain models."""
+
 from __future__ import annotations
 
 import argparse
@@ -73,11 +74,7 @@ def main() -> int:
             if attr_name.startswith("_"):
                 continue
             cls = getattr(module, attr_name)
-            if (
-                isinstance(cls, type)
-                and issubclass(cls, BaseModel)
-                and cls is not BaseModel
-            ):
+            if isinstance(cls, type) and issubclass(cls, BaseModel) and cls is not BaseModel:
                 export_model(cls, args.output_dir)
                 count += 1
 

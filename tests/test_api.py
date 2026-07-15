@@ -1,4 +1,5 @@
 """Tests for the FastAPI application."""
+
 from __future__ import annotations
 
 from uuid import UUID, uuid4
@@ -18,7 +19,9 @@ def _headers(workspace_id: UUID | None = None) -> dict:
 
 @pytest.fixture
 async def client() -> httpx.AsyncClient:
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
         yield c
 
 
@@ -42,7 +45,9 @@ async def test_create_and_get_workspace(client: httpx.AsyncClient) -> None:
 
 
 async def test_unauthorized_request(client: httpx.AsyncClient) -> None:
-    response = await client.get("/workspaces/", headers={"x-workspace-id": str(uuid4()), "x-api-key": "wrong"})
+    response = await client.get(
+        "/workspaces/", headers={"x-workspace-id": str(uuid4()), "x-api-key": "wrong"}
+    )
     assert response.status_code == 401
 
 

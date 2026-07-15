@@ -1,4 +1,5 @@
 """Tests for Alembic migrations, run last because downgrade drops tables."""
+
 from __future__ import annotations
 
 import subprocess

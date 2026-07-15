@@ -14,4 +14,20 @@ from domain.events.outcome_event import OutcomeEvent
 from domain.events.page_snapshot_metadata import PageSnapshotMetadata
 from domain.events.review_decision import ReviewDecisionEvent
 
-__all__ = ["Discovery", "CompanyCandidate", "CompanyResolved", "AtsBoard", "JobSignal", "CrawlRequest", "CrawlResult", "PageSnapshotMetadata", "EvidenceRecord", "FeatureVector", "ClassifierInput", "ClassifierOutput", "ReviewDecisionEvent", "ExportRequest", "OutcomeEvent"]
+__all__ = [
+    "Discovery",
+    "CompanyCandidate",
+    "CompanyResolved",
+    "AtsBoard",
+    "JobSignal",
+    "CrawlRequest",
+    "CrawlResult",
+    "PageSnapshotMetadata",
+    "EvidenceRecord",
+    "FeatureVector",
+    "ClassifierInput",
+    "ClassifierOutput",
+    "ReviewDecisionEvent",
+    "ExportRequest",
+    "OutcomeEvent",
+]

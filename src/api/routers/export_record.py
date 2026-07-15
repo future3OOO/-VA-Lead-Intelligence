@@ -20,7 +20,12 @@ async def list_export_record(
     skip: int = 0,
     limit: int = 100,
 ) -> list[ExportRecord]:
-    result = await session.scalars(select(DBExportRecord).where(DBExportRecord.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBExportRecord)
+        .where(DBExportRecord.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [ExportRecord.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,11 @@ async def get_export_record(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ExportRecord:
-    record = await session.scalar(select(DBExportRecord).where(DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBExportRecord).where(
+            DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return ExportRecord.model_validate(record)
@@ -56,7 +65,11 @@ async def update_export_record(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ExportRecord:
-    record = await session.scalar(select(DBExportRecord).where(DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBExportRecord).where(
+            DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +85,11 @@ async def delete_export_record(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBExportRecord).where(DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBExportRecord).where(
+            DBExportRecord.id == export_record_id, DBExportRecord.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

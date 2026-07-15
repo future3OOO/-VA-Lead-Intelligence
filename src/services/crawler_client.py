@@ -1,4 +1,5 @@
 """Client for delegating crawl jobs to the Crawlee service."""
+
 from __future__ import annotations
 
 import os
@@ -14,7 +15,9 @@ class CrawlerClient:
         self.base_url = base_url or os.environ.get("CRAWLER_BASE_URL", "http://localhost:3000")
         self.timeout = timeout
 
-    async def submit_job(self, workspace_id: str, source_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    async def submit_job(
+        self, workspace_id: str, source_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
         """Submit a crawl job and return the accepted job metadata."""
         payload = {
             "workspace_id": workspace_id,

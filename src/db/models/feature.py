@@ -11,14 +11,20 @@ from db.base import Base
 
 class Feature(Base):
     """Extracted feature for scoring.."""
+
     __tablename__ = "feature"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workspace_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('workspace.id'), index=True)
-    company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('company.id'), index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspace.id"), index=True
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("company.id"), index=True
+    )
     feature_name: Mapped[str] = mapped_column(String(255))
     feature_value: Mapped[dict[str, Any]] = mapped_column(JSON)
     source: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
 
 __all__ = ["Feature"]

@@ -5,7 +5,9 @@ from fastapi import Header, HTTPException
 from db.session import get_session as _get_session
 
 
-async def require_workspace(x_workspace_id: str = Header(...), x_api_key: str = Header(...)) -> UUID:
+async def require_workspace(
+    x_workspace_id: str = Header(...), x_api_key: str = Header(...)
+) -> UUID:
     from config.settings import Settings
 
     settings = Settings()

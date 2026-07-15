@@ -1,4 +1,5 @@
 """Shared test configuration and fixtures."""
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,9 @@ def _create_test_db() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def _test_database() -> None:
     _create_test_db()
-    os.environ["DATABASE_URL"] = f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
+    os.environ["DATABASE_URL"] = (
+        f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
+    )
     subprocess.run(
         ["alembic", "upgrade", "head"],
         cwd=REPO_ROOT,

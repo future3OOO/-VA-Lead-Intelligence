@@ -20,7 +20,12 @@ async def list_discovery_event(
     skip: int = 0,
     limit: int = 100,
 ) -> list[DiscoveryEvent]:
-    result = await session.scalars(select(DBDiscoveryEvent).where(DBDiscoveryEvent.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBDiscoveryEvent)
+        .where(DBDiscoveryEvent.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [DiscoveryEvent.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,12 @@ async def get_discovery_event(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DiscoveryEvent:
-    record = await session.scalar(select(DBDiscoveryEvent).where(DBDiscoveryEvent.id == discovery_event_id, DBDiscoveryEvent.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBDiscoveryEvent).where(
+            DBDiscoveryEvent.id == discovery_event_id,
+            DBDiscoveryEvent.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return DiscoveryEvent.model_validate(record)
@@ -56,7 +66,12 @@ async def update_discovery_event(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DiscoveryEvent:
-    record = await session.scalar(select(DBDiscoveryEvent).where(DBDiscoveryEvent.id == discovery_event_id, DBDiscoveryEvent.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBDiscoveryEvent).where(
+            DBDiscoveryEvent.id == discovery_event_id,
+            DBDiscoveryEvent.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +87,12 @@ async def delete_discovery_event(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBDiscoveryEvent).where(DBDiscoveryEvent.id == discovery_event_id, DBDiscoveryEvent.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBDiscoveryEvent).where(
+            DBDiscoveryEvent.id == discovery_event_id,
+            DBDiscoveryEvent.workspace_id == auth_workspace_id,
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

@@ -1,4 +1,5 @@
 """Abstract adapter interface for lead-generation sources."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

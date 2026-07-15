@@ -20,7 +20,12 @@ async def list_source_health(
     skip: int = 0,
     limit: int = 100,
 ) -> list[SourceHealth]:
-    result = await session.scalars(select(DBSourceHealth).where(DBSourceHealth.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBSourceHealth)
+        .where(DBSourceHealth.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [SourceHealth.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,11 @@ async def get_source_health(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SourceHealth:
-    record = await session.scalar(select(DBSourceHealth).where(DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSourceHealth).where(
+            DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return SourceHealth.model_validate(record)
@@ -56,7 +65,11 @@ async def update_source_health(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SourceHealth:
-    record = await session.scalar(select(DBSourceHealth).where(DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSourceHealth).where(
+            DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +85,11 @@ async def delete_source_health(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBSourceHealth).where(DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSourceHealth).where(
+            DBSourceHealth.id == source_health_id, DBSourceHealth.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

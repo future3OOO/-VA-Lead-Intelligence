@@ -20,7 +20,12 @@ async def list_suppression(
     skip: int = 0,
     limit: int = 100,
 ) -> list[Suppression]:
-    result = await session.scalars(select(DBSuppression).where(DBSuppression.workspace_id == auth_workspace_id).offset(skip).limit(limit))
+    result = await session.scalars(
+        select(DBSuppression)
+        .where(DBSuppression.workspace_id == auth_workspace_id)
+        .offset(skip)
+        .limit(limit)
+    )
     return [Suppression.model_validate(r) for r in result.all()]
 
 
@@ -43,7 +48,11 @@ async def get_suppression(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Suppression:
-    record = await session.scalar(select(DBSuppression).where(DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSuppression).where(
+            DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return Suppression.model_validate(record)
@@ -56,7 +65,11 @@ async def update_suppression(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Suppression:
-    record = await session.scalar(select(DBSuppression).where(DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSuppression).where(
+            DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +85,11 @@ async def delete_suppression(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBSuppression).where(DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBSuppression).where(
+            DBSuppression.id == suppression_id, DBSuppression.workspace_id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

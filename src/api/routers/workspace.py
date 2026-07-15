@@ -43,7 +43,11 @@ async def get_workspace(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Workspace:
-    record = await session.scalar(select(DBWorkspace).where(DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBWorkspace).where(
+            DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     return Workspace.model_validate(record)
@@ -56,7 +60,11 @@ async def update_workspace(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Workspace:
-    record = await session.scalar(select(DBWorkspace).where(DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBWorkspace).where(
+            DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     for key, value in data.model_dump(exclude_unset=True).items():
@@ -72,7 +80,11 @@ async def delete_workspace(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    record = await session.scalar(select(DBWorkspace).where(DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id))
+    record = await session.scalar(
+        select(DBWorkspace).where(
+            DBWorkspace.id == workspace_id, DBWorkspace.id == auth_workspace_id
+        )
+    )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
     await session.delete(record)

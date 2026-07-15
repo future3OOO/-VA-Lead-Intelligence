@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate Pydantic domain models, events, SQLAlchemy models and FastAPI routers from spec/domain.yaml."""
+
 from __future__ import annotations
 
 import argparse
@@ -76,7 +77,9 @@ def py_default(default: Any) -> str:
     return repr(default)
 
 
-def pydantic_default(field: dict[str, Any], enums: dict[str, list[str]], for_create: bool = False) -> str:
+def pydantic_default(
+    field: dict[str, Any], enums: dict[str, list[str]], for_create: bool = False
+) -> str:
     if field.get("primary"):
         return "Field(default_factory=uuid4)"
     if field.get("auto"):
@@ -93,7 +96,11 @@ def pydantic_default(field: dict[str, Any], enums: dict[str, list[str]], for_cre
         return ""
     if field["type"].startswith("enum:"):
         enum_name = py_type(field["type"], enums)
-        raw = default[1:-1] if isinstance(default, str) and default.startswith("'") and default.endswith("'") else default
+        raw = (
+            default[1:-1]
+            if isinstance(default, str) and default.startswith("'") and default.endswith("'")
+            else default
+        )
         return f"{enum_name}.{enum_member_name(raw)}"
     return py_default(default)
 
@@ -147,7 +154,12 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
         else:
             kwargs.append("server_default=func.now()")
     default = field.get("default")
-    if not field.get("primary") and not field.get("auto") and default is not None and sql in ("String(255)", "String(2048)", "Boolean", "Integer", "Float"):
+    if (
+        not field.get("primary")
+        and not field.get("auto")
+        and default is not None
+        and sql in ("String(255)", "String(2048)", "Boolean", "Integer", "Float")
+    ):
         kwargs.append(f"default={py_default(default)}")
     args = sql + ((", " + ", ".join(kwargs)) if kwargs else "")
     return f"    {name}: Mapped[{mapped_py_type(field['type'])}] = mapped_column({args})"
@@ -176,8 +188,9 @@ def generate_enums(enums: dict[str, list[str]]) -> str:
 
 def generate_base_event(base_fields: list[dict[str, Any]], enums: dict[str, list[str]]) -> str:
     fields = [response_field(f, enums) for f in base_fields]
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         from datetime import datetime
         from uuid import UUID, uuid4
 
@@ -188,10 +201,18 @@ def generate_base_event(base_fields: list[dict[str, Any]], enums: dict[str, list
             model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
 
         """
-    ) + "\n".join(fields) + "\n\n__all__ = [\"BaseEvent\"]\n"
+        )
+        + "\n".join(fields)
+        + '\n\n__all__ = ["BaseEvent"]\n'
+    )
 
 
-def generate_event(class_name: str, spec: dict[str, Any], base_fields: list[dict[str, Any]], enums: dict[str, list[str]]) -> str:
+def generate_event(
+    class_name: str,
+    spec: dict[str, Any],
+    base_fields: list[dict[str, Any]],
+    enums: dict[str, list[str]],
+) -> str:
     all_fields = base_fields + spec.get("fields", [])
     event_fields = [response_field(f, enums) for f in spec.get("fields", [])]
     version = spec.get("schema_version", "1.0.0")
@@ -214,7 +235,7 @@ def generate_event(class_name: str, spec: dict[str, Any], base_fields: list[dict
         imports.append(f"from config.enums import {', '.join(sorted(used_enums))}")
     imports.extend(["", "from domain.events.base import BaseEvent", ""])
     lines = imports + [
-        f'class {class_name}(BaseEvent):',
+        f"class {class_name}(BaseEvent):",
         f'    """{spec.get("description", "")}"""',
         f'    schema_version: str = "{version}"',
     ]
@@ -223,11 +244,15 @@ def generate_event(class_name: str, spec: dict[str, Any], base_fields: list[dict
     return "\n".join(lines) + "\n"
 
 
-def generate_pydantic_models(class_name: str, spec: dict[str, Any], enums: dict[str, list[str]]) -> str:
+def generate_pydantic_models(
+    class_name: str, spec: dict[str, Any], enums: dict[str, list[str]]
+) -> str:
     response_fields = [response_field(f, enums) for f in spec["fields"]]
     create_fields = [line for line in (create_field(f, enums) for f in spec["fields"]) if line]
     update_fields = [line for line in (update_field(f, enums) for f in spec["fields"]) if line]
-    used_enums = {py_type(f["type"], enums) for f in spec["fields"] if f["type"].startswith("enum:")}
+    used_enums = {
+        py_type(f["type"], enums) for f in spec["fields"] if f["type"].startswith("enum:")
+    }
     lines = [
         "from datetime import date, datetime",
         "from typing import Any",
@@ -237,11 +262,32 @@ def generate_pydantic_models(class_name: str, spec: dict[str, Any], enums: dict[
     ]
     if used_enums:
         lines.append(f"from config.enums import {', '.join(sorted(used_enums))}")
-    lines.extend(["", f'class {class_name}(BaseModel):', f'    """{spec.get("description", class_name)}."""', '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)'])
+    lines.extend(
+        [
+            "",
+            f"class {class_name}(BaseModel):",
+            f'    """{spec.get("description", class_name)}."""',
+            '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
+        ]
+    )
     lines.extend(response_fields)
-    lines.extend(["", f'class {class_name}Create(BaseModel):', '    """Create request."""', '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)'])
+    lines.extend(
+        [
+            "",
+            f"class {class_name}Create(BaseModel):",
+            '    """Create request."""',
+            '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
+        ]
+    )
     lines.extend(create_fields)
-    lines.extend(["", f'class {class_name}Update(BaseModel):', '    """Partial update request."""', '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)'])
+    lines.extend(
+        [
+            "",
+            f"class {class_name}Update(BaseModel):",
+            '    """Partial update request."""',
+            '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
+        ]
+    )
     lines.extend(update_fields)
     lines.extend(["", f'__all__ = ["{class_name}", "{class_name}Create", "{class_name}Update"]'])
     return "\n".join(lines) + "\n"
@@ -257,19 +303,21 @@ def generate_sqlalchemy_model(name: str, class_name: str, spec: dict[str, Any]) 
         lines.append("from datetime import date, datetime")
     if has_json:
         lines.append("from typing import Any")
-    lines.extend([
-        "from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func",
-        "from sqlalchemy.dialects.postgresql import UUID",
-        "from sqlalchemy.orm import Mapped, mapped_column",
-        "",
-        "from db.base import Base",
-        "",
-        "",
-        f"class {class_name}(Base):",
-        f'    """{spec.get("description", class_name)}."""',
-        f'    __tablename__ = "{name}"',
-        "",
-    ])
+    lines.extend(
+        [
+            "from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func",
+            "from sqlalchemy.dialects.postgresql import UUID",
+            "from sqlalchemy.orm import Mapped, mapped_column",
+            "",
+            "from db.base import Base",
+            "",
+            "",
+            f"class {class_name}(Base):",
+            f'    """{spec.get("description", class_name)}."""',
+            f'    __tablename__ = "{name}"',
+            "",
+        ]
+    )
     lines.extend(fields)
     lines.extend(["", f'__all__ = ["{class_name}"]'])
     return "\n".join(lines) + "\n"
@@ -387,7 +435,9 @@ def main() -> None:
     entities = data.get("entities", {})
 
     (SRC / "config" / "enums.py").write_text(generate_enums(enums))
-    (SRC / "domain" / "events" / "base.py").write_text(generate_base_event(base_event_fields, enums))
+    (SRC / "domain" / "events" / "base.py").write_text(
+        generate_base_event(base_event_fields, enums)
+    )
 
     def safe_class_name(name: str) -> str:
         candidate = to_pascal(name)
@@ -396,10 +446,17 @@ def main() -> None:
     events_init = []
     for name, spec in events.items():
         event_class = safe_class_name(name)
-        (SRC / "domain" / "events" / f"{name}.py").write_text(generate_event(event_class, spec, base_event_fields, enums))
+        (SRC / "domain" / "events" / f"{name}.py").write_text(
+            generate_event(event_class, spec, base_event_fields, enums)
+        )
         events_init.append(f"from domain.events.{name} import {event_class}")
     event_names = [line.split()[-1] for line in events_init]
-    (SRC / "domain" / "events" / "__init__.py").write_text("\n".join(events_init) + "\n\n__all__ = [" + ", ".join(f'"{n}"' for n in event_names) + "]\n")
+    (SRC / "domain" / "events" / "__init__.py").write_text(
+        "\n".join(events_init)
+        + "\n\n__all__ = ["
+        + ", ".join(f'"{n}"' for n in event_names)
+        + "]\n"
+    )
 
     domain_models_init = []
     db_models_init = []
@@ -407,9 +464,15 @@ def main() -> None:
     for name, spec in entities.items():
         db_class = to_pascal(name)
         model_class = db_class if db_class not in enums else f"{db_class}Record"
-        (SRC / "domain" / "models" / f"{name}.py").write_text(generate_pydantic_models(model_class, spec, enums))
-        domain_models_init.append(f"from domain.models.{name} import {model_class}, {model_class}Create, {model_class}Update")
-        (SRC / "db" / "models" / f"{name}.py").write_text(generate_sqlalchemy_model(name, db_class, spec))
+        (SRC / "domain" / "models" / f"{name}.py").write_text(
+            generate_pydantic_models(model_class, spec, enums)
+        )
+        domain_models_init.append(
+            f"from domain.models.{name} import {model_class}, {model_class}Create, {model_class}Update"
+        )
+        (SRC / "db" / "models" / f"{name}.py").write_text(
+            generate_sqlalchemy_model(name, db_class, spec)
+        )
         db_models_init.append(f"from db.models.{name} import {db_class}")
         router = generate_router(name, model_class, db_class, spec)
         if router:
@@ -419,11 +482,26 @@ def main() -> None:
     domain_model_names = []
     for line in domain_models_init:
         domain_model_names.extend([n.strip() for n in line.split("import", 1)[1].split(",")])
-    (SRC / "domain" / "models" / "__init__.py").write_text("\n".join(domain_models_init) + "\n\n__all__ = [" + ", ".join(f'"{n}"' for n in domain_model_names) + "]\n")
+    (SRC / "domain" / "models" / "__init__.py").write_text(
+        "\n".join(domain_models_init)
+        + "\n\n__all__ = ["
+        + ", ".join(f'"{n}"' for n in domain_model_names)
+        + "]\n"
+    )
     db_model_names = [line.split()[-1] for line in db_models_init]
-    (SRC / "db" / "models" / "__init__.py").write_text("\n".join(db_models_init) + "\n\n__all__ = [" + ", ".join(f'"{n}"' for n in db_model_names) + "]\n")
+    (SRC / "db" / "models" / "__init__.py").write_text(
+        "\n".join(db_models_init)
+        + "\n\n__all__ = ["
+        + ", ".join(f'"{n}"' for n in db_model_names)
+        + "]\n"
+    )
     router_names = [imp.split()[-1] for imp in router_imports]
-    router_init = "\n".join(router_imports) + "\n\n__all__ = [" + ", ".join(f'"{n}"' for n in router_names) + "]\n"
+    router_init = (
+        "\n".join(router_imports)
+        + "\n\n__all__ = ["
+        + ", ".join(f'"{n}"' for n in router_names)
+        + "]\n"
+    )
     (SRC / "api" / "routers" / "__init__.py").write_text(router_init)
 
     app_body = textwrap.dedent(

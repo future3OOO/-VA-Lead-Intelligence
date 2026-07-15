@@ -1,4 +1,5 @@
 """Source and jurisdiction policy engine."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,7 +22,10 @@ def evaluate_source(source_id: str, path: Path | None = None) -> dict[str, Any]:
     for source in data.get("sources", []):
         if source["id"] == source_id:
             if source.get("allowed"):
-                return {"allowed": True, "ttl_hours": source.get("rate_limit_daily", data.get("default_ttl_hours", 720))}
+                return {
+                    "allowed": True,
+                    "ttl_hours": source.get("rate_limit_daily", data.get("default_ttl_hours", 720)),
+                }
             return {"allowed": False, "reason": "source_blocked"}
     prohibited = {p["id"] for p in data.get("prohibited_sources", [])}
     if source_id in prohibited:

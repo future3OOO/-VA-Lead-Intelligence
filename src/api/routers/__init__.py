@@ -12,4 +12,18 @@ from api.routers.source_health import router as source_health_router
 from api.routers.suppression import router as suppression_router
 from api.routers.workspace import router as workspace_router
 
-__all__ = ["workspace_router", "company_router", "campaign_router", "campaign_run_router", "discovery_event_router", "scorecard_router", "lead_assessment_router", "review_assignment_router", "suppression_router", "export_record_router", "outcome_router", "cost_ledger_router", "source_health_router"]
+__all__ = [
+    "workspace_router",
+    "company_router",
+    "campaign_router",
+    "campaign_run_router",
+    "discovery_event_router",
+    "scorecard_router",
+    "lead_assessment_router",
+    "review_assignment_router",
+    "suppression_router",
+    "export_record_router",
+    "outcome_router",
+    "cost_ledger_router",
+    "source_health_router",
+]
