@@ -44,7 +44,6 @@ def main() -> int:
     schema = app.openapi()
     schema.setdefault("info", {})
     schema["info"]["x-build-sha"] = build_sha()
-    schema["info"]["x-generated-at"] = subprocess.check_output(["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"], text=True).strip()
 
     sorted_schema = deep_sort(schema)
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -13,6 +13,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from eralchemy2 import render_er  # noqa: E402
 
 from config.settings import Settings  # noqa: E402
+import db.models  # noqa: E402, F401
 from db.base import Base  # noqa: E402
 
 

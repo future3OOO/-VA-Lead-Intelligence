@@ -86,7 +86,7 @@ def main() -> int:
     ]
 
     if not args.skip_tests:
-        steps.append(("unit tests", [sys.executable, "-m", "pytest", "tests/", "-q", "--tb=short"]))
+        steps.append(("unit tests", [sys.executable, "-m", "pytest", "tests/", "-q", "--tb=short", "--junitxml=reports/junit.xml"]))
 
     if not args.skip_terraform:
         steps.append(("terraform validate", ["bash", "-c", "cd infra/terraform && terraform init -backend=false && terraform validate"]))
