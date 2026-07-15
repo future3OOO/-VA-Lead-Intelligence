@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "OutcomeType": {
+      "enum": [
+        "contacted",
+        "responded",
+        "qualified",
+        "converted",
+        "uninterested",
+        "bounced"
+      ],
+      "title": "OutcomeType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/outcome-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Outreach outcome..",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "lead_id": {
+      "format": "uuid",
+      "title": "Lead Id",
+      "type": "string"
+    },
+    "notes": {
+      "title": "Notes",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "outcome_type": {
+      "$ref": "#/definitions/OutcomeType"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "lead_id",
+    "outcome_type",
+    "occurred_at",
+    "notes"
+  ],
+  "title": "Outcome",
+  "type": "object",
+  "version": "1.0.0"
+}

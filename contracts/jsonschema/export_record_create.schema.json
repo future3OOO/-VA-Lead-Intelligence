@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "ExportStatus": {
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "title": "ExportStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/export_record_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "destination": {
+      "title": "Destination",
+      "type": "string"
+    },
+    "lead_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Lead Ids",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/definitions/ExportStatus",
+      "default": "pending"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "campaign_id",
+    "destination",
+    "completed_at"
+  ],
+  "title": "ExportRecordCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

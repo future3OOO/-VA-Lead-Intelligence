@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "OutcomeType": {
+      "enum": [
+        "contacted",
+        "responded",
+        "qualified",
+        "converted",
+        "uninterested",
+        "bounced"
+      ],
+      "title": "OutcomeType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/outcome_update-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Partial update request.",
+  "properties": {
+    "lead_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lead Id"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "occurred_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Occurred At"
+    },
+    "outcome_type": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/OutcomeType"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "title": "OutcomeUpdate",
+  "type": "object",
+  "version": "1.0.0"
+}

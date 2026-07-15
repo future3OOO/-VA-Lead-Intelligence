@@ -1,0 +1,35 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/operational_metadata_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "value": {
+      "additionalProperties": false,
+      "title": "Value",
+      "type": "object"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "key"
+  ],
+  "title": "OperationalMetadataCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/feature-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Extracted feature for scoring..",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "feature_name": {
+      "title": "Feature Name",
+      "type": "string"
+    },
+    "feature_value": {
+      "additionalProperties": false,
+      "title": "Feature Value",
+      "type": "object"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "feature_name",
+    "source"
+  ],
+  "title": "Feature",
+  "type": "object",
+  "version": "1.0.0"
+}

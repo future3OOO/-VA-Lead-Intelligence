@@ -1,0 +1,43 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/scorecard-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Released scorecard version metadata..",
+  "properties": {
+    "config_path": {
+      "title": "Config Path",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "is_active": {
+      "title": "Is Active",
+      "type": "boolean"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "version",
+    "config_path",
+    "is_active"
+  ],
+  "title": "Scorecard",
+  "type": "object",
+  "version": "1.0.0"
+}

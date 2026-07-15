@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "LeadStatus": {
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected",
+        "suppressed",
+        "exported"
+      ],
+      "title": "LeadStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/lead_assessment-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Scored lead..",
+  "properties": {
+    "assessed_at": {
+      "format": "date-time",
+      "title": "Assessed At",
+      "type": "string"
+    },
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "score": {
+      "title": "Score",
+      "type": "number"
+    },
+    "status": {
+      "$ref": "#/definitions/LeadStatus",
+      "default": "pending"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "campaign_id",
+    "score",
+    "assessed_at"
+  ],
+  "title": "LeadAssessment",
+  "type": "object",
+  "version": "1.0.0"
+}

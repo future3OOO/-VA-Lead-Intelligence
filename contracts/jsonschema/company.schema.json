@@ -1,0 +1,63 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Normalized company..",
+  "properties": {
+    "canonical_name": {
+      "title": "Canonical Name",
+      "type": "string"
+    },
+    "country_code": {
+      "title": "Country Code",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "employee_count": {
+      "title": "Employee Count",
+      "type": "integer"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "industry": {
+      "title": "Industry",
+      "type": "string"
+    },
+    "primary_domain": {
+      "title": "Primary Domain",
+      "type": "string"
+    },
+    "status": {
+      "default": "active",
+      "title": "Status",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "canonical_name",
+    "primary_domain",
+    "country_code",
+    "industry",
+    "employee_count"
+  ],
+  "title": "Company",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,34 @@
+version: "1.0.0"
+approved_at: "2026-07-15"
+approved_by: "legal-and-compliance"
+default_status: allowed
+retention_days: 1095
+rules:
+  - country_code: "US"
+    status: allowed
+    data_subject_rights: ["access", "deletion", "opt_out"]
+    notes: "Follow CAN-SPAM and state privacy laws."
+  - country_code: "GB"
+    status: allowed
+    data_subject_rights: ["access", "deletion", "opt_out"]
+    notes: "UK GDPR lawful basis: legitimate interest with opt-out."
+  - country_code: "DE"
+    status: allowed
+    data_subject_rights: ["access", "deletion", "opt_out"]
+    notes: "German BDSR requires documented legitimate-interest assessment."
+  - country_code: "CA"
+    status: conditional
+    data_subject_rights: ["access", "deletion", "opt_out"]
+    notes: "CASL requires express or implied consent for CEM."
+  - country_code: "CN"
+    status: blocked
+    reason: "prohibited_by_policy"
+  - country_code: "RU"
+    status: blocked
+    reason: "prohibited_by_policy"
+  - country_code: "KP"
+    status: blocked
+    reason: "sanctions"
+  - country_code: "IR"
+    status: blocked
+    reason: "sanctions"

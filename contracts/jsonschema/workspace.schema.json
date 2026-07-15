@@ -1,0 +1,48 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/workspace-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Tenant workspace..",
+  "properties": {
+    "billing_email": {
+      "format": "email",
+      "title": "Billing Email",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "plan": {
+      "default": "trial",
+      "title": "Plan",
+      "type": "string"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "slug",
+    "billing_email"
+  ],
+  "title": "Workspace",
+  "type": "object",
+  "version": "1.0.0"
+}

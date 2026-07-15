@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "ReviewDecision": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "needs_review"
+      ],
+      "title": "ReviewDecision",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/review_decision_record-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "ReviewDecisionRecord.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision": {
+      "$ref": "#/definitions/ReviewDecision"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "lead_id": {
+      "format": "uuid",
+      "title": "Lead Id",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "reviewer_id": {
+      "format": "uuid",
+      "title": "Reviewer Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "lead_id",
+    "reviewer_id",
+    "decision",
+    "reason"
+  ],
+  "title": "ReviewDecisionRecord",
+  "type": "object",
+  "version": "1.0.0"
+}

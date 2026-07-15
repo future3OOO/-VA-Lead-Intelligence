@@ -1,0 +1,41 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_identifier_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "external_id": {
+      "title": "External Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "source",
+    "external_id"
+  ],
+  "title": "CompanyIdentifierCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

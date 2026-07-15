@@ -1,0 +1,58 @@
+version: "1.0.0"
+approved_at: "2026-07-15"
+approved_by: "compliance-officer"
+default_ttl_hours: 720
+sources:
+  - id: linkedin_public
+    name: "LinkedIn Public"
+    allowed: true
+    attribution_required: true
+    rate_limit_rpm: 60
+    rate_limit_daily: 5000
+    categories: ["public", "professional_network"]
+    do_not_scrape_if_robots_disallow: true
+    required_headers:
+      user_agent: "VA-LeadBot/1.0"
+  - id: company_careers_page
+    name: "Company Careers Page"
+    allowed: true
+    attribution_required: true
+    rate_limit_rpm: 30
+    rate_limit_daily: 2000
+    categories: ["public", "first_party"]
+    do_not_scrape_if_robots_disallow: true
+    required_headers:
+      user_agent: "VA-LeadBot/1.0"
+  - id: crunchbase
+    name: "Crunchbase"
+    allowed: true
+    attribution_required: true
+    rate_limit_rpm: 30
+    rate_limit_daily: 2000
+    categories: ["public", "commercial"]
+    do_not_scrape_if_robots_disallow: true
+    required_headers:
+      user_agent: "VA-LeadBot/1.0"
+  - id: builtwith
+    name: "BuiltWith"
+    allowed: true
+    attribution_required: true
+    rate_limit_rpm: 20
+    rate_limit_daily: 1000
+    categories: ["commercial", "technographic"]
+    do_not_scrape_if_robots_disallow: true
+    required_headers:
+      user_agent: "VA-LeadBot/1.0"
+  - id: manual_import
+    name: "Manual Import"
+    allowed: true
+    attribution_required: true
+    rate_limit_rpm: 0
+    rate_limit_daily: 0
+    categories: ["user_provided"]
+    consent_record_required: true
+prohibited_sources:
+  - id: dark_web
+    reason: "prohibited_jurisdiction_and_risk"
+  - id: password_dump
+    reason: "prohibited_privacy_and_security"

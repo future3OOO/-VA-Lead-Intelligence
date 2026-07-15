@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/source_health-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Source adapter health..",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "error_count": {
+      "title": "Error Count",
+      "type": "integer"
+    },
+    "healthy": {
+      "title": "Healthy",
+      "type": "boolean"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "last_checked_at": {
+      "format": "date-time",
+      "title": "Last Checked At",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "source_id",
+    "healthy",
+    "last_checked_at",
+    "error_count"
+  ],
+  "title": "SourceHealth",
+  "type": "object",
+  "version": "1.0.0"
+}

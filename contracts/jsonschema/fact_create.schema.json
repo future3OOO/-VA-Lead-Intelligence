@@ -1,0 +1,52 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/fact_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "confidence": {
+      "title": "Confidence",
+      "type": "number"
+    },
+    "evidence_record_id": {
+      "format": "uuid",
+      "title": "Evidence Record Id",
+      "type": "string"
+    },
+    "fact_type": {
+      "title": "Fact Type",
+      "type": "string"
+    },
+    "value": {
+      "additionalProperties": false,
+      "title": "Value",
+      "type": "object"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "evidence_record_id",
+    "company_id",
+    "fact_type",
+    "confidence"
+  ],
+  "title": "FactCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

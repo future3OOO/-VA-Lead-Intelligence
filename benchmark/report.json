@@ -1,0 +1,30 @@
+{
+  "total": 3,
+  "failures": 0,
+  "results": [
+    {
+      "fixture_id": "blocked-jurisdiction-001",
+      "expected_pass": false,
+      "actual_pass": false,
+      "score": 100.0,
+      "jurisdiction_allowed": false,
+      "passed": true
+    },
+    {
+      "fixture_id": "high-fit-001",
+      "expected_pass": true,
+      "actual_pass": true,
+      "score": 100.0,
+      "jurisdiction_allowed": true,
+      "passed": true
+    },
+    {
+      "fixture_id": "low-fit-001",
+      "expected_pass": false,
+      "actual_pass": false,
+      "score": 15.0,
+      "jurisdiction_allowed": true,
+      "passed": true
+    }
+  ]
+}

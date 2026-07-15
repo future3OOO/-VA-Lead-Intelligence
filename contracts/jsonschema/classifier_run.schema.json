@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/classifier_run-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "ClassifierRun.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "input": {
+      "additionalProperties": false,
+      "title": "Input",
+      "type": "object"
+    },
+    "model_provider": {
+      "title": "Model Provider",
+      "type": "string"
+    },
+    "output": {
+      "additionalProperties": false,
+      "title": "Output",
+      "type": "object"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "model_provider"
+  ],
+  "title": "ClassifierRun",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/evidence_record-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "EvidenceRecord.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "evidence_type": {
+      "title": "Evidence Type",
+      "type": "string"
+    },
+    "extracted_facts": {
+      "additionalProperties": false,
+      "title": "Extracted Facts",
+      "type": "object"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "signal_strength": {
+      "title": "Signal Strength",
+      "type": "number"
+    },
+    "source_event_id": {
+      "format": "uuid",
+      "title": "Source Event Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "source_event_id",
+    "evidence_type",
+    "signal_strength"
+  ],
+  "title": "EvidenceRecord",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,52 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/evidence_record_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "evidence_type": {
+      "title": "Evidence Type",
+      "type": "string"
+    },
+    "extracted_facts": {
+      "additionalProperties": false,
+      "title": "Extracted Facts",
+      "type": "object"
+    },
+    "signal_strength": {
+      "title": "Signal Strength",
+      "type": "number"
+    },
+    "source_event_id": {
+      "format": "uuid",
+      "title": "Source Event Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "source_event_id",
+    "evidence_type",
+    "signal_strength"
+  ],
+  "title": "EvidenceRecordCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

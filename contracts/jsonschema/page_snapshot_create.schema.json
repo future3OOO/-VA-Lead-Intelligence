@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/page_snapshot_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "etag": {
+      "title": "Etag",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "snapshot_path": {
+      "title": "Snapshot Path",
+      "type": "string"
+    },
+    "url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "url",
+    "snapshot_path",
+    "etag",
+    "fetched_at"
+  ],
+  "title": "PageSnapshotCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

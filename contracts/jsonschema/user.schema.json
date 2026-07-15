@@ -1,0 +1,33 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/user-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "User.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "email": {
+      "format": "email",
+      "title": "Email",
+      "type": "string"
+    },
+    "full_name": {
+      "title": "Full Name",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "email",
+    "full_name"
+  ],
+  "title": "User",
+  "type": "object",
+  "version": "1.0.0"
+}

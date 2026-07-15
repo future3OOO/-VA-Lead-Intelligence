@@ -1,0 +1,38 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/operational_metadata-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "OperationalMetadata.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "value": {
+      "additionalProperties": false,
+      "title": "Value",
+      "type": "object"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "key"
+  ],
+  "title": "OperationalMetadata",
+  "type": "object",
+  "version": "1.0.0"
+}

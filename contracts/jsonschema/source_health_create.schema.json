@@ -1,0 +1,46 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/source_health_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "error_count": {
+      "title": "Error Count",
+      "type": "integer"
+    },
+    "healthy": {
+      "title": "Healthy",
+      "type": "boolean"
+    },
+    "last_checked_at": {
+      "format": "date-time",
+      "title": "Last Checked At",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "source_id",
+    "healthy",
+    "last_checked_at",
+    "error_count"
+  ],
+  "title": "SourceHealthCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "ReviewDecision": {
+      "enum": [
+        "accepted",
+        "rejected",
+        "needs_review"
+      ],
+      "title": "ReviewDecision",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/review_decision_event-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Human review decision on a lead.",
+  "properties": {
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "decision": {
+      "$ref": "#/definitions/ReviewDecision"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "lead_id": {
+      "format": "uuid",
+      "title": "Lead Id",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "reviewer_id": {
+      "format": "uuid",
+      "title": "Reviewer Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "workspace_id",
+    "correlation_id",
+    "producer",
+    "lead_id",
+    "decision",
+    "reviewer_id"
+  ],
+  "title": "ReviewDecisionEvent",
+  "type": "object",
+  "version": "1.0.0"
+}

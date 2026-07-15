@@ -1,0 +1,49 @@
+version: "1.0.0"
+approved_at: "2026-07-15"
+approved_by: "va-lead-intelligence-product"
+capabilities:
+  - id: intent_to_hire
+    name: "Intent to Hire"
+    category: demand
+    description: "Evidence that a company is actively recruiting for roles matching our target personas."
+    signals:
+      - job_posting_seniority
+      - hiring_velocity
+      - role_skill_match
+    scorable: true
+  - id: growth_momentum
+    name: "Growth Momentum"
+    category: firmographic
+    description: "Headcount, funding, and revenue expansion indicators."
+    signals:
+      - employee_count_delta
+      - funding_round_recency
+      - revenue_range
+    scorable: true
+  - id: technology_fit
+    name: "Technology Fit"
+    category: technographic
+    description: "Presence of complementary or target technologies in public evidence."
+    signals:
+      - stack_extraction
+      - integration_mentions
+      - job_skill_requirements
+    scorable: true
+  - id: market_access
+    name: "Market Access"
+    category: jurisdiction
+    description: "Geographic and regulatory permissibility for outreach."
+    signals:
+      - country_code
+      - industry_regulation
+      - do_not_contact_list
+    scorable: true
+  - id: fit_score_confidence
+    name: "Fit Score Confidence"
+    category: quality
+    description: "Confidence in the aggregate score based on evidence recency and source diversity."
+    signals:
+      - evidence_recency
+      - source_diversity
+      - conflicting_signals
+    scorable: false

@@ -1,0 +1,55 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "canonical_name": {
+      "title": "Canonical Name",
+      "type": "string"
+    },
+    "country_code": {
+      "title": "Country Code",
+      "type": "string"
+    },
+    "employee_count": {
+      "title": "Employee Count",
+      "type": "integer"
+    },
+    "industry": {
+      "title": "Industry",
+      "type": "string"
+    },
+    "primary_domain": {
+      "title": "Primary Domain",
+      "type": "string"
+    },
+    "status": {
+      "default": "active",
+      "title": "Status",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "canonical_name",
+    "primary_domain",
+    "country_code",
+    "industry",
+    "employee_count"
+  ],
+  "title": "CompanyCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

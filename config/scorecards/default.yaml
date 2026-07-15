@@ -1,0 +1,67 @@
+version: "1.0.0"
+approved_at: "2026-07-15"
+approved_by: "lead-scoring-committee"
+scorecard_id: "default-v1"
+min_score: 60
+gate_logic: "all_required"
+dimensions:
+  - id: intent_to_hire
+    weight: 0.35
+    min_threshold: 30
+    signals:
+      - name: job_posting_seniority
+        weight: 0.4
+        operator: gte
+        value: 3
+      - name: hiring_velocity
+        weight: 0.3
+        operator: gte
+        value: 2
+      - name: role_skill_match
+        weight: 0.3
+        operator: gte
+        value: 0.7
+  - id: growth_momentum
+    weight: 0.25
+    min_threshold: 15
+    signals:
+      - name: employee_count_delta
+        weight: 0.5
+        operator: gte
+        value: 0.1
+      - name: funding_round_recency
+        weight: 0.3
+        operator: lte
+        value: 180
+      - name: revenue_range
+        weight: 0.2
+        operator: in
+        values: ["10m-50m", "50m-100m", "100m+"]
+  - id: technology_fit
+    weight: 0.25
+    min_threshold: 15
+    signals:
+      - name: stack_extraction
+        weight: 0.4
+        operator: contains_any
+        values: ["python", "kubernetes", "aws"]
+      - name: integration_mentions
+        weight: 0.3
+        operator: contains_any
+        values: ["salesforce", "hubspot", "slack"]
+      - name: job_skill_requirements
+        weight: 0.3
+        operator: contains_any
+        values: ["rest", "graphql", "typescript"]
+  - id: market_access
+    weight: 0.15
+    min_threshold: 10
+    signals:
+      - name: country_code
+        weight: 0.6
+        operator: not_in
+        values: ["XX"]
+      - name: do_not_contact_list
+        weight: 0.4
+        operator: equals
+        value: false

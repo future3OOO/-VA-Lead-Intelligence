@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "CrawlStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "rate_limited"
+      ],
+      "title": "CrawlStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/crawl_result-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Result of a crawl.",
+  "properties": {
+    "content_text": {
+      "title": "Content Text",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "crawl_request": {
+      "additionalProperties": false,
+      "title": "Crawl Request",
+      "type": "object"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "links": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Links",
+      "type": "array"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/CrawlStatus"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "workspace_id",
+    "correlation_id",
+    "producer",
+    "status",
+    "content_text"
+  ],
+  "title": "CrawlResult",
+  "type": "object",
+  "version": "1.0.0"
+}

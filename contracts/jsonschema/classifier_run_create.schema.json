@@ -1,0 +1,46 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/classifier_run_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "input": {
+      "additionalProperties": false,
+      "title": "Input",
+      "type": "object"
+    },
+    "model_provider": {
+      "title": "Model Provider",
+      "type": "string"
+    },
+    "output": {
+      "additionalProperties": false,
+      "title": "Output",
+      "type": "object"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "model_provider"
+  ],
+  "title": "ClassifierRunCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,77 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/job_signal-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Normalized job posting signal.",
+  "properties": {
+    "ats_board_id": {
+      "format": "uuid",
+      "title": "Ats Board Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "description_text": {
+      "title": "Description Text",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "remote_allowed": {
+      "title": "Remote Allowed",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "workspace_id",
+    "correlation_id",
+    "producer",
+    "ats_board_id",
+    "job_id",
+    "title",
+    "location",
+    "description_text",
+    "remote_allowed"
+  ],
+  "title": "JobSignal",
+  "type": "object",
+  "version": "1.0.0"
+}

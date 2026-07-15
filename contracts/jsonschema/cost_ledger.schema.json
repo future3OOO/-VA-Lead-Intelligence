@@ -1,0 +1,54 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/cost_ledger-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Tracked cost event..",
+  "properties": {
+    "campaign_run_id": {
+      "format": "uuid",
+      "title": "Campaign Run Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "currency": {
+      "default": "USD",
+      "title": "Currency",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "service": {
+      "title": "Service",
+      "type": "string"
+    },
+    "unit_cost": {
+      "title": "Unit Cost",
+      "type": "number"
+    },
+    "units": {
+      "title": "Units",
+      "type": "number"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "campaign_run_id",
+    "service",
+    "units",
+    "unit_cost"
+  ],
+  "title": "CostLedger",
+  "type": "object",
+  "version": "1.0.0"
+}

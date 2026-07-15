@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "CampaignStatus": {
+      "enum": [
+        "draft",
+        "active",
+        "paused",
+        "completed",
+        "archived"
+      ],
+      "title": "CampaignStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/campaign_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "capability_filter": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Capability Filter",
+      "type": "array"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "score_threshold": {
+      "title": "Score Threshold",
+      "type": "number"
+    },
+    "status": {
+      "$ref": "#/definitions/CampaignStatus",
+      "default": "draft"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "name",
+    "score_threshold"
+  ],
+  "title": "CampaignCreate",
+  "type": "object",
+  "version": "1.0.0"
+}
