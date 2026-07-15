@@ -14,6 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_DATABASE_NAME = "va_lead_intelligence_test"
 
 os.environ["ENVIRONMENT"] = "test"
+os.environ["DATABASE_URL"] = (
+    f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
+)
 
 
 def _create_test_db() -> None:
@@ -33,9 +36,6 @@ def _create_test_db() -> None:
 @pytest.fixture(scope="session", autouse=True)
 def _test_database() -> None:
     _create_test_db()
-    os.environ["DATABASE_URL"] = (
-        f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
-    )
     subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=REPO_ROOT,
