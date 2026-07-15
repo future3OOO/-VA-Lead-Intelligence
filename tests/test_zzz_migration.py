@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_migration_is_at_head() -> None:
-    result = subprocess.run(
-        ["alembic", "current"],
+def _alembic(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
         cwd=REPO_ROOT,
         check=True,
         text=True,
         capture_output=True,
     )
+
+
+def test_migration_is_at_head() -> None:
+    result = _alembic("current")
     assert "head" in result.stdout.lower()
 
 
@@ -25,17 +30,5 @@ def test_migration_file_exists() -> None:
 
 
 def test_migration_downgrade() -> None:
-    subprocess.run(
-        ["alembic", "downgrade", "base"],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["alembic", "upgrade", "head"],
-        cwd=REPO_ROOT,
-        check=True,
-        text=True,
-        capture_output=True,
-    )
+    _alembic("downgrade", "base")
+    _alembic("upgrade", "head")

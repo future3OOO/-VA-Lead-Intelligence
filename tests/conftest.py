@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import psycopg2
@@ -36,7 +37,7 @@ def _test_database() -> None:
         f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
     )
     subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=REPO_ROOT,
         check=True,
         text=True,

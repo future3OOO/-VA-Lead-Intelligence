@@ -59,11 +59,12 @@ def test_score_determinism(high_fit_features: dict) -> None:
 
 def test_benchmark() -> None:
     import subprocess
+    import sys
     from pathlib import Path
 
     repo = Path(__file__).resolve().parent.parent
     result = subprocess.run(
-        ["python", "scripts/build_benchmark.py"],
+        [sys.executable, "scripts/build_benchmark.py"],
         cwd=repo,
         check=False,
         capture_output=True,

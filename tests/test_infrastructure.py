@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -43,7 +44,7 @@ def test_env_catalogue() -> None:
     with TemporaryDirectory() as tmp:
         output = Path(tmp) / "ENVIRONMENT_CATALOGUE.md"
         result = subprocess.run(
-            ["python", "scripts/export_env_catalogue.py", "--output", str(output)],
+            [sys.executable, "scripts/export_env_catalogue.py", "--output", str(output)],
             cwd=REPO_ROOT,
             check=False,
             capture_output=True,
