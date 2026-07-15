@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "SourceType": {
+      "enum": [
+        "greenhouse",
+        "lever",
+        "ashby",
+        "company_web",
+        "search"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/ats_board_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "board_token": {
+      "title": "Board Token",
+      "type": "string"
+    },
+    "board_url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Board Url",
+      "type": "string"
+    },
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "last_fetched_at": {
+      "format": "date-time",
+      "title": "Last Fetched At",
+      "type": "string"
+    },
+    "provider": {
+      "$ref": "#/definitions/SourceType"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "provider",
+    "board_url",
+    "board_token",
+    "last_fetched_at"
+  ],
+  "title": "AtsBoardCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

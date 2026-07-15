@@ -1,0 +1,41 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_alias_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "alias": {
+      "title": "Alias",
+      "type": "string"
+    },
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "alias",
+    "source"
+  ],
+  "title": "CompanyAliasCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

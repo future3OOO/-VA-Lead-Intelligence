@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "MembershipRole": {
+      "enum": [
+        "owner",
+        "admin",
+        "reviewer",
+        "viewer"
+      ],
+      "title": "MembershipRole",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/membership-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Membership.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/definitions/MembershipRole"
+    },
+    "user_id": {
+      "format": "uuid",
+      "title": "User Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "user_id",
+    "role"
+  ],
+  "title": "Membership",
+  "type": "object",
+  "version": "1.0.0"
+}

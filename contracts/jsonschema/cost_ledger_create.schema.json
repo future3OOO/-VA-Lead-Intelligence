@@ -1,0 +1,51 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/cost_ledger_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "campaign_run_id": {
+      "format": "uuid",
+      "title": "Campaign Run Id",
+      "type": "string"
+    },
+    "currency": {
+      "default": "USD",
+      "title": "Currency",
+      "type": "string"
+    },
+    "service": {
+      "title": "Service",
+      "type": "string"
+    },
+    "unit_cost": {
+      "title": "Unit Cost",
+      "type": "number"
+    },
+    "units": {
+      "title": "Units",
+      "type": "number"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "campaign_run_id",
+    "service",
+    "units",
+    "unit_cost"
+  ],
+  "title": "CostLedgerCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

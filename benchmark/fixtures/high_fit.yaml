@@ -1,0 +1,15 @@
+fixture_id: high-fit-001
+expected_pass: true
+min_score: 60
+features:
+  employee_count_delta: 0.5
+  funding_round_recency: 90
+  revenue_range: "50m-100m"
+  role_skill_match: 0.95
+  hiring_velocity: 5
+  job_posting_seniority: 4
+  stack_extraction: "python, kubernetes, aws"
+  integration_mentions: "salesforce, hubspot"
+  job_skill_requirements: "typescript, graphql, rest"
+  country_code: "US"
+  do_not_contact_list: false

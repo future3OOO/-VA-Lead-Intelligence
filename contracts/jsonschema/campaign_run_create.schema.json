@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/campaign_run_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/RunStatus",
+      "default": "pending"
+    },
+    "total_discovered": {
+      "title": "Total Discovered",
+      "type": "integer"
+    },
+    "total_qualified": {
+      "title": "Total Qualified",
+      "type": "integer"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "campaign_id",
+    "started_at",
+    "completed_at",
+    "total_discovered",
+    "total_qualified"
+  ],
+  "title": "CampaignRunCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

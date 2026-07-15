@@ -1,0 +1,65 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/job-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Job posting..",
+  "properties": {
+    "ats_board_id": {
+      "format": "uuid",
+      "title": "Ats Board Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "description_text": {
+      "title": "Description Text",
+      "type": "string"
+    },
+    "external_job_id": {
+      "title": "External Job Id",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string"
+    },
+    "posted_at": {
+      "format": "date-time",
+      "title": "Posted At",
+      "type": "string"
+    },
+    "remote_allowed": {
+      "title": "Remote Allowed",
+      "type": "boolean"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "ats_board_id",
+    "external_job_id",
+    "title",
+    "location",
+    "description_text",
+    "remote_allowed",
+    "posted_at"
+  ],
+  "title": "Job",
+  "type": "object",
+  "version": "1.0.0"
+}

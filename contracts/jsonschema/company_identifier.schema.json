@@ -1,0 +1,44 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_identifier-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "CompanyIdentifier.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "external_id": {
+      "title": "External Id",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "source",
+    "external_id"
+  ],
+  "title": "CompanyIdentifier",
+  "type": "object",
+  "version": "1.0.0"
+}

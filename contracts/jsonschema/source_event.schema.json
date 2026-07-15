@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "SourceType": {
+      "enum": [
+        "greenhouse",
+        "lever",
+        "ashby",
+        "company_web",
+        "search"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/source_event-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Raw source event..",
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "raw_payload": {
+      "additionalProperties": false,
+      "title": "Raw Payload",
+      "type": "object"
+    },
+    "received_at": {
+      "format": "date-time",
+      "title": "Received At",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_type": {
+      "$ref": "#/definitions/SourceType"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "source_id",
+    "source_type"
+  ],
+  "title": "SourceEvent",
+  "type": "object",
+  "version": "1.0.0"
+}

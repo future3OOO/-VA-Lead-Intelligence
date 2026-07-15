@@ -1,0 +1,59 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/workspace_update-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Partial update request.",
+  "properties": {
+    "billing_email": {
+      "anyOf": [
+        {
+          "format": "email",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Billing Email"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "plan": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plan"
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Slug"
+    }
+  },
+  "title": "WorkspaceUpdate",
+  "type": "object",
+  "version": "1.0.0"
+}

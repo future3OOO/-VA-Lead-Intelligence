@@ -1,0 +1,52 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/review_assignment-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "ReviewAssignment.",
+  "properties": {
+    "assigned_at": {
+      "format": "date-time",
+      "title": "Assigned At",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "lead_id": {
+      "format": "uuid",
+      "title": "Lead Id",
+      "type": "string"
+    },
+    "reviewer_id": {
+      "format": "uuid",
+      "title": "Reviewer Id",
+      "type": "string"
+    },
+    "status": {
+      "default": "pending",
+      "title": "Status",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "lead_id",
+    "reviewer_id",
+    "assigned_at",
+    "completed_at"
+  ],
+  "title": "ReviewAssignment",
+  "type": "object",
+  "version": "1.0.0"
+}

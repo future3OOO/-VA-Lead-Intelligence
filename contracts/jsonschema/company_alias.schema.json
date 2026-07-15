@@ -1,0 +1,44 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_alias-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "CompanyAlias.",
+  "properties": {
+    "alias": {
+      "title": "Alias",
+      "type": "string"
+    },
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "alias",
+    "source"
+  ],
+  "title": "CompanyAlias",
+  "type": "object",
+  "version": "1.0.0"
+}

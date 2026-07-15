@@ -1,0 +1,42 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/company_relationship_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "child_company_id": {
+      "format": "uuid",
+      "title": "Child Company Id",
+      "type": "string"
+    },
+    "parent_company_id": {
+      "format": "uuid",
+      "title": "Parent Company Id",
+      "type": "string"
+    },
+    "relationship_type": {
+      "title": "Relationship Type",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "parent_company_id",
+    "child_company_id",
+    "relationship_type"
+  ],
+  "title": "CompanyRelationshipCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

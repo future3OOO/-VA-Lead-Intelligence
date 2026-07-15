@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/campaign_run-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Single execution of a campaign..",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/RunStatus",
+      "default": "pending"
+    },
+    "total_discovered": {
+      "title": "Total Discovered",
+      "type": "integer"
+    },
+    "total_qualified": {
+      "title": "Total Qualified",
+      "type": "integer"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "campaign_id",
+    "started_at",
+    "completed_at",
+    "total_discovered",
+    "total_qualified"
+  ],
+  "title": "CampaignRun",
+  "type": "object",
+  "version": "1.0.0"
+}

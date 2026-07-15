@@ -1,0 +1,15 @@
+fixture_id: blocked-jurisdiction-001
+expected_pass: false
+min_score: 60
+features:
+  employee_count_delta: 0.2
+  funding_round_recency: 120
+  revenue_range: "10m-50m"
+  role_skill_match: 0.9
+  hiring_velocity: 3
+  job_posting_seniority: 3
+  stack_extraction: "python, aws"
+  integration_mentions: "salesforce"
+  job_skill_requirements: "rest"
+  country_code: "CN"
+  do_not_contact_list: false

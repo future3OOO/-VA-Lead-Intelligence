@@ -1,0 +1,33 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/workspace_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "billing_email": {
+      "format": "email",
+      "title": "Billing Email",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "plan": {
+      "default": "trial",
+      "title": "Plan",
+      "type": "string"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "slug",
+    "billing_email"
+  ],
+  "title": "WorkspaceCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

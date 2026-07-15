@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "ExportStatus": {
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "title": "ExportStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/export_record-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Lead export request and result..",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "destination": {
+      "title": "Destination",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "lead_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Lead Ids",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/definitions/ExportStatus",
+      "default": "pending"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "campaign_id",
+    "destination",
+    "completed_at"
+  ],
+  "title": "ExportRecord",
+  "type": "object",
+  "version": "1.0.0"
+}

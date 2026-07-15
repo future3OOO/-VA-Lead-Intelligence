@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "MembershipRole": {
+      "enum": [
+        "owner",
+        "admin",
+        "reviewer",
+        "viewer"
+      ],
+      "title": "MembershipRole",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/membership_update-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Partial update request.",
+  "properties": {
+    "role": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/MembershipRole"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "user_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Id"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "title": "MembershipUpdate",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -1,0 +1,52 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/page_snapshot-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "PageSnapshot.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "etag": {
+      "title": "Etag",
+      "type": "string"
+    },
+    "fetched_at": {
+      "format": "date-time",
+      "title": "Fetched At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "snapshot_path": {
+      "title": "Snapshot Path",
+      "type": "string"
+    },
+    "url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "url",
+    "snapshot_path",
+    "etag",
+    "fetched_at"
+  ],
+  "title": "PageSnapshot",
+  "type": "object",
+  "version": "1.0.0"
+}

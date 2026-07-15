@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "va-lead-intelligence"
+version = "0.1.0"
+description = "VA lead intelligence platform"
+requires-python = ">=3.10"
+dependencies = [
+    "alembic>=1.13,<2",
+    "asyncpg>=0.29,<1",
+    "email-validator>=2.1",
+    "fastapi>=0.111,<1",
+    "httpx>=0.27,<0.28",
+    "jsonschema>=4.22,<5",
+    "psycopg2-binary>=2.9,<3",
+    "pydantic>=2.7,<3",
+    "pydantic-settings>=2.3,<3",
+    "python-dotenv>=1.0,<2",
+    "python-multipart>=0.0.9",
+    "PyYAML>=6.0.1,<7",
+    "redis>=5.0,<6",
+    "SQLAlchemy>=2.0,<3",
+    "temporalio>=1.6,<2",
+    "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.4,<25",
+    "coverage>=7.5,<8",
+    "eralchemy2>=1.4,<2",
+    "graphviz>=0.20,<1",
+    "mypy>=1.10,<2",
+    "pytest>=8.2,<9",
+    "pytest-asyncio>=0.23,<1",
+    "ruff>=0.4,<1",
+    "sqlalchemy-utils>=0.41,<1",
+    "types-PyYAML",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = ["migrations/versions/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["src"]

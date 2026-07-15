@@ -1,0 +1,23 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/user_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "email": {
+      "format": "email",
+      "title": "Email",
+      "type": "string"
+    },
+    "full_name": {
+      "title": "Full Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "email",
+    "full_name"
+  ],
+  "title": "UserCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

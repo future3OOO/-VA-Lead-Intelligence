@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "OutcomeType": {
+      "enum": [
+        "contacted",
+        "responded",
+        "qualified",
+        "converted",
+        "uninterested",
+        "bounced"
+      ],
+      "title": "OutcomeType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/outcome_event-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Outcome from outreach.",
+  "properties": {
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "lead_id": {
+      "format": "uuid",
+      "title": "Lead Id",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "outcome_type": {
+      "$ref": "#/definitions/OutcomeType"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "workspace_id",
+    "correlation_id",
+    "producer",
+    "lead_id",
+    "outcome_type"
+  ],
+  "title": "OutcomeEvent",
+  "type": "object",
+  "version": "1.0.0"
+}

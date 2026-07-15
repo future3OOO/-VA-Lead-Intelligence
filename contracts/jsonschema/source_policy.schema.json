@@ -1,0 +1,44 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/source_policy-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "SourcePolicy.",
+  "properties": {
+    "config": {
+      "additionalProperties": false,
+      "title": "Config",
+      "type": "object"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "effective_at": {
+      "format": "date-time",
+      "title": "Effective At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "source_id",
+    "effective_at"
+  ],
+  "title": "SourcePolicy",
+  "type": "object",
+  "version": "1.0.0"
+}

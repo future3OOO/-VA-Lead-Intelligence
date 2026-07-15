@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "SourceType": {
+      "enum": [
+        "greenhouse",
+        "lever",
+        "ashby",
+        "company_web",
+        "search"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/ats_board-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Parsed ATS board..",
+  "properties": {
+    "board_token": {
+      "title": "Board Token",
+      "type": "string"
+    },
+    "board_url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Board Url",
+      "type": "string"
+    },
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "last_fetched_at": {
+      "format": "date-time",
+      "title": "Last Fetched At",
+      "type": "string"
+    },
+    "provider": {
+      "$ref": "#/definitions/SourceType"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "provider",
+    "board_url",
+    "board_token",
+    "last_fetched_at"
+  ],
+  "title": "AtsBoard",
+  "type": "object",
+  "version": "1.0.0"
+}

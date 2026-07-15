@@ -1,0 +1,41 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/jurisdiction_policy_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "config": {
+      "additionalProperties": false,
+      "title": "Config",
+      "type": "object"
+    },
+    "country_code": {
+      "title": "Country Code",
+      "type": "string"
+    },
+    "effective_at": {
+      "format": "date-time",
+      "title": "Effective At",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "country_code",
+    "effective_at"
+  ],
+  "title": "JurisdictionPolicyCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

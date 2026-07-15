@@ -1,0 +1,57 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/feature_vector-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Extracted features for scoring.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "features": {
+      "additionalProperties": false,
+      "title": "Features",
+      "type": "object"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "workspace_id",
+    "correlation_id",
+    "producer",
+    "company_id"
+  ],
+  "title": "FeatureVector",
+  "type": "object",
+  "version": "1.0.0"
+}

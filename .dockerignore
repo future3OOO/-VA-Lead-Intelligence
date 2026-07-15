@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.git
+infra/terraform/.terraform
+infra/terraform/**/*.tfstate
+dist
+reports
+node_modules

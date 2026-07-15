@@ -1,0 +1,960 @@
+enums:
+  MembershipRole:
+    - owner
+    - admin
+    - reviewer
+    - viewer
+  CampaignStatus:
+    - draft
+    - active
+    - paused
+    - completed
+    - archived
+  RunStatus:
+    - pending
+    - running
+    - succeeded
+    - failed
+    - cancelled
+  LeadStatus:
+    - pending
+    - accepted
+    - rejected
+    - suppressed
+    - exported
+  ReviewDecision:
+    - accepted
+    - rejected
+    - needs_review
+  ExportStatus:
+    - pending
+    - processing
+    - completed
+    - failed
+  OutcomeType:
+    - contacted
+    - responded
+    - qualified
+    - converted
+    - uninterested
+    - bounced
+  CrawlStatus:
+    - pending
+    - running
+    - succeeded
+    - failed
+    - rate_limited
+  SourceType:
+    - greenhouse
+    - lever
+    - ashby
+    - company_web
+    - search
+
+base_event_fields:
+  - name: schema_version
+    type: str
+    default: "'1.0.0'"
+  - name: event_id
+    type: uuid
+  - name: occurred_at
+    type: datetime
+  - name: workspace_id
+    type: uuid
+  - name: correlation_id
+    type: uuid
+  - name: producer
+    type: str
+
+events:
+  discovery:
+    description: Initial discovery request for a seed.
+    fields:
+      - name: seed_url
+        type: url
+      - name: source_id
+        type: str
+      - name: campaign_id
+        type: uuid
+  company_candidate:
+    description: Candidate company identified by a discovery adapter.
+    fields:
+      - name: company_name
+        type: str
+      - name: domain
+        type: str
+      - name: source_payload
+        type: json
+  company_resolved:
+    description: Company identity resolved and normalized.
+    fields:
+      - name: company_id
+        type: uuid
+      - name: canonical_name
+        type: str
+      - name: aliases
+        type: list_str
+  ats_board:
+    description: Parsed ATS board snapshot.
+    fields:
+      - name: board_url
+        type: url
+      - name: provider
+        type: enum:SourceType
+      - name: board_token
+        type: str
+  job_signal:
+    description: Normalized job posting signal.
+    fields:
+      - name: ats_board_id
+        type: uuid
+      - name: job_id
+        type: str
+      - name: title
+        type: str
+      - name: location
+        type: str
+      - name: description_text
+        type: text
+      - name: remote_allowed
+        type: bool
+  crawl_request:
+    description: Request to crawl a single URL.
+    fields:
+      - name: url
+        type: url
+      - name: crawl_depth
+        type: int
+        default: 0
+      - name: browser_allowed
+        type: bool
+        default: false
+  crawl_result:
+    description: Result of a crawl.
+    fields:
+      - name: crawl_request
+        type: json
+      - name: status
+        type: enum:CrawlStatus
+      - name: content_text
+        type: text
+      - name: links
+        type: list_str
+  page_snapshot_metadata:
+    description: Metadata for a stored page snapshot.
+    fields:
+      - name: url
+        type: url
+      - name: snapshot_path
+        type: str
+      - name: etag
+        type: str
+      - name: fetched_at
+        type: datetime
+  evidence_record:
+    description: Normalized evidence supporting a lead.
+    fields:
+      - name: company_id
+        type: uuid
+      - name: evidence_type
+        type: str
+      - name: source_event_id
+        type: uuid
+      - name: signal_strength
+        type: float
+  feature_vector:
+    description: Extracted features for scoring.
+    fields:
+      - name: company_id
+        type: uuid
+      - name: features
+        type: json
+  classifier_input:
+    description: Input to the classifier.
+    fields:
+      - name: company_id
+        type: uuid
+      - name: evidence_ids
+        type: list_str
+  classifier_output:
+    description: Output from the classifier.
+    fields:
+      - name: company_id
+        type: uuid
+      - name: predicted_capabilities
+        type: list_str
+      - name: confidence
+        type: float
+  review_decision:
+    description: Human review decision on a lead.
+    fields:
+      - name: lead_id
+        type: uuid
+      - name: decision
+        type: enum:ReviewDecision
+      - name: reviewer_id
+        type: uuid
+  export_request:
+    description: Request to export leads.
+    fields:
+      - name: lead_ids
+        type: list_str
+      - name: destination
+        type: str
+  outcome_event:
+    description: Outcome from outreach.
+    fields:
+      - name: lead_id
+        type: uuid
+      - name: outcome_type
+        type: enum:OutcomeType
+      - name: occurred_at
+        type: datetime
+
+entities:
+  workspace:
+    route: /workspaces
+    description: Tenant workspace.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: name
+        type: str
+      - name: slug
+        type: str
+      - name: billing_email
+        type: email
+      - name: plan
+        type: str
+        default: "'trial'"
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  user:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: email
+        type: email
+      - name: full_name
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  membership:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: user_id
+        type: fk:user
+        index: true
+      - name: role
+        type: enum:MembershipRole
+      - name: created_at
+        type: datetime
+        auto: true
+
+  audit_event:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: actor_id
+        type: uuid
+      - name: action
+        type: str
+      - name: resource_type
+        type: str
+      - name: resource_id
+        type: uuid
+      - name: payload
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true
+
+  company:
+    route: /companies
+    description: Normalized company.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: canonical_name
+        type: str
+      - name: primary_domain
+        type: str
+      - name: country_code
+        type: str
+      - name: industry
+        type: str
+      - name: employee_count
+        type: int
+      - name: status
+        type: str
+        default: "'active'"
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  company_identifier:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: source
+        type: str
+      - name: external_id
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  company_alias:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: alias
+        type: str
+      - name: source
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  company_relationship:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: parent_company_id
+        type: fk:company
+        index: true
+      - name: child_company_id
+        type: fk:company
+        index: true
+      - name: relationship_type
+        type: str
+
+  campaign:
+    route: /campaigns
+    description: Outreach campaign definition.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: name
+        type: str
+      - name: status
+        type: enum:CampaignStatus
+        default: "'draft'"
+      - name: capability_filter
+        type: list_str
+      - name: score_threshold
+        type: float
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  campaign_run:
+    route: /campaign-runs
+    description: Single execution of a campaign.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+        index: true
+      - name: status
+        type: enum:RunStatus
+        default: "'pending'"
+      - name: started_at
+        type: datetime
+      - name: completed_at
+        type: datetime
+      - name: total_discovered
+        type: int
+      - name: total_qualified
+        type: int
+      - name: created_at
+        type: datetime
+        auto: true
+
+  discovery_event:
+    route: /refresh-requests
+    description: Tracked discovery request.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+        index: true
+      - name: source_id
+        type: str
+      - name: seed_url
+        type: url
+      - name: status
+        type: enum:RunStatus
+        default: "'pending'"
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  ats_board:
+    route: none
+    description: Parsed ATS board.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: provider
+        type: enum:SourceType
+      - name: board_url
+        type: url
+      - name: board_token
+        type: str
+      - name: last_fetched_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  job:
+    route: none
+    description: Job posting.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: ats_board_id
+        type: fk:ats_board
+        index: true
+      - name: external_job_id
+        type: str
+      - name: title
+        type: str
+      - name: location
+        type: str
+      - name: description_text
+        type: text
+      - name: remote_allowed
+        type: bool
+      - name: posted_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  job_history:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: job_id
+        type: fk:job
+        index: true
+      - name: title
+        type: str
+      - name: changed_at
+        type: datetime
+      - name: change_type
+        type: str
+
+  source_event:
+    route: none
+    description: Raw source event.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_id
+        type: str
+      - name: source_type
+        type: enum:SourceType
+      - name: raw_payload
+        type: json
+      - name: received_at
+        type: datetime
+        auto: true
+
+  page_snapshot:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: url
+        type: url
+      - name: snapshot_path
+        type: str
+      - name: etag
+        type: str
+      - name: fetched_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  evidence_record:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: source_event_id
+        type: fk:source_event
+        index: true
+      - name: evidence_type
+        type: str
+      - name: signal_strength
+        type: float
+      - name: extracted_facts
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true
+
+  fact:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: evidence_record_id
+        type: fk:evidence_record
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: fact_type
+        type: str
+      - name: value
+        type: json
+      - name: confidence
+        type: float
+      - name: created_at
+        type: datetime
+        auto: true
+
+  feature:
+    route: none
+    description: Extracted feature for scoring.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: feature_name
+        type: str
+      - name: feature_value
+        type: json
+      - name: source
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  scorecard:
+    route: /scorecards
+    description: Released scorecard version metadata.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: version
+        type: str
+      - name: config_path
+        type: str
+      - name: is_active
+        type: bool
+      - name: created_at
+        type: datetime
+        auto: true
+
+  classifier_run:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: model_provider
+        type: str
+      - name: input
+        type: json
+      - name: output
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true
+
+  lead_assessment:
+    route: /leads
+    description: Scored lead.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+        index: true
+      - name: score
+        type: float
+      - name: status
+        type: enum:LeadStatus
+        default: "'pending'"
+      - name: reason_codes
+        type: list_str
+      - name: assessed_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  review_assignment:
+    route: /reviews
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: lead_id
+        type: fk:lead_assessment
+        index: true
+      - name: reviewer_id
+        type: fk:user
+        index: true
+      - name: assigned_at
+        type: datetime
+      - name: completed_at
+        type: datetime
+      - name: status
+        type: str
+        default: "'pending'"
+
+  review_decision:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: lead_id
+        type: fk:lead_assessment
+        index: true
+      - name: reviewer_id
+        type: fk:user
+        index: true
+      - name: decision
+        type: enum:ReviewDecision
+      - name: reason
+        type: text
+      - name: created_at
+        type: datetime
+        auto: true
+
+  source_policy:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_id
+        type: str
+      - name: config
+        type: json
+      - name: effective_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  jurisdiction_policy:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: country_code
+        type: str
+      - name: config
+        type: json
+      - name: effective_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  suppression:
+    route: /suppressions
+    description: Suppression rule.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: reason
+        type: str
+      - name: expires_at
+        type: datetime
+      - name: created_at
+        type: datetime
+        auto: true
+
+  export_record:
+    route: /exports
+    description: Lead export request and result.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+      - name: status
+        type: enum:ExportStatus
+        default: "'pending'"
+      - name: lead_ids
+        type: list_str
+      - name: destination
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: completed_at
+        type: datetime
+
+  contact_route:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+      - name: route_type
+        type: str
+      - name: value
+        type: str
+      - name: is_verified
+        type: bool
+      - name: created_at
+        type: datetime
+        auto: true
+
+  outcome:
+    route: /outcomes
+    description: Outreach outcome.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: lead_id
+        type: fk:lead_assessment
+        index: true
+      - name: outcome_type
+        type: enum:OutcomeType
+      - name: occurred_at
+        type: datetime
+      - name: notes
+        type: text
+      - name: created_at
+        type: datetime
+        auto: true
+
+  cost_ledger:
+    route: /costs
+    description: Tracked cost event.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_run_id
+        type: fk:campaign_run
+      - name: service
+        type: str
+      - name: units
+        type: float
+      - name: unit_cost
+        type: float
+      - name: currency
+        type: str
+        default: "'USD'"
+      - name: created_at
+        type: datetime
+        auto: true
+
+  source_health:
+    route: /sources/health
+    description: Source adapter health.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_id
+        type: str
+      - name: healthy
+        type: bool
+      - name: last_checked_at
+        type: datetime
+      - name: error_count
+        type: int
+      - name: created_at
+        type: datetime
+        auto: true
+
+  operational_metadata:
+    route: none
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: key
+        type: str
+      - name: value
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true

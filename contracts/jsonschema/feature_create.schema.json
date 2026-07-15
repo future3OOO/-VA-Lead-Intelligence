@@ -1,0 +1,46 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/feature_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "feature_name": {
+      "title": "Feature Name",
+      "type": "string"
+    },
+    "feature_value": {
+      "additionalProperties": false,
+      "title": "Feature Value",
+      "type": "object"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "company_id",
+    "feature_name",
+    "source"
+  ],
+  "title": "FeatureCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

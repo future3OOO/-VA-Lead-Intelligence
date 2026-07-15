@@ -1,0 +1,45 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/suppression-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Suppression rule..",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "reason",
+    "expires_at"
+  ],
+  "title": "Suppression",
+  "type": "object",
+  "version": "1.0.0"
+}

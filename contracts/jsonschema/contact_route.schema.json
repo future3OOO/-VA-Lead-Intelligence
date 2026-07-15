@@ -1,0 +1,49 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/contact_route-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "ContactRoute.",
+  "properties": {
+    "company_id": {
+      "format": "uuid",
+      "title": "Company Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "is_verified": {
+      "title": "Is Verified",
+      "type": "boolean"
+    },
+    "route_type": {
+      "title": "Route Type",
+      "type": "string"
+    },
+    "value": {
+      "title": "Value",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "route_type",
+    "value",
+    "is_verified"
+  ],
+  "title": "ContactRoute",
+  "type": "object",
+  "version": "1.0.0"
+}

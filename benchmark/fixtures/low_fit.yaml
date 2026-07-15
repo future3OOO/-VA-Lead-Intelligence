@@ -1,0 +1,15 @@
+fixture_id: low-fit-001
+expected_pass: false
+min_score: 60
+features:
+  employee_count_delta: -0.1
+  funding_round_recency: 400
+  revenue_range: "1m-10m"
+  role_skill_match: 0.1
+  hiring_velocity: 0
+  job_posting_seniority: 1
+  stack_extraction: "php, wordpress"
+  integration_mentions: "none"
+  job_skill_requirements: "none"
+  country_code: "US"
+  do_not_contact_list: false

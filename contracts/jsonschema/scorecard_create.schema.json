@@ -1,0 +1,40 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/scorecard_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "config_path": {
+      "title": "Config Path",
+      "type": "string"
+    },
+    "is_active": {
+      "title": "Is Active",
+      "type": "boolean"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "version",
+    "config_path",
+    "is_active"
+  ],
+  "title": "ScorecardCreate",
+  "type": "object",
+  "version": "1.0.0"
+}
