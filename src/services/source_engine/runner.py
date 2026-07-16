@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config.enums import RunStatus
+from config.enums import IntentLabel, RunStatus
+from db.models.campaign import Campaign
 from db.models.source_hit import SourceHit as DBSourceHit
 from db.models.source_run import SourceRun as DBSourceRun
 from services.source_engine.adapters import ADAPTER_MAP
@@ -17,7 +20,7 @@ from services.source_engine.classifier import classify_intent
 from services.source_engine.config import SourceConfig, SourceRegistryLoader
 from services.source_engine.enricher import enrich_contact_routes
 from services.source_engine.resolver import resolve_company
-from services.source_engine.scorer import score_source_hit
+from services.source_engine.scorer import _to_intent_label, score_source_hit
 
 
 class SourceRunner:
@@ -44,6 +47,8 @@ class SourceRunner:
         query_overrides: dict[str, Any] | None = None,
     ) -> DBSourceRun:
         """Execute the configured portfolio and persist results."""
+        campaign = await session.get(Campaign, campaign_id)
+        score_threshold = campaign.score_threshold if campaign else 0.5
         started_at = datetime.now(timezone.utc)
         source_run = DBSourceRun(
             id=uuid4(),
@@ -84,7 +89,7 @@ class SourceRunner:
                         duplicates += 1
                         continue
                     seen_hashes.add(content_hash)
-                    if scored.get("source_hit_priority", 0) >= 0.3:
+                    if self._is_qualified(scored, score_threshold):
                         qualified += 1
                     await self._persist_hit(session, scored)
             except Exception:
@@ -99,11 +104,41 @@ class SourceRunner:
         await session.commit()
         return source_run
 
+    def _is_qualified(self, hit: dict[str, Any], threshold: float) -> bool:
+        """A hit is qualified if it scores above threshold and has buyer-side intent."""
+        if hit.get("source_hit_priority", 0) < threshold:
+            return False
+        label = _to_intent_label(hit.get("intent_label"))
+        return label in {
+            IntentLabel.BUYER_REQUEST,
+            IntentLabel.COMPANY_HIRING,
+            IntentLabel.OPERATIONAL_PAIN,
+        }
+
     def _process_hit(self, hit: dict[str, Any]) -> dict[str, Any]:
         """Classify, score, and resolve a source hit."""
         label = classify_intent(hit.get("title", ""), hit.get("body_excerpt", ""))
         hit["intent_label"] = label.value
+        published_at = hit.get("published_at")
+        if isinstance(published_at, str):
+            published_at = published_at.replace("Z", "+00:00")
+            try:
+                hit["published_at"] = datetime.fromisoformat(published_at)
+            except ValueError:
+                hit["published_at"] = datetime.now(timezone.utc)
+        if not isinstance(hit.get("published_at"), datetime):
+            hit["published_at"] = datetime.now(timezone.utc)
         hit["source_hit_priority"] = score_source_hit(hit)
+        hash_input = json.dumps(
+            {
+                "title": str(hit.get("title", "")).strip().lower(),
+                "body": str(hit.get("body_excerpt", "")).strip().lower(),
+                "company": str(hit.get("company_name_raw", "")).strip().lower(),
+                "domain": str(hit.get("company_domain_raw", "")).strip().lower(),
+            },
+            sort_keys=True,
+        )
+        hit["content_hash"] = hashlib.sha256(hash_input.encode()).hexdigest()
         return hit
 
     async def _persist_hit(self, session: AsyncSession, data: dict[str, Any]) -> DBSourceHit:

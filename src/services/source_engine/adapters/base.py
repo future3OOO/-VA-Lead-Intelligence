@@ -56,6 +56,28 @@ class BaseSourceAdapter(ABC):
         """Normalize a raw record into a SourceHit dict."""
         ...
 
+    _STRING_FIELDS: tuple[str, ...] = (
+        "source_url",
+        "title",
+        "body_excerpt",
+        "company_name_raw",
+        "company_domain_raw",
+        "location_raw",
+        "workplace_type",
+        "source_native_id",
+        "content_hash",
+        "raw_snapshot_uri",
+        "access_policy_version",
+    )
+
+    def _coerce_strings(self, hit: dict[str, Any]) -> None:
+        """Ensure non-nullable string fields are never None."""
+        for field in self._STRING_FIELDS:
+            if hit.get(field) is None:
+                hit[field] = ""
+        if hit.get("contact_routes_raw") is None:
+            hit["contact_routes_raw"] = []
+
     async def run(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
         """Fetch and normalize records with rate limiting and metrics."""
         if not self.enabled or self.kill_switched():
@@ -66,7 +88,9 @@ class BaseSourceAdapter(ABC):
         normalized: list[dict[str, Any]] = []
         for raw in raw_records:
             try:
-                normalized.append(self.normalize(workspace_id, raw))
+                hit = self.normalize(workspace_id, raw)
+                self._coerce_strings(hit)
+                normalized.append(hit)
             except Exception:
                 self.metrics.record_error("normalize")
         self.checkpoint.save(workspace_id, {"observed_at": datetime.now(timezone.utc).isoformat()})

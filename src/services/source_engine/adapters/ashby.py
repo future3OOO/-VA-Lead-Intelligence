@@ -27,29 +27,30 @@ class AshbyJobsAdapter(BaseSourceAdapter):
         return "ashby_jobs"
 
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
-        subdomain = query.get("subdomain") or self.config.adapter_config.get("subdomain")
-        if not subdomain:
+        board = query.get("subdomain") or self.config.adapter_config.get("subdomain")
+        if not board:
             return []
-        response = await self.client.get(f"/job-posting?subdomain={subdomain}")
+        response = await self.client.get(f"/job-board/{board}")
         response.raise_for_status()
         data = response.json()
-        return [{"subdomain": subdomain, "posting": p} for p in data.get("results", [])]
+        return [{"subdomain": board, "posting": p} for p in data.get("jobs", [])]
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:
         posting = raw["posting"]
+        description = posting.get("descriptionPlain") or posting.get("descriptionHtml") or ""
         return {
             "workspace_id": workspace_id,
             "source_key": self.source_key,
             "source_native_id": posting.get("id", ""),
             "source_url": posting.get("jobUrl") or "http://localhost",
             "observed_at": datetime.now(timezone.utc),
-            "published_at": posting.get("createdAt") or datetime.now(timezone.utc),
+            "published_at": posting.get("publishedAt") or datetime.now(timezone.utc),
             "title": posting.get("title", ""),
-            "body_excerpt": (posting.get("description") or "")[:2000],
+            "body_excerpt": description[:2000],
             "company_name_raw": raw["subdomain"],
             "company_domain_raw": "",
             "location_raw": posting.get("location", ""),
-            "workplace_type": posting.get("employmentType", ""),
+            "workplace_type": posting.get("workplaceType", ""),
             "contact_routes_raw": [],
             "raw_snapshot_uri": "",
             "content_hash": "",
