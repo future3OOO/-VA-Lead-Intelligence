@@ -349,6 +349,9 @@ def _parse_named_route(value: str) -> dict[str, str]:
         name = m.group(1).strip()
         title = _clean_title_text((m.group(2) or "").strip())
         payload = m.group(3).strip().rstrip(">")
+        # Drop implausibly long/boilerplate titles while keeping the contact.
+        if title and (len(title) > 60 or len(title.split()) > 8):
+            title = ""
         if _is_plausible_person_name(name):
             parsed = {"name": name, "title": title, "value": payload}
     return parsed

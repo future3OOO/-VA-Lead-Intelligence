@@ -114,6 +114,69 @@ _GENERIC_NAME_WORDS = {
     "agency",
     "firm",
     "company",
+    "email",
+    "us",
+    "click",
+    "here",
+    "call",
+    "text",
+    "message",
+    "send",
+    "more",
+    "learn",
+    "today",
+    "now",
+    "inquire",
+    "sitemap",
+    "connect",
+    "use",
+    "visit",
+    "website",
+    "page",
+    "menu",
+    "navigation",
+    "read",
+    "about",
+    "details",
+    "link",
+    "follow",
+    "fb",
+    "ig",
+    "li",
+    "tt",
+    "facebook",
+    "instagram",
+    "twitter",
+    "tiktok",
+    "youtube",
+}
+
+_NAV_WORDS = {
+    "company",
+    "about",
+    "team",
+    "our",
+    "join",
+    "how",
+    "it",
+    "works",
+    "faq",
+    "stories",
+    "founders",
+    "sitemap",
+    "menu",
+    "navigation",
+    "use",
+    "website",
+    "page",
+    "read",
+    "connect",
+    "the",
+    "and",
+    "with",
+    "for",
+    "from",
+    "home",
 }
 
 _LINKEDIN_RE = re.compile(r"https?://(?:[\w\-]+\.)?linkedin\.com/in/([^/?\s]+)", re.I)
@@ -177,13 +240,34 @@ def _name_from_email(email: str) -> str:
     return _title_case_name(" ".join(parts))
 
 
+_TITLE_BOILERPLATE = re.compile(
+    r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
+    re.I,
+)
+
+
 def _clean_title(title: str) -> str:
     """Strip HTML entities and boilerplate from a title string."""
     title = re.sub(r"<[^>]+>", "", title)
-    title = title.replace("&amp;", "&").replace("&nbsp;", " ").strip()
-    # Collapse whitespace
-    title = re.sub(r"\s+", " ", title)
+    title = title.replace("&amp;", "&").replace("&nbsp;", " ")
+    title = _TITLE_BOILERPLATE.sub("", title)
+    title = title.replace("|", " ").replace("  ", " ")
+    title = re.sub(r"\s+", " ", title).strip(" -")
     return title
+
+
+def _is_plausible_person_name(name: str) -> bool:
+    """Return True if the extracted string looks like a real person name."""
+    if not name or len(name) > 50 or len(name) < 3:
+        return False
+    if "@" in name or "http" in name.lower() or "/" in name or "linkedin" in name.lower():
+        return False
+    words = name.split()
+    if not (2 <= len(words) <= 4):
+        return False
+    if any(w.lower() in _GENERIC_NAME_WORDS or w.lower() in _TITLE_KEYWORDS_LOWER for w in words):
+        return False
+    return not all(w.isupper() and len(w) <= 3 for w in words)
 
 
 class _PersonResult:
@@ -205,15 +289,7 @@ class _PersonResult:
 
     def _is_generic_name(self) -> bool:
         """Return True if the extracted 'name' is a department/role, not a person."""
-        if not self.name:
-            return True
-        words = {w.lower() for w in self.name.split()}
-        if words & _GENERIC_NAME_WORDS:
-            return True
-        if self.name.lower() in _TITLE_KEYWORDS_LOWER:
-            return True
-        # Single word that is not obviously a person name; treat as generic/unknown.
-        return len(self.name.split()) == 1 and self.name.lower() not in {"owner", "founder"}
+        return not _is_plausible_person_name(self.name)
 
     def as_routes(self) -> list[dict[str, Any]]:
         """Return ContactRoute-compatible route dicts."""
@@ -267,6 +343,18 @@ class _PersonResult:
         return routes
 
 
+def _is_plausible_title(text: str) -> bool:
+    """Return True if text looks like a job title rather than navigation boilerplate."""
+    if not text or len(text) > 80:
+        return False
+    words = text.split()
+    if not (1 <= len(words) <= 8):
+        return False
+    if any(w.lower() in _NAV_WORDS for w in words):
+        return False
+    return bool(_TITLE_RE.search(text))
+
+
 def _extract_title_phrase(text: str, name: str = "") -> str:
     """Return the most plausible job-title phrase, excluding the person's name."""
     text = re.sub(r"<[^>]+>", " ", text)
@@ -275,15 +363,16 @@ def _extract_title_phrase(text: str, name: str = "") -> str:
     # not start with the person's name.
     for match in re.finditer(r"([A-Z][A-Za-z\-&'\.]+(?:\s+[A-Za-z\-&'\.]+){0,6})", text):
         phrase = match.group(1).strip()
-        if 3 <= len(phrase) <= 60 and _TITLE_RE.search(phrase):
-            if name and phrase.lower().startswith(name.lower()):
-                # Try to return only the title portion.
-                for tmatch in _TITLE_RE.finditer(phrase):
-                    tail = phrase[tmatch.start() :].strip()
-                    if len(tail) <= 60:
-                        return tail
-                continue
-            return phrase
+        if not _is_plausible_title(phrase):
+            continue
+        if name and phrase.lower().startswith(name.lower()):
+            # Try to return only the title portion.
+            for tmatch in _TITLE_RE.finditer(phrase):
+                tail = phrase[tmatch.start() :].strip()
+                if _is_plausible_title(tail):
+                    return tail
+            continue
+        return phrase
     return ""
 
 
@@ -304,15 +393,6 @@ def _find_person_ancestor(tag: Any) -> Any:
     return None
 
 
-def _looks_like_name(text: str) -> bool:
-    """Return True if text is a plausible person name and not a title/role."""
-    if not text or "@" in text or len(text) > 50 or len(text) < 3:
-        return False
-    if _TITLE_RE.search(text):
-        return False
-    return bool(_NAME_RE.search(text))
-
-
 def _name_and_title_from_parent(a_tag: Any) -> tuple[str, str]:
     """Given an <a> tag, try to find the person's name and title in surrounding DOM."""
     parent = _find_person_ancestor(a_tag)
@@ -325,7 +405,7 @@ def _name_and_title_from_parent(a_tag: Any) -> tuple[str, str]:
     # Prefer an explicit heading/span/div that is just a name.
     for tag in parent.find_all(["h1", "h2", "h3", "h4", "h5", "h6", "span", "div", "p"]):
         txt = tag.get_text(separator=" ", strip=True)
-        if _looks_like_name(txt):
+        if _is_plausible_person_name(txt):
             match = _NAME_RE.search(txt)
             if match:
                 name = match.group(1)
@@ -337,7 +417,7 @@ def _name_and_title_from_parent(a_tag: Any) -> tuple[str, str]:
         txt = tag.get_text(separator=" ", strip=True)
         if name and (name.lower() in txt.lower() or txt.lower() in name.lower()):
             continue
-        if _TITLE_RE.search(txt) and 3 <= len(txt) <= 80:
+        if _is_plausible_title(txt):
             title = _clean_title(txt)
             if name.lower() not in title.lower():
                 break
@@ -396,9 +476,9 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 continue
             name, title = _name_and_title_from_parent(a)
             if not name:
-                name = a.get_text(strip=True)
-                if "@" in name or len(name) < 3:
-                    name = ""
+                text_name = a.get_text(strip=True)
+                if _is_plausible_person_name(text_name):
+                    name = text_name
             if not name:
                 name = _name_from_email(email)
             p = _PersonResult(name=name, title=title, email=email)
@@ -419,7 +499,7 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 title = ""
                 # Try to find a better name/title in the parent block
                 p_name, p_title = _name_and_title_from_parent(a)
-                if p_name:
+                if _is_plausible_person_name(p_name):
                     name = p_name
                 if p_title:
                     title = p_title
@@ -431,7 +511,7 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                         if a.find_parent()
                         else ""
                     )
-                if not name:
+                if not _is_plausible_person_name(name):
                     name = _parse_linkedin_slug(slug)
                 p = _PersonResult(name=name, title=title, linkedin=linkedin)
                 people[linkedin] = p
