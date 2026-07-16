@@ -50,6 +50,8 @@ async def resolve_company(
             )
         )
         if result:
+            if domain and not result.primary_domain:
+                result.primary_domain = domain
             return cast(DBCompany | None, result)
 
     if not domain and not name:

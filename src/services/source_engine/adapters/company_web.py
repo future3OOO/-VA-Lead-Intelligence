@@ -68,7 +68,16 @@ class _TitleExtractor(HTMLParser):
 class CompanyWebAdapter(BaseSourceAdapter):
     """Fetch up to eight high-signal company pages and extract evidence."""
 
-    DEFAULT_PATHS = ["/", "/careers", "/contact", "/support", "/services", "/locations"]
+    DEFAULT_PATHS = [
+        "/",
+        "/careers",
+        "/contact",
+        "/contact-us",
+        "/about",
+        "/support",
+        "/services",
+        "/locations",
+    ]
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
@@ -156,6 +165,8 @@ class CompanyWebAdapter(BaseSourceAdapter):
         ):
             url = match.group(1)
             if any(url.lower().endswith(ext) for ext in self._ASSET_EXTS):
+                continue
+            if "facebook" in url.lower() or "wp-json" in url.lower() or "oembed" in url.lower():
                 continue
             if url not in seen:
                 seen.add(url)
