@@ -113,6 +113,7 @@ class SourceRunner:
             IntentLabel.BUYER_REQUEST,
             IntentLabel.COMPANY_HIRING,
             IntentLabel.OPERATIONAL_PAIN,
+            IntentLabel.GROWTH_TRIGGER,
         }
 
     def _process_hit(self, hit: dict[str, Any]) -> dict[str, Any]:
