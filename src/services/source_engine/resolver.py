@@ -26,7 +26,7 @@ async def resolve_company(
 ) -> DBCompany | None:
     """Resolve a source hit to an existing or new company record."""
     intent = source_hit.get("intent_label")
-    if intent in EXCLUDED_INTENTS:
+    if intent in EXCLUDED_INTENTS and source_hit.get("source_key") != "company_web":
         return None
 
     domain = source_hit.get("company_domain_raw", "").lower().strip()

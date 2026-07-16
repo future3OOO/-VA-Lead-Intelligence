@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.enums import ContactRouteType
@@ -25,6 +26,17 @@ async def enrich_contact_routes(
     routes_raw: list[dict[str, Any]],
 ) -> list[DBContactRoute]:
     """Persist verified contact routes for a resolved company."""
+    existing = {
+        (r.route_type, r.value.lower())
+        for r in (
+            await session.scalars(
+                select(DBContactRoute).where(
+                    DBContactRoute.workspace_id == workspace_id,
+                    DBContactRoute.company_id == company_id,
+                )
+            )
+        ).all()
+    }
     created: list[DBContactRoute] = []
     for route in routes_raw:
         if not isinstance(route, dict):
@@ -32,11 +44,15 @@ async def enrich_contact_routes(
         value = str(route.get("value", "")).strip()
         if not value:
             continue
+        route_type = _resolve_route_type(route.get("type", "generic_email")).value
+        if (route_type, value.lower()) in existing:
+            continue
+        existing.add((route_type, value.lower()))
         record = DBContactRoute(
             id=uuid4(),
             workspace_id=workspace_id,
             company_id=company_id,
-            route_type=_resolve_route_type(route.get("type", "generic_email")).value,
+            route_type=route_type,
             value=value,
             is_verified=bool(route.get("is_verified", False)),
         )
