@@ -92,7 +92,13 @@ class CompanyWebAdapter(BaseSourceAdapter):
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
         rp = RobotFileParser(robots_url)
         try:
-            rp.read()
+            response = httpx.get(
+                robots_url,
+                timeout=10.0,
+                headers={"User-Agent": "VALeadBot/1.0"},
+                follow_redirects=True,
+            )
+            rp.parse(response.text.splitlines())
             return rp.can_fetch("VALeadBot/1.0", url)
         except Exception:
             return True
