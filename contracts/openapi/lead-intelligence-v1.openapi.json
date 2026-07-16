@@ -1107,6 +1107,268 @@
         "title": "ExportStatus",
         "type": "string"
       },
+      "ExternalOpportunity": {
+        "additionalProperties": false,
+        "description": "Explicit work posting with unresolved client..",
+        "properties": {
+          "budget_hint": {
+            "title": "Budget Hint",
+            "type": "string"
+          },
+          "buyer_intent_label": {
+            "$ref": "#/components/schemas/IntentLabel",
+            "default": "unresolved"
+          },
+          "country_code": {
+            "title": "Country Code",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "external_opportunity_id": {
+            "title": "External Opportunity Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "source_hit_id": {
+            "format": "uuid",
+            "title": "Source Hit Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "source_hit_id",
+          "platform",
+          "external_opportunity_id",
+          "title",
+          "description",
+          "budget_hint",
+          "country_code"
+        ],
+        "title": "ExternalOpportunity",
+        "type": "object"
+      },
+      "ExternalOpportunityCreate": {
+        "additionalProperties": false,
+        "description": "Create request.",
+        "properties": {
+          "budget_hint": {
+            "title": "Budget Hint",
+            "type": "string"
+          },
+          "buyer_intent_label": {
+            "$ref": "#/components/schemas/IntentLabel",
+            "default": "unresolved"
+          },
+          "country_code": {
+            "title": "Country Code",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "external_opportunity_id": {
+            "title": "External Opportunity Id",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "source_hit_id": {
+            "format": "uuid",
+            "title": "Source Hit Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "open",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "source_hit_id",
+          "platform",
+          "external_opportunity_id",
+          "title",
+          "description",
+          "budget_hint",
+          "country_code"
+        ],
+        "title": "ExternalOpportunityCreate",
+        "type": "object"
+      },
+      "ExternalOpportunityUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update request.",
+        "properties": {
+          "budget_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Hint"
+          },
+          "buyer_intent_label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntentLabel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "external_opportunity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Opportunity Id"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "source_hit_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Hit Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "title": "ExternalOpportunityUpdate",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1119,6 +1381,21 @@
         },
         "title": "HTTPValidationError",
         "type": "object"
+      },
+      "IntentLabel": {
+        "enum": [
+          "buyer_request",
+          "company_hiring",
+          "operational_pain",
+          "growth_trigger",
+          "company_existence_only",
+          "seller_promotion",
+          "job_seeker",
+          "general_discussion",
+          "unresolved"
+        ],
+        "title": "IntentLabel",
+        "type": "string"
       },
       "LeadAssessment": {
         "additionalProperties": false,
@@ -1508,6 +1785,211 @@
           }
         },
         "title": "OutcomeUpdate",
+        "type": "object"
+      },
+      "QueryFamily": {
+        "additionalProperties": false,
+        "description": "Versioned query set for source discovery..",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "family_key": {
+            "title": "Family Key",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "negative_terms": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Terms",
+            "type": "array"
+          },
+          "positive_task_phrases": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Task Phrases",
+            "type": "array"
+          },
+          "positive_titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Titles",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "family_key",
+          "version"
+        ],
+        "title": "QueryFamily",
+        "type": "object"
+      },
+      "QueryFamilyCreate": {
+        "additionalProperties": false,
+        "description": "Create request.",
+        "properties": {
+          "family_key": {
+            "title": "Family Key",
+            "type": "string"
+          },
+          "negative_terms": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Terms",
+            "type": "array"
+          },
+          "positive_task_phrases": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Task Phrases",
+            "type": "array"
+          },
+          "positive_titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Titles",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "family_key",
+          "version"
+        ],
+        "title": "QueryFamilyCreate",
+        "type": "object"
+      },
+      "QueryFamilyUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update request.",
+        "properties": {
+          "family_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family Key"
+          },
+          "negative_terms": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Negative Terms"
+          },
+          "positive_task_phrases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positive Task Phrases"
+          },
+          "positive_titles": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positive Titles"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "title": "QueryFamilyUpdate",
         "type": "object"
       },
       "ReviewAssignment": {
@@ -1985,6 +2467,1086 @@
           }
         },
         "title": "SourceHealthUpdate",
+        "type": "object"
+      },
+      "SourceHit": {
+        "additionalProperties": false,
+        "description": "Normalized record from a source adapter..",
+        "properties": {
+          "access_policy_version": {
+            "title": "Access Policy Version",
+            "type": "string"
+          },
+          "body_excerpt": {
+            "title": "Body Excerpt",
+            "type": "string"
+          },
+          "company_domain_raw": {
+            "title": "Company Domain Raw",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "company_name_raw": {
+            "title": "Company Name Raw",
+            "type": "string"
+          },
+          "contact_routes_raw": {
+            "default": [],
+            "title": "Contact Routes Raw"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "intent_label": {
+            "$ref": "#/components/schemas/IntentLabel",
+            "default": "unresolved"
+          },
+          "location_raw": {
+            "title": "Location Raw",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "raw_snapshot_uri": {
+            "default": "",
+            "title": "Raw Snapshot Uri",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "source_native_id": {
+            "title": "Source Native Id",
+            "type": "string"
+          },
+          "source_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "workplace_type": {
+            "title": "Workplace Type",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "company_id",
+          "source_key",
+          "source_native_id",
+          "source_url",
+          "observed_at",
+          "published_at",
+          "title",
+          "body_excerpt",
+          "company_name_raw",
+          "company_domain_raw",
+          "location_raw",
+          "workplace_type",
+          "content_hash",
+          "access_policy_version"
+        ],
+        "title": "SourceHit",
+        "type": "object"
+      },
+      "SourceHitCreate": {
+        "additionalProperties": false,
+        "description": "Create request.",
+        "properties": {
+          "access_policy_version": {
+            "title": "Access Policy Version",
+            "type": "string"
+          },
+          "body_excerpt": {
+            "title": "Body Excerpt",
+            "type": "string"
+          },
+          "company_domain_raw": {
+            "title": "Company Domain Raw",
+            "type": "string"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "company_name_raw": {
+            "title": "Company Name Raw",
+            "type": "string"
+          },
+          "contact_routes_raw": {
+            "default": [],
+            "title": "Contact Routes Raw"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "intent_label": {
+            "$ref": "#/components/schemas/IntentLabel",
+            "default": "unresolved"
+          },
+          "location_raw": {
+            "title": "Location Raw",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "published_at": {
+            "format": "date-time",
+            "title": "Published At",
+            "type": "string"
+          },
+          "raw_snapshot_uri": {
+            "default": "",
+            "title": "Raw Snapshot Uri",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "source_native_id": {
+            "title": "Source Native Id",
+            "type": "string"
+          },
+          "source_url": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "title": "Source Url",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "workplace_type": {
+            "title": "Workplace Type",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "source_key",
+          "source_native_id",
+          "source_url",
+          "observed_at",
+          "published_at",
+          "title",
+          "body_excerpt",
+          "company_name_raw",
+          "company_domain_raw",
+          "location_raw",
+          "workplace_type",
+          "content_hash",
+          "access_policy_version"
+        ],
+        "title": "SourceHitCreate",
+        "type": "object"
+      },
+      "SourceHitUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update request.",
+        "properties": {
+          "access_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Policy Version"
+          },
+          "body_excerpt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Excerpt"
+          },
+          "company_domain_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Domain Raw"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "company_name_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name Raw"
+          },
+          "contact_routes_raw": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Routes Raw"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "intent_label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntentLabel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "location_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Raw"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "raw_snapshot_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Snapshot Uri"
+          },
+          "source_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Key"
+          },
+          "source_native_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Native Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2083,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "workplace_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workplace Type"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "title": "SourceHitUpdate",
+        "type": "object"
+      },
+      "SourceRegistry": {
+        "additionalProperties": false,
+        "description": "Configured source adapter registration..",
+        "properties": {
+          "access_mode": {
+            "title": "Access Mode",
+            "type": "string"
+          },
+          "allowed_fields": {
+            "default": [],
+            "title": "Allowed Fields"
+          },
+          "allowed_outputs": {
+            "default": [],
+            "title": "Allowed Outputs"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kill_switch": {
+            "title": "Kill Switch",
+            "type": "string"
+          },
+          "normalized_retention_days": {
+            "title": "Normalized Retention Days",
+            "type": "integer"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "rate_limit": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Rate Limit",
+            "type": "object"
+          },
+          "raw_retention_days": {
+            "title": "Raw Retention Days",
+            "type": "integer"
+          },
+          "source_class": {
+            "title": "Source Class",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "status": {
+            "default": "enabled",
+            "title": "Status",
+            "type": "string"
+          },
+          "terms_review_status": {
+            "title": "Terms Review Status",
+            "type": "string"
+          },
+          "terms_reviewed_at": {
+            "format": "date-time",
+            "title": "Terms Reviewed At",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "source_key",
+          "source_class",
+          "access_mode",
+          "owner",
+          "terms_review_status",
+          "terms_reviewed_at",
+          "raw_retention_days",
+          "normalized_retention_days",
+          "kill_switch"
+        ],
+        "title": "SourceRegistry",
+        "type": "object"
+      },
+      "SourceRegistryCreate": {
+        "additionalProperties": false,
+        "description": "Create request.",
+        "properties": {
+          "access_mode": {
+            "title": "Access Mode",
+            "type": "string"
+          },
+          "allowed_fields": {
+            "default": [],
+            "title": "Allowed Fields"
+          },
+          "allowed_outputs": {
+            "default": [],
+            "title": "Allowed Outputs"
+          },
+          "kill_switch": {
+            "title": "Kill Switch",
+            "type": "string"
+          },
+          "normalized_retention_days": {
+            "title": "Normalized Retention Days",
+            "type": "integer"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "rate_limit": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Rate Limit",
+            "type": "object"
+          },
+          "raw_retention_days": {
+            "title": "Raw Retention Days",
+            "type": "integer"
+          },
+          "source_class": {
+            "title": "Source Class",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "status": {
+            "default": "enabled",
+            "title": "Status",
+            "type": "string"
+          },
+          "terms_review_status": {
+            "title": "Terms Review Status",
+            "type": "string"
+          },
+          "terms_reviewed_at": {
+            "format": "date-time",
+            "title": "Terms Reviewed At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "source_key",
+          "source_class",
+          "access_mode",
+          "owner",
+          "terms_review_status",
+          "terms_reviewed_at",
+          "raw_retention_days",
+          "normalized_retention_days",
+          "kill_switch"
+        ],
+        "title": "SourceRegistryCreate",
+        "type": "object"
+      },
+      "SourceRegistryUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update request.",
+        "properties": {
+          "access_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Mode"
+          },
+          "allowed_fields": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Fields"
+          },
+          "allowed_outputs": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Outputs"
+          },
+          "kill_switch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kill Switch"
+          },
+          "normalized_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Retention Days"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "rate_limit": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate Limit"
+          },
+          "raw_retention_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Retention Days"
+          },
+          "source_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Class"
+          },
+          "source_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Key"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "terms_review_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Review Status"
+          },
+          "terms_reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Reviewed At"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "title": "SourceRegistryUpdate",
+        "type": "object"
+      },
+      "SourceRun": {
+        "additionalProperties": false,
+        "description": "Execution record for a source adapter run..",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "checkpoint": {
+            "additionalProperties": true,
+            "title": "Checkpoint",
+            "type": "object"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "errors_total": {
+            "title": "Errors Total",
+            "type": "integer"
+          },
+          "hits_duplicate_total": {
+            "title": "Hits Duplicate Total",
+            "type": "integer"
+          },
+          "hits_qualified_total": {
+            "title": "Hits Qualified Total",
+            "type": "integer"
+          },
+          "hits_total": {
+            "title": "Hits Total",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus",
+            "default": "pending"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "campaign_id",
+          "source_key",
+          "started_at",
+          "completed_at",
+          "hits_total",
+          "hits_qualified_total",
+          "hits_duplicate_total",
+          "errors_total",
+          "checkpoint"
+        ],
+        "title": "SourceRun",
+        "type": "object"
+      },
+      "SourceRunCreate": {
+        "additionalProperties": false,
+        "description": "Create request.",
+        "properties": {
+          "campaign_id": {
+            "format": "uuid",
+            "title": "Campaign Id",
+            "type": "string"
+          },
+          "checkpoint": {
+            "additionalProperties": true,
+            "title": "Checkpoint",
+            "type": "object"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "errors_total": {
+            "title": "Errors Total",
+            "type": "integer"
+          },
+          "hits_duplicate_total": {
+            "title": "Hits Duplicate Total",
+            "type": "integer"
+          },
+          "hits_qualified_total": {
+            "title": "Hits Qualified Total",
+            "type": "integer"
+          },
+          "hits_total": {
+            "title": "Hits Total",
+            "type": "integer"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus",
+            "default": "pending"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "campaign_id",
+          "source_key",
+          "started_at",
+          "completed_at",
+          "hits_total",
+          "hits_qualified_total",
+          "hits_duplicate_total",
+          "errors_total",
+          "checkpoint"
+        ],
+        "title": "SourceRunCreate",
+        "type": "object"
+      },
+      "SourceRunUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update request.",
+        "properties": {
+          "campaign_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "checkpoint": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "errors_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors Total"
+          },
+          "hits_duplicate_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hits Duplicate Total"
+          },
+          "hits_qualified_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hits Qualified Total"
+          },
+          "hits_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hits Total"
+          },
+          "source_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Key"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "title": "SourceRunUpdate",
         "type": "object"
       },
       "Suppression": {
@@ -2931,6 +4493,164 @@
         "summary": "Update Campaign",
         "tags": [
           "campaign"
+        ]
+      }
+    },
+    "/campaigns/{campaign_id}/source-runs": {
+      "get": {
+        "description": "List source runs for a campaign.",
+        "operationId": "list_source_runs_for_campaign_campaigns__campaign_id__source_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceRun"
+                  },
+                  "title": "Response List Source Runs For Campaign Campaigns  Campaign Id  Source Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Runs For Campaign",
+        "tags": [
+          "source_engine"
+        ]
+      },
+      "post": {
+        "description": "Run a configured source portfolio for a campaign.",
+        "operationId": "execute_source_run_campaigns__campaign_id__source_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Campaign Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Source Run",
+        "tags": [
+          "source_engine"
         ]
       }
     },
@@ -3882,6 +5602,322 @@
         ]
       }
     },
+    "/external-opportunities/": {
+      "get": {
+        "operationId": "list_external_opportunity_external_opportunities__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExternalOpportunity"
+                  },
+                  "title": "Response List External Opportunity External Opportunities  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List External Opportunity",
+        "tags": [
+          "external_opportunity"
+        ]
+      },
+      "post": {
+        "operationId": "create_external_opportunity_external_opportunities__post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalOpportunityCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalOpportunity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create External Opportunity",
+        "tags": [
+          "external_opportunity"
+        ]
+      }
+    },
+    "/external-opportunities/{external_opportunity_id}": {
+      "delete": {
+        "operationId": "delete_external_opportunity_external_opportunities__external_opportunity_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "external_opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "External Opportunity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete External Opportunity",
+        "tags": [
+          "external_opportunity"
+        ]
+      },
+      "get": {
+        "operationId": "get_external_opportunity_external_opportunities__external_opportunity_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "external_opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "External Opportunity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalOpportunity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get External Opportunity",
+        "tags": [
+          "external_opportunity"
+        ]
+      },
+      "patch": {
+        "operationId": "update_external_opportunity_external_opportunities__external_opportunity_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "external_opportunity_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "External Opportunity Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalOpportunityUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalOpportunity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update External Opportunity",
+        "tags": [
+          "external_opportunity"
+        ]
+      }
+    },
     "/leads/": {
       "get": {
         "operationId": "list_lead_assessment_leads__get",
@@ -4511,6 +6547,322 @@
         "summary": "Update Outcome",
         "tags": [
           "outcome"
+        ]
+      }
+    },
+    "/query-families/": {
+      "get": {
+        "operationId": "list_query_family_query_families__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QueryFamily"
+                  },
+                  "title": "Response List Query Family Query Families  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Query Family",
+        "tags": [
+          "query_family"
+        ]
+      },
+      "post": {
+        "operationId": "create_query_family_query_families__post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryFamilyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryFamily"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Query Family",
+        "tags": [
+          "query_family"
+        ]
+      }
+    },
+    "/query-families/{query_family_id}": {
+      "delete": {
+        "operationId": "delete_query_family_query_families__query_family_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "query_family_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Query Family Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Query Family",
+        "tags": [
+          "query_family"
+        ]
+      },
+      "get": {
+        "operationId": "get_query_family_query_families__query_family_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "query_family_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Query Family Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryFamily"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Query Family",
+        "tags": [
+          "query_family"
+        ]
+      },
+      "patch": {
+        "operationId": "update_query_family_query_families__query_family_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "query_family_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Query Family Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryFamilyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryFamily"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Query Family",
+        "tags": [
+          "query_family"
         ]
       }
     },
@@ -5459,6 +7811,954 @@
         "summary": "Update Scorecard",
         "tags": [
           "scorecard"
+        ]
+      }
+    },
+    "/source-hits/": {
+      "get": {
+        "operationId": "list_source_hit_source_hits__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceHit"
+                  },
+                  "title": "Response List Source Hit Source Hits  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Hit",
+        "tags": [
+          "source_hit"
+        ]
+      },
+      "post": {
+        "operationId": "create_source_hit_source_hits__post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceHitCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceHit"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Source Hit",
+        "tags": [
+          "source_hit"
+        ]
+      }
+    },
+    "/source-hits/{source_hit_id}": {
+      "delete": {
+        "operationId": "delete_source_hit_source_hits__source_hit_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_hit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Hit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Source Hit",
+        "tags": [
+          "source_hit"
+        ]
+      },
+      "get": {
+        "operationId": "get_source_hit_source_hits__source_hit_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_hit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Hit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceHit"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Source Hit",
+        "tags": [
+          "source_hit"
+        ]
+      },
+      "patch": {
+        "operationId": "update_source_hit_source_hits__source_hit_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_hit_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Hit Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceHitUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceHit"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Source Hit",
+        "tags": [
+          "source_hit"
+        ]
+      }
+    },
+    "/source-registry/": {
+      "get": {
+        "operationId": "list_source_registry_source_registry__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceRegistry"
+                  },
+                  "title": "Response List Source Registry Source Registry  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Registry",
+        "tags": [
+          "source_registry"
+        ]
+      },
+      "post": {
+        "operationId": "create_source_registry_source_registry__post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRegistryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRegistry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Source Registry",
+        "tags": [
+          "source_registry"
+        ]
+      }
+    },
+    "/source-registry/{source_registry_id}": {
+      "delete": {
+        "operationId": "delete_source_registry_source_registry__source_registry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_registry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Registry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Source Registry",
+        "tags": [
+          "source_registry"
+        ]
+      },
+      "get": {
+        "operationId": "get_source_registry_source_registry__source_registry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_registry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Registry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRegistry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Source Registry",
+        "tags": [
+          "source_registry"
+        ]
+      },
+      "patch": {
+        "operationId": "update_source_registry_source_registry__source_registry_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_registry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Registry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRegistryUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRegistry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Source Registry",
+        "tags": [
+          "source_registry"
+        ]
+      }
+    },
+    "/source-runs/": {
+      "get": {
+        "operationId": "list_source_run_source_runs__get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceRun"
+                  },
+                  "title": "Response List Source Run Source Runs  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Run",
+        "tags": [
+          "source_run"
+        ]
+      },
+      "post": {
+        "operationId": "create_source_run_source_runs__post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Source Run",
+        "tags": [
+          "source_run"
+        ]
+      }
+    },
+    "/source-runs/{source_run_id}": {
+      "delete": {
+        "operationId": "delete_source_run_source_runs__source_run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Source Run",
+        "tags": [
+          "source_run"
+        ]
+      },
+      "get": {
+        "operationId": "get_source_run_source_runs__source_run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Source Run",
+        "tags": [
+          "source_run"
+        ]
+      },
+      "patch": {
+        "operationId": "update_source_run_source_runs__source_run_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": true,
+            "schema": {
+              "title": "X-Workspace-Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": true,
+            "schema": {
+              "title": "X-Api-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRunUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Source Run",
+        "tags": [
+          "source_run"
         ]
       }
     },

@@ -1,0 +1,24 @@
+version: "1.0.0"
+approved_at: "2026-07-15T00:00:00+00:00"
+
+allowed_access_modes:
+  - public_api
+  - manual_import
+  - scoped_public_web_crawl
+  - licensed_api
+
+prohibited_access_modes:
+  - authenticated_scraping
+  - captcha_bypass
+  - fake_account
+  - stealth_collection
+
+retention:
+  raw_snapshot_days: 90
+  normalized_record_days: 730
+  contact_route_after_qualification_only: true
+
+jurisdiction_requirements:
+  - explicit_consent_or_legitimate_interest
+  - do_not_contact_list_check
+  - storage_rights_notification

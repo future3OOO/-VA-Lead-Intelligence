@@ -27,6 +27,7 @@ PYDANTIC_TYPE_MAP = {
     "datetime": "datetime",
     "date": "date",
     "json": "dict[str, Any]",
+    "json_list": "Any",
     "list_str": "list[str]",
 }
 
@@ -42,6 +43,7 @@ SQLALCHEMY_TYPE_MAP = {
     "datetime": "DateTime(timezone=True)",
     "date": "Date",
     "json": "JSON",
+    "json_list": "JSON",
     "list_str": "JSON",
 }
 
@@ -50,12 +52,16 @@ def to_pascal(snake: str) -> str:
     return "".join(part.capitalize() for part in snake.split("_"))
 
 
-def py_type(spec_type: str, enums: dict[str, list[str]]) -> str:
+def py_type(spec_type: str, enums: dict[str, list[str]], nullable: bool = False) -> str:
     if spec_type.startswith("enum:"):
-        return spec_type.split(":", 1)[1]
-    if spec_type.startswith("fk:"):
-        return "UUID"
-    return PYDANTIC_TYPE_MAP[spec_type]
+        base = spec_type.split(":", 1)[1]
+    elif spec_type.startswith("fk:"):
+        base = "UUID"
+    else:
+        base = PYDANTIC_TYPE_MAP[spec_type]
+    if nullable and base not in ("Any",):
+        return f"{base} | None"
+    return base
 
 
 def sa_type(spec_type: str) -> str:
@@ -86,13 +92,17 @@ def pydantic_default(
         return "Field(default_factory=datetime.utcnow)"
     if for_create and field["name"] == "workspace_id":
         return "None"
+    if for_create and field.get("nullable") and field.get("default") is None:
+        return "None"
     default = field.get("default")
     if default is None:
         py = py_type(field["type"], {})
-        if py == "list[str]":
-            return "Field(default_factory=list)"
-        if py == "dict[str, Any]":
-            return "Field(default_factory=dict)"
+        if py in ("list[str]", "Any"):
+            return (
+                "Field(default_factory=list)"
+                if "list" in field.get("type", "")
+                else "Field(default_factory=dict)"
+            )
         return ""
     if field["type"].startswith("enum:"):
         enum_name = py_type(field["type"], enums)
@@ -106,7 +116,7 @@ def pydantic_default(
 
 
 def response_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
-    py = py_type(field["type"], enums)
+    py = py_type(field["type"], enums, nullable=bool(field.get("nullable")))
     default = pydantic_default(field, enums)
     if default:
         return f"    {field['name']}: {py} = {default}"
@@ -116,7 +126,7 @@ def response_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
 def create_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
     if field.get("primary") or field.get("auto"):
         return ""
-    py = py_type(field["type"], enums)
+    py = py_type(field["type"], enums, nullable=bool(field.get("nullable")))
     if field["name"] == "workspace_id":
         return "    workspace_id: UUID | None = None"
     default = pydantic_default(field, enums, for_create=True)
@@ -128,9 +138,12 @@ def create_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
 def update_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
     if field.get("primary") or field.get("auto"):
         return ""
-    py = py_type(field["type"], enums)
+    nullable = bool(field.get("nullable"))
+    py = py_type(field["type"], enums, nullable=nullable)
     if field["name"] == "workspace_id":
         return "    workspace_id: UUID | None = None"
+    if nullable:
+        return f"    {field['name']}: {py} = None"
     return f"    {field['name']}: {py} | None = None"
 
 
@@ -138,6 +151,7 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
     sql = sa_type(field["type"])
     kwargs: list[str] = []
     name = field["name"]
+    nullable = bool(field.get("nullable"))
     if field.get("primary"):
         kwargs.append("primary_key=True")
         kwargs.append("default=uuid.uuid4")
@@ -146,6 +160,8 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
         kwargs.append(f"ForeignKey('{target}.id')")
     if field.get("index"):
         kwargs.append("index=True")
+    if nullable:
+        kwargs.append("nullable=True")
     if field.get("auto"):
         if name == "created_at":
             kwargs.append("server_default=func.now()")
@@ -162,18 +178,21 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
     ):
         kwargs.append(f"default={py_default(default)}")
     args = sql + ((", " + ", ".join(kwargs)) if kwargs else "")
-    return f"    {name}: Mapped[{mapped_py_type(field['type'])}] = mapped_column({args})"
+    return f"    {name}: Mapped[{mapped_py_type(field['type'], nullable)}] = mapped_column({args})"
 
 
-def mapped_py_type(spec_type: str) -> str:
+def mapped_py_type(spec_type: str, nullable: bool = False) -> str:
     if spec_type.startswith("enum:"):
-        return "str"
-    if spec_type == "uuid" or spec_type.startswith("fk:"):
-        return "uuid.UUID"
-    py = py_type(spec_type, {})
-    if py in ("HttpUrl", "EmailStr"):
-        return "str"
-    return py
+        base = "str"
+    elif spec_type == "uuid" or spec_type.startswith("fk:"):
+        base = "uuid.UUID"
+    else:
+        base = py_type(spec_type, {})
+    if base in ("HttpUrl", "EmailStr"):
+        base = "str"
+    if nullable and base not in ("Any",):
+        return f"{base} | None"
+    return base
 
 
 def generate_enums(enums: dict[str, list[str]]) -> str:
@@ -295,7 +314,7 @@ def generate_pydantic_models(
 
 def generate_sqlalchemy_model(name: str, class_name: str, spec: dict[str, Any]) -> str:
     fields = [sqlalchemy_field(f) for f in spec["fields"]]
-    has_json = any(f["type"] == "json" for f in spec["fields"])
+    has_json = any(f["type"] in ("json", "json_list") for f in spec["fields"])
     used_types = {f["type"] for f in spec["fields"]}
     needs_datetime = any(t in ("datetime", "date") for t in used_types)
     lines = ["import uuid"]

@@ -1,0 +1,13 @@
+description: A company hiring a virtual assistant with clear tasks and contact routes.
+source_hits:
+  - source_key: manual_seed
+    title: "Office Administrator / Virtual Assistant"
+    body_excerpt: "We need a remote virtual assistant to manage inbox, schedule appointments, update CRM and process orders."
+    company_name_raw: "Acme Services"
+    company_domain_raw: "acme-services.example.com"
+    location_raw: "Remote, US"
+    contact_routes_raw:
+      - type: generic_email
+        value: hiring@acme-services.example.com
+    intent_label: buyer_request
+    source_hit_priority: 0.95

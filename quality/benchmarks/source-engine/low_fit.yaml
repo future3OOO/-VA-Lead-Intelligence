@@ -1,0 +1,11 @@
+description: A job seeker post or training course, not a hiring company.
+source_hits:
+  - source_key: manual_seed
+    title: "Become a Virtual Assistant Today"
+    body_excerpt: "Join our virtual assistant course and learn how to get clients. No experience needed."
+    company_name_raw: "VA Training Academy"
+    company_domain_raw: "va-training.example.com"
+    location_raw: "Online"
+    contact_routes_raw: []
+    intent_label: seller_promotion
+    source_hit_priority: 0.0

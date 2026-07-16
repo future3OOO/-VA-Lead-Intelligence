@@ -27,7 +27,8 @@
     }
   },
   "required": [
-    "key"
+    "key",
+    "value"
   ],
   "title": "OperationalMetadataCreate",
   "type": "object",

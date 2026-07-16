@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/source_run-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Execution record for a source adapter run..",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "checkpoint": {
+      "additionalProperties": false,
+      "title": "Checkpoint",
+      "type": "object"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "errors_total": {
+      "title": "Errors Total",
+      "type": "integer"
+    },
+    "hits_duplicate_total": {
+      "title": "Hits Duplicate Total",
+      "type": "integer"
+    },
+    "hits_qualified_total": {
+      "title": "Hits Qualified Total",
+      "type": "integer"
+    },
+    "hits_total": {
+      "title": "Hits Total",
+      "type": "integer"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "source_key": {
+      "title": "Source Key",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/RunStatus",
+      "default": "pending"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "campaign_id",
+    "source_key",
+    "started_at",
+    "completed_at",
+    "hits_total",
+    "hits_qualified_total",
+    "hits_duplicate_total",
+    "errors_total",
+    "checkpoint"
+  ],
+  "title": "SourceRun",
+  "type": "object",
+  "version": "1.0.0"
+}

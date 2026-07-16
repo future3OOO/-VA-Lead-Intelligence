@@ -1,0 +1,189 @@
+version: "1.0.0"
+reviewed_at: "2026-07-15T00:00:00+00:00"
+
+sources:
+  manual_seed:
+    source_class: manual_seed
+    access_mode: manual_import
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - company_domain
+      - title
+      - body
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 10
+      max_concurrency_per_host: 1
+    kill_switch: ""
+
+  greenhouse_jobs:
+    source_class: greenhouse_jobs
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - job_title
+      - description
+      - location
+      - department
+      - published_at
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.greenhouse.enabled
+
+  lever_jobs:
+    source_class: lever_jobs
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - job_title
+      - description
+      - location
+      - department
+      - published_at
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.lever.enabled
+
+  ashby_jobs:
+    source_class: ashby_jobs
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - job_title
+      - description
+      - location
+      - department
+      - published_at
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.ashby.enabled
+
+  smartrecruiters_postings:
+    source_class: smartrecruiters_postings
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - job_title
+      - description
+      - location
+      - department
+      - published_at
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.smartrecruiters.enabled
+
+  company_web:
+    source_class: company_web
+    access_mode: scoped_public_web_crawl
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - contact_route
+    allowed_fields:
+      - company_name
+      - company_domain
+      - contact_routes
+      - industry
+      - locations
+      - operating_hours
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.company_web.enabled
+
+  search_discovery:
+    source_class: search_discovery
+    access_mode: licensed_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - url_company_candidate
+    allowed_fields:
+      - url
+      - title
+      - snippet
+    raw_retention_days: 30
+    normalized_retention_days: 365
+    rate_limit:
+      requests_per_second: 1
+      max_concurrency_per_host: 1
+    kill_switch: sources.search_discovery.enabled
+
+  hunter_domain:
+    source_class: hunter_domain
+    access_mode: licensed_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - contact_route
+    allowed_fields:
+      - email
+      - position
+      - verification_status
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 1
+      max_concurrency_per_host: 1
+    kill_switch: sources.hunter.enabled

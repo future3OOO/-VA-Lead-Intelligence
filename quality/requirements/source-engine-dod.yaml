@@ -1,0 +1,63 @@
+version: "1.0.0"
+approved_at: "2026-07-15T00:00:00+00:00"
+
+requirements:
+  - id: SE-01
+    title: Source adapter interface
+    description: All P0 source adapters implement BaseSourceAdapter with fetch, normalize, rate limiting, checkpointing and kill switch support.
+    verification: unit tests + source registry validation
+    status: implemented
+
+  - id: SE-02
+    title: SourceHit contract
+    description: Every normalized hit conforms to the SourceHit schema with workspace_id, source_key, source_native_id, source_url, observed_at, published_at, title, body_excerpt, company_name_raw, company_domain_raw, location_raw, workplace_type, intent_label, contact_routes_raw, raw_snapshot_uri, content_hash and access_policy_version.
+    verification: JSON schema + model tests
+    status: implemented
+
+  - id: SE-03
+    title: Intent classification
+    description: Rule-based classifier maps source hit titles and bodies to IntentLabel using the query library positive/negative terms.
+    verification: benchmark fixtures high_fit, low_fit, blocked_jurisdiction
+    status: implemented
+
+  - id: SE-04
+    title: Company resolution
+    description: Resolved by company_domain_raw, fallback to company_name_raw, and creates a company record only for buyer-facing intents.
+    verification: integration test with in-memory database
+    status: implemented
+
+  - id: SE-05
+    title: Contact enrichment
+    description: Contact routes extracted from company_web and hunter_domain sources are persisted only after a company is resolved and qualified.
+    verification: integration test
+    status: implemented
+
+  - id: SE-06
+    title: Source-level scoring
+    description: Each SourceHit receives a priority score using intent_strength, company_resolvability, freshness, evidence_quality, contactability and source_stability.
+    verification: unit tests
+    status: implemented
+
+  - id: SE-07
+    title: Operational controls
+    description: Idempotency via content_hash, checkpoints per adapter/workspace, token-bucket rate limits, concurrency caps, budget tracking, kill switches and retention policies.
+    verification: unit tests + config-validate
+    status: implemented
+
+  - id: SE-08
+    title: Jurisdiction and source policies
+    description: Source access modes and jurisdiction requirements are configured in YAML and validated before every run.
+    verification: config-validate + policy engine tests
+    status: implemented
+
+  - id: SE-09
+    title: Audit and metrics
+    description: Every source run records hits_total, hits_qualified_total, hits_duplicate_total, errors_total and per-adapter metrics.
+    verification: source_run API + metrics tests
+    status: implemented
+
+  - id: SE-10
+    title: Documentation and runbooks
+    description: Architecture diagrams, source access matrix, shutdown runbook and DOD traceability are committed.
+    verification: make handover
+    status: implemented

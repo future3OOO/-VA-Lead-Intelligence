@@ -12,7 +12,7 @@ class SourcePolicy(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
     source_id: str
-    config: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any]
     effective_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -23,7 +23,7 @@ class SourcePolicyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     source_id: str
-    config: dict[str, Any] = Field(default_factory=dict)
+    config: dict[str, Any]
     effective_at: datetime
 
 

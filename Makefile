@@ -25,7 +25,7 @@ typecheck: install ## Run mypy type checking
 	$(PYTHON) -m mypy src scripts
 
 test: install ## Run all tests
-	$(PYTHON) -m pytest tests -q
+	$(PYTHON) -m pytest tests -q --junitxml=reports/junit.xml
 
 test-unit: install ## Run unit tests
 	$(PYTHON) -m pytest tests/unit -q

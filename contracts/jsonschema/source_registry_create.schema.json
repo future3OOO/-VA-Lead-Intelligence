@@ -1,0 +1,90 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/source_registry_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "access_mode": {
+      "title": "Access Mode",
+      "type": "string"
+    },
+    "allowed_fields": {
+      "default": [],
+      "title": "Allowed Fields"
+    },
+    "allowed_outputs": {
+      "default": [],
+      "title": "Allowed Outputs"
+    },
+    "kill_switch": {
+      "title": "Kill Switch",
+      "type": "string"
+    },
+    "normalized_retention_days": {
+      "title": "Normalized Retention Days",
+      "type": "integer"
+    },
+    "owner": {
+      "title": "Owner",
+      "type": "string"
+    },
+    "rate_limit": {
+      "additionalProperties": false,
+      "default": {},
+      "title": "Rate Limit",
+      "type": "object"
+    },
+    "raw_retention_days": {
+      "title": "Raw Retention Days",
+      "type": "integer"
+    },
+    "source_class": {
+      "title": "Source Class",
+      "type": "string"
+    },
+    "source_key": {
+      "title": "Source Key",
+      "type": "string"
+    },
+    "status": {
+      "default": "enabled",
+      "title": "Status",
+      "type": "string"
+    },
+    "terms_review_status": {
+      "title": "Terms Review Status",
+      "type": "string"
+    },
+    "terms_reviewed_at": {
+      "format": "date-time",
+      "title": "Terms Reviewed At",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "source_key",
+    "source_class",
+    "access_mode",
+    "owner",
+    "terms_review_status",
+    "terms_reviewed_at",
+    "raw_retention_days",
+    "normalized_retention_days",
+    "kill_switch"
+  ],
+  "title": "SourceRegistryCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

@@ -44,7 +44,8 @@
     "actor_id",
     "action",
     "resource_type",
-    "resource_id"
+    "resource_id",
+    "payload"
   ],
   "title": "AuditEventCreate",
   "type": "object",

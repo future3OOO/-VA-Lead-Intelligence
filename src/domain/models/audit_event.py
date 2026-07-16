@@ -15,7 +15,7 @@ class AuditEvent(BaseModel):
     action: str
     resource_type: str
     resource_id: UUID
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any]
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -28,7 +28,7 @@ class AuditEventCreate(BaseModel):
     action: str
     resource_type: str
     resource_id: UUID
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any]
 
 
 class AuditEventUpdate(BaseModel):

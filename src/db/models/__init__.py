@@ -12,6 +12,7 @@ from db.models.cost_ledger import CostLedger
 from db.models.discovery_event import DiscoveryEvent
 from db.models.evidence_record import EvidenceRecord
 from db.models.export_record import ExportRecord
+from db.models.external_opportunity import ExternalOpportunity
 from db.models.fact import Fact
 from db.models.feature import Feature
 from db.models.job import Job
@@ -22,12 +23,16 @@ from db.models.membership import Membership
 from db.models.operational_metadata import OperationalMetadata
 from db.models.outcome import Outcome
 from db.models.page_snapshot import PageSnapshot
+from db.models.query_family import QueryFamily
 from db.models.review_assignment import ReviewAssignment
 from db.models.review_decision import ReviewDecision
 from db.models.scorecard import Scorecard
 from db.models.source_event import SourceEvent
 from db.models.source_health import SourceHealth
+from db.models.source_hit import SourceHit
 from db.models.source_policy import SourcePolicy
+from db.models.source_registry import SourceRegistry
+from db.models.source_run import SourceRun
 from db.models.suppression import Suppression
 from db.models.user import User
 from db.models.workspace import Workspace
@@ -66,4 +71,9 @@ __all__ = [
     "CostLedger",
     "SourceHealth",
     "OperationalMetadata",
+    "SourceHit",
+    "ExternalOpportunity",
+    "SourceRegistry",
+    "QueryFamily",
+    "SourceRun",
 ]

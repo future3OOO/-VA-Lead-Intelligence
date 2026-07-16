@@ -71,6 +71,7 @@
     "workspace_id",
     "correlation_id",
     "producer",
+    "crawl_request",
     "status",
     "content_text"
   ],

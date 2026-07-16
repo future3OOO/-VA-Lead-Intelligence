@@ -4,11 +4,17 @@ from api.routers.company import router as company_router
 from api.routers.cost_ledger import router as cost_ledger_router
 from api.routers.discovery_event import router as discovery_event_router
 from api.routers.export_record import router as export_record_router
+from api.routers.external_opportunity import router as external_opportunity_router
 from api.routers.lead_assessment import router as lead_assessment_router
 from api.routers.outcome import router as outcome_router
+from api.routers.query_family import router as query_family_router
 from api.routers.review_assignment import router as review_assignment_router
 from api.routers.scorecard import router as scorecard_router
+from api.routers.source_engine import router as source_engine_router
 from api.routers.source_health import router as source_health_router
+from api.routers.source_hit import router as source_hit_router
+from api.routers.source_registry import router as source_registry_router
+from api.routers.source_run import router as source_run_router
 from api.routers.suppression import router as suppression_router
 from api.routers.workspace import router as workspace_router
 
@@ -26,4 +32,10 @@ __all__ = [
     "outcome_router",
     "cost_ledger_router",
     "source_health_router",
+    "source_hit_router",
+    "external_opportunity_router",
+    "source_registry_router",
+    "query_family_router",
+    "source_engine_router",
+    "source_run_router",
 ]

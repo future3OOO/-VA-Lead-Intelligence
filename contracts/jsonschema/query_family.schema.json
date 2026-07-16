@@ -1,0 +1,67 @@
+{
+  "$id": "https://schemas.va-lead-intelligence/query_family-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Versioned query set for source discovery..",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "family_key": {
+      "title": "Family Key",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "negative_terms": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Negative Terms",
+      "type": "array"
+    },
+    "positive_task_phrases": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Positive Task Phrases",
+      "type": "array"
+    },
+    "positive_titles": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Positive Titles",
+      "type": "array"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "family_key",
+    "version"
+  ],
+  "title": "QueryFamily",
+  "type": "object",
+  "version": "1.0.0"
+}

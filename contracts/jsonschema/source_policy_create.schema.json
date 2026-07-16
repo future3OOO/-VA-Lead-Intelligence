@@ -33,6 +33,7 @@
   },
   "required": [
     "source_id",
+    "config",
     "effective_at"
   ],
   "title": "SourcePolicyCreate",

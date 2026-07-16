@@ -44,3 +44,4 @@ reports/
 *.bundle
 *.zip
 tmp/
+data/

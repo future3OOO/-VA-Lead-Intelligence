@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "IntentLabel": {
+      "enum": [
+        "buyer_request",
+        "company_hiring",
+        "operational_pain",
+        "growth_trigger",
+        "company_existence_only",
+        "seller_promotion",
+        "job_seeker",
+        "general_discussion",
+        "unresolved"
+      ],
+      "title": "IntentLabel",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/external_opportunity_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "budget_hint": {
+      "title": "Budget Hint",
+      "type": "string"
+    },
+    "buyer_intent_label": {
+      "$ref": "#/definitions/IntentLabel",
+      "default": "unresolved"
+    },
+    "country_code": {
+      "title": "Country Code",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "external_opportunity_id": {
+      "title": "External Opportunity Id",
+      "type": "string"
+    },
+    "platform": {
+      "title": "Platform",
+      "type": "string"
+    },
+    "source_hit_id": {
+      "format": "uuid",
+      "title": "Source Hit Id",
+      "type": "string"
+    },
+    "status": {
+      "default": "open",
+      "title": "Status",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "source_hit_id",
+    "platform",
+    "external_opportunity_id",
+    "title",
+    "description",
+    "budget_hint",
+    "country_code"
+  ],
+  "title": "ExternalOpportunityCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

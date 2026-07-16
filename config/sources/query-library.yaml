@@ -1,0 +1,46 @@
+version: "1.0.0"
+reviewed_at: "2026-07-15T00:00:00+00:00"
+
+families:
+  va_adjacent_jobs_v1:
+    positive_titles:
+      - virtual assistant
+      - executive assistant
+      - administrative assistant
+      - operations assistant
+      - operations coordinator
+      - customer support coordinator
+      - scheduling coordinator
+      - appointment setter
+      - sales support
+      - crm administrator
+      - ecommerce assistant
+      - order processing
+      - property management assistant
+      - transaction coordinator
+      - recruitment coordinator
+      - project coordinator
+    positive_task_phrases:
+      - manage inbox
+      - schedule appointments
+      - respond to customer enquiries
+      - update crm
+      - process orders
+      - coordinate maintenance
+      - prepare reports
+      - data entry
+      - follow up leads
+      - manage returns
+    negative_terms:
+      - on-site only
+      - driving required
+      - childcare
+      - personal care
+      - security clearance
+      - licensed clinical work
+      - licensed legal advice
+      - staffing agency
+      - recruitment agency
+      - virtual assistant course
+      - become a virtual assistant
+      - looking for work as a virtual assistant

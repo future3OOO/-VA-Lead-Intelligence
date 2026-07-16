@@ -48,8 +48,44 @@ enums:
     - greenhouse
     - lever
     - ashby
+    - smartrecruiters
     - company_web
     - search
+    - job_search_provider
+    - hunter_domain
+    - manual_seed
+    - upwork_marketplace
+    - freelancer_marketplace
+    - company_dataset
+    - company_news
+    - official_registry
+    - apollo_or_pdl_enrichment
+    - meta_pages
+    - x_posts
+    - reddit_posts
+    - youtube_content
+    - places_or_directory
+
+  IntentLabel:
+    - buyer_request
+    - company_hiring
+    - operational_pain
+    - growth_trigger
+    - company_existence_only
+    - seller_promotion
+    - job_seeker
+    - general_discussion
+    - unresolved
+
+  ContactRouteType:
+    - generic_email
+    - contact_form
+    - sales_form
+    - demo_booking
+    - business_phone
+    - support_route
+    - named_work_email_approved
+    - social_profile_review_only
 
 base_event_fields:
   - name: schema_version
@@ -954,6 +990,210 @@ entities:
       - name: key
         type: str
       - name: value
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true
+
+  source_hit:
+    route: /source-hits
+    description: Normalized record from a source adapter.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+        nullable: true
+      - name: source_key
+        type: str
+      - name: source_native_id
+        type: str
+      - name: source_url
+        type: url
+      - name: observed_at
+        type: datetime
+      - name: published_at
+        type: datetime
+      - name: title
+        type: str
+      - name: body_excerpt
+        type: text
+      - name: company_name_raw
+        type: str
+      - name: company_domain_raw
+        type: str
+      - name: location_raw
+        type: str
+      - name: workplace_type
+        type: str
+      - name: intent_label
+        type: enum:IntentLabel
+        default: "'unresolved'"
+      - name: contact_routes_raw
+        type: json_list
+        default: []
+      - name: raw_snapshot_uri
+        type: str
+        default: "''"
+      - name: content_hash
+        type: str
+      - name: access_policy_version
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  external_opportunity:
+    route: /external-opportunities
+    description: Explicit work posting with unresolved client.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_hit_id
+        type: fk:source_hit
+        index: true
+      - name: platform
+        type: str
+      - name: external_opportunity_id
+        type: str
+      - name: title
+        type: str
+      - name: description
+        type: text
+      - name: buyer_intent_label
+        type: enum:IntentLabel
+        default: "'unresolved'"
+      - name: budget_hint
+        type: str
+      - name: country_code
+        type: str
+      - name: status
+        type: str
+        default: "'open'"
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  source_registry:
+    route: /source-registry
+    description: Configured source adapter registration.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_key
+        type: str
+      - name: source_class
+        type: str
+      - name: access_mode
+        type: str
+      - name: status
+        type: str
+        default: "'enabled'"
+      - name: owner
+        type: str
+      - name: terms_review_status
+        type: str
+      - name: terms_reviewed_at
+        type: datetime
+      - name: allowed_outputs
+        type: json_list
+        default: []
+      - name: allowed_fields
+        type: json_list
+        default: []
+      - name: raw_retention_days
+        type: int
+      - name: normalized_retention_days
+        type: int
+      - name: rate_limit
+        type: json
+        default: {}
+      - name: kill_switch
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  query_family:
+    route: /query-families
+    description: Versioned query set for source discovery.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: family_key
+        type: str
+      - name: version
+        type: str
+      - name: positive_titles
+        type: list_str
+        default: []
+      - name: positive_task_phrases
+        type: list_str
+        default: []
+      - name: negative_terms
+        type: list_str
+        default: []
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  source_run:
+    route: /source-runs
+    description: Execution record for a source adapter run.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+        index: true
+      - name: source_key
+        type: str
+      - name: status
+        type: enum:RunStatus
+        default: "'pending'"
+      - name: started_at
+        type: datetime
+      - name: completed_at
+        type: datetime
+      - name: hits_total
+        type: int
+      - name: hits_qualified_total
+        type: int
+      - name: hits_duplicate_total
+        type: int
+      - name: errors_total
+        type: int
+      - name: checkpoint
         type: json
       - name: created_at
         type: datetime

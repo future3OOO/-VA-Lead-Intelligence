@@ -1,0 +1,13 @@
+description: A source hit from a jurisdiction that must be suppressed.
+source_hits:
+  - source_key: manual_seed
+    title: "Remote Administrative Assistant"
+    body_excerpt: "Hiring a remote assistant to manage calendar and customer support."
+    company_name_raw: "Global Consultants"
+    company_domain_raw: "global-consultants.example.com"
+    location_raw: "EU-DE"
+    contact_routes_raw:
+      - type: generic_email
+        value: jobs@global-consultants.example.com
+    intent_label: buyer_request
+    jurisdiction_action: block

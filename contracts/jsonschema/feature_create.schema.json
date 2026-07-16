@@ -38,6 +38,7 @@
   "required": [
     "company_id",
     "feature_name",
+    "feature_value",
     "source"
   ],
   "title": "FeatureCreate",

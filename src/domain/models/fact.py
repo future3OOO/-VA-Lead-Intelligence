@@ -14,7 +14,7 @@ class Fact(BaseModel):
     evidence_record_id: UUID
     company_id: UUID
     fact_type: str
-    value: dict[str, Any] = Field(default_factory=dict)
+    value: dict[str, Any]
     confidence: float
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -27,7 +27,7 @@ class FactCreate(BaseModel):
     evidence_record_id: UUID
     company_id: UUID
     fact_type: str
-    value: dict[str, Any] = Field(default_factory=dict)
+    value: dict[str, Any]
     confidence: float
 
 

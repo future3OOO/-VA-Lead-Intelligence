@@ -12,7 +12,7 @@ class OperationalMetadata(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
     key: str
-    value: dict[str, Any] = Field(default_factory=dict)
+    value: dict[str, Any]
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -22,7 +22,7 @@ class OperationalMetadataCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     key: str
-    value: dict[str, Any] = Field(default_factory=dict)
+    value: dict[str, Any]
 
 
 class OperationalMetadataUpdate(BaseModel):

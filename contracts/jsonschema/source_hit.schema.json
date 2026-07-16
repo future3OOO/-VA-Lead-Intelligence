@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "IntentLabel": {
+      "enum": [
+        "buyer_request",
+        "company_hiring",
+        "operational_pain",
+        "growth_trigger",
+        "company_existence_only",
+        "seller_promotion",
+        "job_seeker",
+        "general_discussion",
+        "unresolved"
+      ],
+      "title": "IntentLabel",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/source_hit-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Normalized record from a source adapter..",
+  "properties": {
+    "access_policy_version": {
+      "title": "Access Policy Version",
+      "type": "string"
+    },
+    "body_excerpt": {
+      "title": "Body Excerpt",
+      "type": "string"
+    },
+    "company_domain_raw": {
+      "title": "Company Domain Raw",
+      "type": "string"
+    },
+    "company_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Company Id"
+    },
+    "company_name_raw": {
+      "title": "Company Name Raw",
+      "type": "string"
+    },
+    "contact_routes_raw": {
+      "default": [],
+      "title": "Contact Routes Raw"
+    },
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "intent_label": {
+      "$ref": "#/definitions/IntentLabel",
+      "default": "unresolved"
+    },
+    "location_raw": {
+      "title": "Location Raw",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "raw_snapshot_uri": {
+      "default": "",
+      "title": "Raw Snapshot Uri",
+      "type": "string"
+    },
+    "source_key": {
+      "title": "Source Key",
+      "type": "string"
+    },
+    "source_native_id": {
+      "title": "Source Native Id",
+      "type": "string"
+    },
+    "source_url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Source Url",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "workplace_type": {
+      "title": "Workplace Type",
+      "type": "string"
+    },
+    "workspace_id": {
+      "format": "uuid",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "company_id",
+    "source_key",
+    "source_native_id",
+    "source_url",
+    "observed_at",
+    "published_at",
+    "title",
+    "body_excerpt",
+    "company_name_raw",
+    "company_domain_raw",
+    "location_raw",
+    "workplace_type",
+    "content_hash",
+    "access_policy_version"
+  ],
+  "title": "SourceHit",
+  "type": "object",
+  "version": "1.0.0"
+}

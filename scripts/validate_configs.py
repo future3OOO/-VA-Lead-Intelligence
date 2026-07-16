@@ -63,6 +63,43 @@ def validate_policy(data: dict[str, Any], path: Path, required_root: str) -> lis
     return errors
 
 
+def validate_source_registry(data: dict[str, Any], path: Path) -> list[str]:
+    errors: list[str] = []
+    sources = data.get("sources", {})
+    if not isinstance(sources, dict):
+        errors.append(f"{path} 'sources' must be a mapping")
+        return errors
+    for key, cfg in sources.items():
+        for field in ("source_class", "access_mode", "status", "owner", "terms_review_status"):
+            if not cfg.get(field):
+                errors.append(f"{path} source '{key}' missing {field}")
+    return errors
+
+
+def validate_query_library(data: dict[str, Any], path: Path) -> list[str]:
+    errors: list[str] = []
+    families = data.get("families", {})
+    if not isinstance(families, dict):
+        errors.append(f"{path} 'families' must be a mapping")
+        return errors
+    for key, family in families.items():
+        for field in ("positive_titles", "positive_task_phrases", "negative_terms"):
+            if not isinstance(family.get(field), list):
+                errors.append(f"{path} family '{key}' missing or invalid {field}")
+    return errors
+
+
+def validate_source_policy(data: dict[str, Any], path: Path) -> list[str]:
+    errors: list[str] = []
+    if "version" not in data:
+        errors.append(f"{path} missing version")
+    if "allowed_access_modes" not in data:
+        errors.append(f"{path} missing allowed_access_modes")
+    if "retention" not in data:
+        errors.append(f"{path} missing retention")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-dir", type=Path, default=CONFIG_DIR)
@@ -74,6 +111,9 @@ def main() -> int:
         "scorecards/default.yaml": validate_scorecard,
         "source-policy/default.yaml": lambda data, p: validate_policy(data, p, "sources"),
         "jurisdiction-policy/default.yaml": lambda data, p: validate_policy(data, p, "rules"),
+        "sources/source-registry.yaml": validate_source_registry,
+        "sources/query-library.yaml": validate_query_library,
+        "sources/source-policies/default.yaml": validate_source_policy,
     }
 
     for rel_path, validator in validators.items():

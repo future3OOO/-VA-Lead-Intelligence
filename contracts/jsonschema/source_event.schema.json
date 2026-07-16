@@ -5,8 +5,23 @@
         "greenhouse",
         "lever",
         "ashby",
+        "smartrecruiters",
         "company_web",
-        "search"
+        "search",
+        "job_search_provider",
+        "hunter_domain",
+        "manual_seed",
+        "upwork_marketplace",
+        "freelancer_marketplace",
+        "company_dataset",
+        "company_news",
+        "official_registry",
+        "apollo_or_pdl_enrichment",
+        "meta_pages",
+        "x_posts",
+        "reddit_posts",
+        "youtube_content",
+        "places_or_directory"
       ],
       "title": "SourceType",
       "type": "string"
@@ -47,7 +62,8 @@
   "required": [
     "workspace_id",
     "source_id",
-    "source_type"
+    "source_type",
+    "raw_payload"
   ],
   "title": "SourceEvent",
   "type": "object",
