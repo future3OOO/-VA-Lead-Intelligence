@@ -363,6 +363,17 @@ async def main() -> None:
 
         lead_rows.sort(key=lambda x: (-x["qualification_score"], x["company_name"].lower()))
 
+        # Cap each company at the strongest 18 leads so the export stays diverse.
+        per_company_count: dict[str, int] = defaultdict(int)
+        capped_rows: list[dict[str, Any]] = []
+        for row in lead_rows:
+            name = row["company_name"].lower().strip()
+            if per_company_count[name] >= 18:
+                continue
+            per_company_count[name] += 1
+            capped_rows.append(row)
+        lead_rows = capped_rows
+
         with open(leads_path, "w", newline="", encoding="utf-8") as f:
             leads_writer = csv.DictWriter(
                 f,
