@@ -123,11 +123,15 @@ class SourceRunner:
         if isinstance(published_at, str):
             published_at = published_at.replace("Z", "+00:00")
             try:
-                hit["published_at"] = datetime.fromisoformat(published_at)
+                published_at = datetime.fromisoformat(published_at)
             except ValueError:
-                hit["published_at"] = datetime.now(timezone.utc)
-        if not isinstance(hit.get("published_at"), datetime):
-            hit["published_at"] = datetime.now(timezone.utc)
+                published_at = datetime.now(timezone.utc)
+        if isinstance(published_at, datetime):
+            if published_at.tzinfo is None:
+                published_at = published_at.replace(tzinfo=timezone.utc)
+        else:
+            published_at = datetime.now(timezone.utc)
+        hit["published_at"] = published_at
         hit["source_hit_priority"] = score_source_hit(hit)
         hash_input = json.dumps(
             {

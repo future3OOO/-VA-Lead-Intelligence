@@ -17,9 +17,18 @@ families:
       - ecommerce assistant
       - order processing
       - property management assistant
+      - property maintenance coordinator
+      - maintenance coordinator
       - transaction coordinator
       - recruitment coordinator
       - project coordinator
+      - bookkeeper
+      - real estate assistant
+      - insurance coordinator
+      - mortgage broker assistant
+      - mortgage assistant
+      - loan processor
+      - office manager
     positive_task_phrases:
       - manage inbox
       - schedule appointments
@@ -44,3 +53,9 @@ families:
       - virtual assistant course
       - become a virtual assistant
       - looking for work as a virtual assistant
+      - our client
+      - for our client
+      - on behalf of
+      - bpo
+      - business process outsourcing
+      - outsourcing provider
