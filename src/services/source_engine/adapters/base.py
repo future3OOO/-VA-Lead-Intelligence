@@ -56,25 +56,29 @@ class BaseSourceAdapter(ABC):
         """Normalize a raw record into a SourceHit dict."""
         ...
 
-    _STRING_FIELDS: tuple[str, ...] = (
-        "source_url",
-        "title",
-        "body_excerpt",
-        "company_name_raw",
-        "company_domain_raw",
-        "location_raw",
-        "workplace_type",
-        "source_native_id",
-        "content_hash",
-        "raw_snapshot_uri",
-        "access_policy_version",
-    )
+    _STRING_FIELDS: dict[str, int] = {
+        "source_url": 2048,
+        "title": 255,
+        "body_excerpt": 2000,
+        "company_name_raw": 255,
+        "company_domain_raw": 255,
+        "location_raw": 255,
+        "workplace_type": 255,
+        "source_native_id": 255,
+        "content_hash": 255,
+        "raw_snapshot_uri": 255,
+        "access_policy_version": 255,
+    }
 
     def _coerce_strings(self, hit: dict[str, Any]) -> None:
-        """Ensure non-nullable string fields are never None."""
-        for field in self._STRING_FIELDS:
-            if hit.get(field) is None:
-                hit[field] = ""
+        """Ensure non-nullable string fields are never None and fit column limits."""
+        for field, limit in self._STRING_FIELDS.items():
+            value = hit.get(field)
+            if value is None:
+                value = ""
+            if isinstance(value, str) and len(value) > limit:
+                value = value[:limit]
+            hit[field] = value
         if hit.get("contact_routes_raw") is None:
             hit["contact_routes_raw"] = []
 
