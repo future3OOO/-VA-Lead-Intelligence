@@ -168,6 +168,30 @@ sources:
       max_concurrency_per_host: 1
     kill_switch: sources.search_discovery.enabled
 
+  team_pages:
+    source_class: team_pages
+    access_mode: scoped_public_web_crawl
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - contact_route
+      - company_lead
+    allowed_fields:
+      - company_name
+      - company_domain
+      - contact_routes
+      - social_profiles
+      - names
+      - titles
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.team_pages.enabled
+
   hunter_domain:
     source_class: hunter_domain
     access_mode: licensed_api

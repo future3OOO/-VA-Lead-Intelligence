@@ -229,13 +229,153 @@ def _best_contact(routes: list[dict[str, str]]) -> dict[str, str]:
     for r in routes:
         t = r["type"]
         v = r["value"]
-        if t == "generic_email" and "best_email" not in result:
+        if t in ("named_work_email_approved", "generic_email") and "best_email" not in result:
             result["best_email"] = v
         elif t == "business_phone" and "best_phone" not in result:
             result["best_phone"] = v
         elif t == "sales_form" and "best_form" not in result:
             result["best_form"] = v
     return result
+
+
+def _is_plausible_person_name(name: str) -> bool:
+    """Return True if the extracted string looks like a real person name."""
+    if not name or len(name) > 50 or len(name) < 3:
+        return False
+    if "@" in name or "http" in name.lower() or "/" in name or "linkedin" in name.lower():
+        return False
+    words = name.split()
+    if not (2 <= len(words) <= 4):
+        return False
+    generic = {
+        "info",
+        "contact",
+        "sales",
+        "support",
+        "hello",
+        "team",
+        "careers",
+        "hiring",
+        "leasing",
+        "rent",
+        "feedback",
+        "admin",
+        "office",
+        "help",
+        "service",
+        "marketing",
+        "press",
+        "billing",
+        "jobs",
+        "recruiting",
+        "hr",
+        "legal",
+        "media",
+        "customer",
+        "general",
+        "inquiries",
+        "inquiry",
+        "questions",
+        "apply",
+        "job",
+        "realestate",
+        "realtor",
+        "agent",
+        "agency",
+        "firm",
+        "company",
+        "email",
+        "us",
+        "click",
+        "here",
+        "call",
+        "text",
+        "message",
+        "send",
+        "more",
+        "learn",
+        "today",
+        "now",
+        "inquire",
+        "fb",
+        "ig",
+        "li",
+        "tt",
+        "facebook",
+        "instagram",
+        "twitter",
+        "tiktok",
+        "youtube",
+        "sitemap",
+        "connect",
+        "use",
+        "visit",
+        "website",
+        "page",
+        "menu",
+        "navigation",
+        "read",
+        "about",
+        "details",
+        "link",
+        "follow",
+    }
+    if any(
+        w.lower() in generic or w.lower() in STRONG_ADMIN_TITLES or w.lower() in MEDIUM_ADMIN_TITLES
+        for w in words
+    ):
+        return False
+    return not all(w.isupper() and len(w) <= 3 for w in words)
+
+
+_TITLE_BOILERPLATE = re.compile(
+    r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
+    re.I,
+)
+
+
+def _clean_title_text(title: str) -> str:
+    title = _TITLE_BOILERPLATE.sub("", title)
+    title = title.replace("|", " ").replace("  ", " ")
+    title = re.sub(r"\s+", " ", title).strip(" -")
+    return title
+
+
+def _parse_named_route(value: str) -> dict[str, str]:
+    """Parse a formatted named route such as 'Name (Title) <email>'."""
+    parsed: dict[str, str] = {}
+    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*[<-]\s*(.+?)$", value.strip())
+    if m:
+        name = m.group(1).strip()
+        title = _clean_title_text((m.group(2) or "").strip())
+        payload = m.group(3).strip().rstrip(">")
+        if _is_plausible_person_name(name):
+            parsed = {"name": name, "title": title, "value": payload}
+    return parsed
+
+
+def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
+    """Return the best named hiring contact (email or LinkedIn) for a company."""
+    best: dict[str, str] = {}
+    for r in routes:
+        if r["type"] != "named_work_email_approved":
+            continue
+        parsed = _parse_named_route(r["value"])
+        if parsed:
+            best.update(parsed)
+            best.setdefault("email", parsed.get("value", ""))
+            break
+    # If no named email, try a LinkedIn profile with a name.
+    if not best.get("value"):
+        for r in routes:
+            if r["type"] != "social_profile_review_only":
+                continue
+            parsed = _parse_named_route(r["value"])
+            if parsed and parsed.get("value", "").startswith("http"):
+                best.update(parsed)
+                best.setdefault("linkedin", parsed.get("value", ""))
+                break
+    return best
 
 
 async def main() -> None:
@@ -273,11 +413,16 @@ async def main() -> None:
                     "best_email",
                     "best_phone",
                     "best_form",
+                    "named_contact_name",
+                    "named_contact_title",
+                    "named_contact_email",
+                    "named_contact_linkedin",
                 ]
             )
             for c in company_rows:
                 company_routes = contact_by_company.get(c.id, [])
                 best = _best_contact(company_routes)
+                named = _best_named_contact(company_routes)
                 target = _is_target(f"{c.canonical_name} {c.primary_domain or ''}")
                 hit_count = (
                     await session.execute(
@@ -298,6 +443,10 @@ async def main() -> None:
                         best.get("best_email", ""),
                         best.get("best_phone", ""),
                         best.get("best_form", ""),
+                        named.get("name", ""),
+                        named.get("title", ""),
+                        named.get("email", ""),
+                        named.get("linkedin", ""),
                     ]
                 )
 
@@ -341,6 +490,7 @@ async def main() -> None:
                 company_name, title, location, category, score, rank, best_routes
             )
 
+            named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
             lead_rows.append(
                 {
                     "company_name": company_name,
@@ -358,6 +508,10 @@ async def main() -> None:
                     "best_email": best_routes.get("best_email", ""),
                     "best_phone": best_routes.get("best_phone", ""),
                     "best_form": best_routes.get("best_form", ""),
+                    "named_contact_name": named.get("name", ""),
+                    "named_contact_title": named.get("title", ""),
+                    "named_contact_email": named.get("email", ""),
+                    "named_contact_linkedin": named.get("linkedin", ""),
                 }
             )
 
@@ -393,6 +547,10 @@ async def main() -> None:
                     "best_email",
                     "best_phone",
                     "best_form",
+                    "named_contact_name",
+                    "named_contact_title",
+                    "named_contact_email",
+                    "named_contact_linkedin",
                 ],
             )
             leads_writer.writeheader()
