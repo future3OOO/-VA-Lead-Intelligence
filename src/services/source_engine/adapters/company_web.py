@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -81,7 +82,13 @@ class CompanyWebAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self.client = httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+        )
 
     @property
     def source_key(self) -> str:
@@ -120,11 +127,27 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 continue
         return {}
 
-    _PHONE_RE = re.compile(r"\+?[\d][\d\s().\-]{6,19}[\d]", re.UNICODE)
+    _PHONE_RE = re.compile(
+        r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}",
+        re.UNICODE,
+    )
     _DATE_RE = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
     _IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3,}$")
     _TRAILING_ZIP_RE = re.compile(r"^(.*)\s+\d{5}$")
-    _ASSET_EXTS = {".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".gif", ".woff", ".woff2"}
+    _LEADING_ZIP_RE = re.compile(r"^\d{5}\s+(.*)$")
+    _STRAY_LEADING_DIGIT_RE = re.compile(r"^([2-9])\s+(.+)$")
+    _ASSET_EXTS = {
+        ".css",
+        ".js",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".svg",
+        ".gif",
+        ".woff",
+        ".woff2",
+        ".min",
+    }
 
     def _clean_value(self, value: str) -> str | None:
         cleaned = re.sub(r"\s+", " ", value).strip()
@@ -144,8 +167,25 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 if prefix_digits >= 10:
                     cleaned = match.group(1).strip()
                     digits = prefix_digits
+            # Strip a leading 5-digit ZIP that was captured before the phone number.
+            leading_zip_match = self._LEADING_ZIP_RE.match(cleaned)
+            if leading_zip_match:
+                leading_zip_digits = sum(c.isdigit() for c in leading_zip_match.group(1))
+                if leading_zip_digits >= 10:
+                    cleaned = leading_zip_match.group(1).strip()
+                    digits = leading_zip_digits
+            # Strip a stray single digit prefix (e.g. "6 313-555-1212") that is not a country code.
+            stray_match = self._STRAY_LEADING_DIGIT_RE.match(cleaned)
+            if stray_match:
+                stray_digits = sum(c.isdigit() for c in stray_match.group(2))
+                if stray_digits >= 10:
+                    cleaned = stray_match.group(2).strip()
+                    digits = stray_digits
             # Reject bare digit strings that don't look like formatted phone numbers.
             if all((c.isdigit() or c.isspace()) for c in cleaned) and digits not in (10, 11):
+                return None
+            # Reject over-long captures that are almost certainly not a single phone number.
+            if digits > 14:
                 return None
         return cleaned
 
@@ -165,14 +205,31 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 seen.add(phone)
                 routes.append({"type": "business_phone", "value": phone})
         for match in re.finditer(
-            r'href=["\'](https?://[^"\']+(?:contact|demo|book|quote|sales)[^"\']*)["\']',
+            r'href=["\'](https?://[^"\']+(?:contact|demo|book|quote|sales|careers|apply|get-started)[^"\']*)["\']',
             html,
             re.I,
         ):
             url = match.group(1)
-            if any(url.lower().endswith(ext) for ext in self._ASSET_EXTS):
+            parsed_url = urlparse(url)
+            path_lower = parsed_url.path.lower().split("?")[0]
+            if any(path_lower.endswith(ext) for ext in self._ASSET_EXTS) or any(
+                frag in path_lower
+                for frag in ["wp-content", "wp-json", "wp-includes", ".css", ".js"]
+            ):
                 continue
-            if "facebook" in url.lower() or "wp-json" in url.lower() or "oembed" in url.lower():
+            if any(
+                domain in parsed_url.netloc.lower()
+                for domain in [
+                    "facebook.com",
+                    "fbcdn.net",
+                    "oembed",
+                    "joblinkapply.com",
+                    "careerplug.com",
+                    "idealtraits.com",
+                ]
+            ):
+                continue
+            if len(url) > 250:
                 continue
             if url not in seen:
                 seen.add(url)
@@ -214,6 +271,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 )
             except httpx.HTTPError:
                 continue
+            await asyncio.sleep(1.0)
         return results
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:

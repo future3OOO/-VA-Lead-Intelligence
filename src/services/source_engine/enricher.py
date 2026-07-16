@@ -42,7 +42,7 @@ async def enrich_contact_routes(
         if not isinstance(route, dict):
             continue
         value = str(route.get("value", "")).strip()
-        if not value:
+        if not value or len(value) > 255:
             continue
         route_type = _resolve_route_type(route.get("type", "generic_email")).value
         if (route_type, value.lower()) in existing:
