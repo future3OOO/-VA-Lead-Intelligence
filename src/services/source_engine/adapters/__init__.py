@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from services.source_engine.adapters.ashby import AshbyJobsAdapter
 from services.source_engine.adapters.base import BaseSourceAdapter
+from services.source_engine.adapters.breezy_jobs import BreezyJobsAdapter
 from services.source_engine.adapters.company_web import CompanyWebAdapter
 from services.source_engine.adapters.greenhouse import GreenhouseJobsAdapter
 from services.source_engine.adapters.hunter import HunterDomainAdapter
@@ -18,6 +19,7 @@ ADAPTER_MAP: dict[str, type[BaseSourceAdapter]] = {
     "greenhouse_jobs": GreenhouseJobsAdapter,
     "lever_jobs": LeverJobsAdapter,
     "ashby_jobs": AshbyJobsAdapter,
+    "breezy_jobs": BreezyJobsAdapter,
     "smartrecruiters_postings": SmartRecruitersAdapter,
     "company_web": CompanyWebAdapter,
     "search_discovery": SearchDiscoveryAdapter,
@@ -30,6 +32,7 @@ __all__ = [
     "BaseSourceAdapter",
     "ADAPTER_MAP",
     "AshbyJobsAdapter",
+    "BreezyJobsAdapter",
     "CompanyWebAdapter",
     "GreenhouseJobsAdapter",
     "HunterDomainAdapter",

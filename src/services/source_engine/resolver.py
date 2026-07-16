@@ -25,6 +25,7 @@ ALWAYS_RESOLVE_SOURCES = {
     "lever_jobs",
     "ashby_jobs",
     "smartrecruiters_postings",
+    "breezy_jobs",
 }
 
 

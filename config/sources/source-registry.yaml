@@ -188,6 +188,31 @@ sources:
       max_concurrency_per_host: 1
     kill_switch: sources.hunter.enabled
 
+  breezy_jobs:
+    source_class: breezy_jobs
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+    allowed_fields:
+      - company_name
+      - job_title
+      - description
+      - location
+      - department
+      - published_at
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.breezy.enabled
+
   workable_jobs:
     source_class: workable_jobs
     access_mode: public_api
