@@ -15,7 +15,16 @@ EXCLUDED_INTENTS = {
     IntentLabel.SELLER_PROMOTION.value,
     IntentLabel.JOB_SEEKER.value,
     IntentLabel.GENERAL_DISCUSSION.value,
-    IntentLabel.UNRESOLVED.value,
+}
+
+# Job-board sources are signal collections about real employers; even an UNRESOLVED
+# intent hit should resolve to a company record so that we can enrich/domain it.
+ALWAYS_RESOLVE_SOURCES = {
+    "workable_jobs",
+    "greenhouse_jobs",
+    "lever_jobs",
+    "ashby_jobs",
+    "smartrecruiters_postings",
 }
 
 
@@ -26,7 +35,9 @@ async def resolve_company(
 ) -> DBCompany | None:
     """Resolve a source hit to an existing or new company record."""
     intent = source_hit.get("intent_label")
-    if intent in EXCLUDED_INTENTS and source_hit.get("source_key") != "company_web":
+    source_key = source_hit.get("source_key", "")
+    can_resolve_unresolved = source_key in ALWAYS_RESOLVE_SOURCES or source_key == "company_web"
+    if intent in EXCLUDED_INTENTS and not can_resolve_unresolved:
         return None
 
     domain = source_hit.get("company_domain_raw", "").lower().strip()
