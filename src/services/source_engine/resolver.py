@@ -22,11 +22,14 @@ EXCLUDED_INTENTS = {
 ALWAYS_RESOLVE_SOURCES = {
     "workable_jobs",
     "workable_search",
+    "workable_company",
+    "workable_html_search",
     "greenhouse_jobs",
     "lever_jobs",
     "ashby_jobs",
     "smartrecruiters_postings",
     "breezy_jobs",
+    "jobicy",
     "team_pages",
 }
 
