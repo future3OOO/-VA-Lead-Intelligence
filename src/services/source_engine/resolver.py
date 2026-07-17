@@ -21,6 +21,7 @@ EXCLUDED_INTENTS = {
 # intent hit should resolve to a company record so that we can enrich/domain it.
 ALWAYS_RESOLVE_SOURCES = {
     "workable_jobs",
+    "workable_search",
     "greenhouse_jobs",
     "lever_jobs",
     "ashby_jobs",

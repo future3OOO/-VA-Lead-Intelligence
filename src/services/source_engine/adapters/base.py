@@ -59,7 +59,7 @@ class BaseSourceAdapter(ABC):
     _STRING_FIELDS: dict[str, int] = {
         "source_url": 2048,
         "title": 255,
-        "body_excerpt": 2000,
+        "body_excerpt": 5000,
         "company_name_raw": 255,
         "company_domain_raw": 255,
         "location_raw": 255,

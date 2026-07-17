@@ -14,6 +14,7 @@ from services.source_engine.adapters.search_discovery import SearchDiscoveryAdap
 from services.source_engine.adapters.smartrecruiters import SmartRecruitersAdapter
 from services.source_engine.adapters.team_pages import TeamPagesAdapter
 from services.source_engine.adapters.workable_jobs import WorkableJobsAdapter
+from services.source_engine.adapters.workable_search import WorkableSearchAdapter
 
 ADAPTER_MAP: dict[str, type[BaseSourceAdapter]] = {
     "job_posting": GreenhouseJobsAdapter,
@@ -28,6 +29,7 @@ ADAPTER_MAP: dict[str, type[BaseSourceAdapter]] = {
     "manual_seed": ManualSeedAdapter,
     "team_pages": TeamPagesAdapter,
     "workable_jobs": WorkableJobsAdapter,
+    "workable_search": WorkableSearchAdapter,
 }
 
 __all__ = [
@@ -44,4 +46,5 @@ __all__ = [
     "SmartRecruitersAdapter",
     "TeamPagesAdapter",
     "WorkableJobsAdapter",
+    "WorkableSearchAdapter",
 ]

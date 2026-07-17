@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Export qualified small-business leads with explanation and ranking."""
 
+import argparse
 import asyncio
 import csv
 import re
@@ -18,6 +19,7 @@ from db.session import AsyncSessionLocal
 
 JOB_BOARD_SOURCES = {
     "workable_jobs",
+    "workable_search",
     "breezy_jobs",
     "greenhouse_jobs",
     "lever_jobs",
@@ -25,24 +27,56 @@ JOB_BOARD_SOURCES = {
     "smartrecruiters_postings",
 }
 
+ANZ_REGION_RE = re.compile(
+    r"\b(australia|new zealand|sydney|melbourne|brisbane|perth|adelaide|canberra|darwin|hobart|auckland|wellington|christchurch|queensland|victoria|nsw|new south wales|western australia|south australia|tasmania|northern territory|north island|south island)\b",
+    re.I,
+)
+
+REMOTE_KEYWORDS_RE = re.compile(
+    r"\b(remote|hybrid|wfh|work from home|work at home|telecommut|virtual assistant)\b",
+    re.I,
+)
+
+ONSITE_KEYWORDS_RE = re.compile(
+    r"\b(on[-\s]?site|on site|in[-\s]?office|in office|office[-\s]?based|site[-\s]?based)\b",
+    re.I,
+)
+
+
+def _is_remote_friendly(title: str, body: str, location: str, workplace_type: str = "") -> bool:
+    """Return True if the role is advertised as remote/hybrid or clearly virtual."""
+    wp = (workplace_type or "").lower()
+    if wp in {"remote", "hybrid"}:
+        return True
+    if wp == "on_site":
+        return False
+    text = f"{title} {body} {location}".lower()
+    if ONSITE_KEYWORDS_RE.search(text) and not REMOTE_KEYWORDS_RE.search(text):
+        return False
+    return bool(REMOTE_KEYWORDS_RE.search(text))
+
+
 CATEGORY_PATTERNS = [
     (
         "Property/Facilities",
-        r"\bproperty\b|\bapartment\b|\bmultifamily\b|\bresidential\b|\bleasing\b|\blandlord\b|\bhoa\b|\bhomeowner\b|\bhousing\b|\bfacilit|\bmaintenance\b|\bcommunity\b|\bcondo\b|\bproperty management\b",
+        r"\bproperty management\b|\bproperty manager\b|\bassistant property manager\b|\bproperty services\b|\bproperty portfolio\b|\bresidential property\b|\bcommercial property\b|\bproperty maintenance\b|\bfacilities management\b|\bfacility management\b|\bbody corporate\b|\bleasing consultant\b|\bproperty administrator\b|\blandlord\b|\btenant\b|\brent roll\b|\brental property\b|\bproperty investment\b",
     ),
     (
         "Real Estate",
-        r"\breal estate\b|\brealty\b|\bbrokerage\b|\bbroker\b|\binvestment property\b|\basset manager\b|\bportfolio\b|\bcommercial real estate\b",
+        r"\breal estate\b|\brealty\b|\breal estate agency\b|\brealestate\b|\breal estate sales\b|\bproperty sales\b|\breal estate broker\b|\bproperty broker\b|\binvestment property\b|\bcommercial real estate\b|\bresidential real estate\b|\breal estate investment\b",
     ),
     (
         "Financial Services",
-        r"\bmortgage\b|\bloan\b|\bfinancial\b|\bwealth\b|\binsurance\b|\badvisor\b|\badviser\b|\bbookkeep\b|\baccounting\b|\bcpa\b|\bcredit\b|\blender\b|\bfiscal\b",
+        r"\bmortgage broker\b|\bmortgage lender\b|\bmortgage company\b|\bmortgage provider\b|\bmortgage adviser\b|\bmortgage advisor\b|\binsurance broker\b|\binsurance adviser\b|\binsurance advisor\b|\binsurance company\b|\binsurance agency\b|\binsurance brokerage\b|\binsurer\b|\bunderwriter\b|\bfinancial adviser\b|\bfinancial advisor\b|\bwealth adviser\b|\bwealth advisor\b|\baccounting firm\b|\baccounting services\b|\baccountancy\b|\bpublic practice\b|\bchartered accountants\b|\btax agent\b|\bregistered tax agent\b|\baccounting and tax\b|\bpayroll services\b|\bcredit union\b|\blender\b|\bfinancial planning\b|\bfinancial services\b|\bhome loans?\b",
     ),
     (
         "Home Services/Construction",
-        r"\bplumbing\b|\bhvac\b|\broofing\b|\belectrician\b|\bhandyman\b|\bhome service\b|\bconstruction\b|\brenovation\b|\bremodel\b|\bpainting\b|\bchimney\b|\bfire protection\b|\bplumber\b|\belectrical\b|\bsprinkler\b|\bbath\b|\bhomes?\b|\bhardware\b",
+        r"\bplumbing\b|\bhvac\b|\broofing\b|\belectrician\b|\bhandyman\b|\bhome services\b|\bhome improvement\b|\bconstruction\b|\brenovation\b|\bremodel\b|\bpainting\b|\bchimney\b|\bfire protection\b|\bplumber\b|\belectrical contractor\b|\bsprinkler\b|\bbathroom renovation\b|\bkitchen renovation\b|\bhome builder\b|\bhomebuilder\b|\bbuilding services\b|\bmaintenance services\b|\bproperty maintenance\b|\bhandyman services\b|\btrade services\b",
     ),
-    ("Legal/Professional", r"\blaw\b|\blegal\b|\battorney\b|\bllp\b|\baccounting\b|\bcpa\b"),
+    (
+        "Legal/Professional",
+        r"\blaw firm\b|\blaw office\b|\blegal services\b|\battorney\b|\bllp\b|\blawyers\b",
+    ),
 ]
 
 STAFFING_DENY = [
@@ -90,40 +124,138 @@ STAFFING_DENY = [
     "field-ai",
     "deeter analytics",
     "remotely",
-    "farmer",  # too broad? keep only if combined with insurance and not target
+    "farmer",
+    "hammerjack",
+    "sourcefit",
+    "d2b",
 ]
 
-STRONG_ADMIN_TITLES = [
-    "virtual assistant",
-    "administrative assistant",
-    "executive assistant",
-    "office manager",
-    "bookkeeper",
+NON_TARGET_DENY = [
+    "datacom",
+    "redox",
+    "journey beyond",
+    "amer sports",
+    "clickview",
+    "education perfect",
+    "online education services",
+    "tmgm",
+    "kubota",
+    "triskele labs",
+    "control risks",
+    "centorrino technologies",
+    "centorrino",
+    "king kong",
+    "fleetpartners",
+    "fleet partners",
+    "dof",
+    "entain",
+    "serko",
+    "frank green",
+    "fe fundinfo",
+    "rimkus",
+    "leap legal software",
+    "leap legal",
+    "legalvision",
+    "proquest consulting",
+    "vald",
+    "cathay digital",
+    "scientific safety alliance",
+    "isthmus",
+    "apexfocusgroup",
+    "apex focus group",
+]
+
+ALWAYS_STRONG_TITLES = [
     "property manager",
     "assistant property manager",
+    "property management assistant",
+    "property administrator",
+    "leasing consultant",
     "transaction coordinator",
-    "operations coordinator",
     "maintenance coordinator",
+    "real estate assistant",
+    "mortgage broker",
+    "insurance broker",
+    "mortgage broker assistant",
+    "mortgage assistant",
+    "insurance assistant",
+    "mortgage adviser",
+    "mortgage advisor",
+    "insurance adviser",
+    "insurance advisor",
+    "loan processor",
+    "paraplanner",
+    "conveyancing assistant",
+    "conveyancer",
+    "body corporate manager",
+    "facilities manager",
+    "facilities coordinator",
+]
+
+SECTOR_DEPENDENT_TITLES = [
+    "bookkeeper",
+    "senior bookkeeper",
+    "bookkeeping manager",
+    "accountant",
+    "senior accountant",
+    "assistant accountant",
+    "accounting manager",
+    "accounts assistant",
+    "accounts payable",
+    "accounts receivable",
+    "payroll",
+    "payroll officer",
+    "payroll administrator",
+    "payroll specialist",
+    "tax accountant",
+    "tax manager",
+    "finance officer",
+    "admin officer",
+    "administration officer",
+    "operations coordinator",
     "project coordinator",
-    "customer service",
-    "dispatcher",
     "scheduling coordinator",
     "appointment setter",
     "sales support",
     "crm administrator",
+    "contracts administrator",
+    "sales administrator",
+    "insurance coordinator",
+    "customer support coordinator",
+    "remote services administrator",
+    "collections officer",
+    "retentions officer",
+    "novated leasing consultant",
+    "lease administrator",
+    "operations assistant",
 ]
+
+UNIVERSAL_ADMIN_TITLES = [
+    "virtual assistant",
+    "executive assistant",
+    "administrative assistant",
+    "office manager",
+    "receptionist",
+    "data entry",
+    "legal assistant",
+    "legal secretary",
+]
+
+STRONG_ADMIN_TITLES = ALWAYS_STRONG_TITLES + SECTOR_DEPENDENT_TITLES + UNIVERSAL_ADMIN_TITLES
 
 MEDIUM_ADMIN_TITLES = [
     "coordinator",
     "assistant",
     "admin",
-    "manager",
     "support",
-    "specialist",
-    "representative",
-    "analyst",
     "associate",
-    "supervisor",
+    "officer",
+    "clerk",
+    "operations",
+    "service delivery",
+    "client operations",
+    "people operations",
+    "business operations",
 ]
 
 
@@ -135,11 +267,19 @@ def _detect_category(text: str) -> str:
     return "Other"
 
 
-def _is_target(text: str) -> bool:
+def _is_target(text: str, title: str = "") -> bool:
     text_lower = text.lower()
     for term in STAFFING_DENY:
         if term in text_lower:
             return False
+    for term in NON_TARGET_DENY:
+        if term in text_lower:
+            return False
+    title_lower = title.lower()
+    if any(t in title_lower for t in STRONG_ADMIN_TITLES):
+        return True
+    if not any(t in title_lower for t in MEDIUM_ADMIN_TITLES):
+        return False
     category = _detect_category(text)
     return category != "Other"
 
@@ -158,21 +298,41 @@ def _qualification_score(
     reasons: list[str] = []
 
     title_lower = title.lower()
-    if any(t in title_lower for t in STRONG_ADMIN_TITLES):
+    category = _detect_category(text)
+
+    if any(t in title_lower for t in ALWAYS_STRONG_TITLES):
         score += 30
-        reasons.append("title is a strong VA-adjacent role")
+        reasons.append("title is a strong, sector-specific VA-adjacent role")
+    elif any(t in title_lower for t in UNIVERSAL_ADMIN_TITLES):
+        if category != "Other":
+            score += 30
+            reasons.append("title is a universal admin role in a target sector")
+        else:
+            score += 15
+            reasons.append("title is a universal admin role, but the sector is not clearly target")
+    elif any(t in title_lower for t in SECTOR_DEPENDENT_TITLES):
+        if category != "Other":
+            score += 30
+            reasons.append("title is a finance/operations admin role in a target sector")
+        else:
+            score += 15
+            reasons.append(
+                "title is a finance/operations admin role, but the sector is not clearly target"
+            )
     elif any(t in title_lower for t in MEDIUM_ADMIN_TITLES):
         score += 15
         reasons.append("title shows admin/coordination responsibilities")
 
-    category = _detect_category(text)
     if category != "Other":
         score += 10
         reasons.append(f"company/role in {category} sector")
 
-    if "remote" in text or "hybrid" in text or "work from home" in text:
+    if REMOTE_KEYWORDS_RE.search(text):
         score += 10
         reasons.append("role is remote/hybrid (well suited to a VA)")
+    if ONSITE_KEYWORDS_RE.search(text):
+        score -= 25
+        reasons.append("on-site language detected (red flag for remote VA fit)")
 
     if published_at:
         try:
@@ -382,9 +542,24 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
 
 
 async def main() -> None:
-    workspace_id = UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
-    leads_path = "/tmp/small_business_leads_with_contacts.csv"
-    companies_path = "/tmp/all_companies.csv"
+    parser = argparse.ArgumentParser(description="Export qualified leads and company contacts")
+    parser.add_argument(
+        "--workspace-id", type=UUID, default=UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
+    )
+    parser.add_argument("--leads-path", default="/tmp/small_business_leads_with_contacts.csv")
+    parser.add_argument("--companies-path", default="/tmp/all_companies.csv")
+    parser.add_argument(
+        "--region",
+        choices=["all", "anz"],
+        default="all",
+        help="Filter leads to a region (anz = Australia + New Zealand)",
+    )
+    args = parser.parse_args()
+
+    workspace_id = args.workspace_id
+    leads_path = args.leads_path
+    companies_path = args.companies_path
+    region_filter = args.region
 
     async with AsyncSessionLocal() as session:
         # Load all contact routes keyed by company_id
@@ -426,7 +601,7 @@ async def main() -> None:
                 company_routes = contact_by_company.get(c.id, [])
                 best = _best_contact(company_routes)
                 named = _best_named_contact(company_routes)
-                target = _is_target(f"{c.canonical_name} {c.primary_domain or ''}")
+                target = _is_target(f"{c.canonical_name} {c.primary_domain or ''}", "")
                 hit_count = (
                     await session.execute(
                         select(func.count()).where(
@@ -470,8 +645,13 @@ async def main() -> None:
             company_name = hit.company_name_raw or ""
             location = hit.location_raw or ""
             body = hit.body_excerpt or ""
+            workplace_type = hit.workplace_type or ""
             text = f"{title} {company_name} {body} {location}"
-            if not _is_target(text):
+            if not _is_target(text, title):
+                continue
+            if not _is_remote_friendly(title, body, location, workplace_type):
+                continue
+            if region_filter == "anz" and not ANZ_REGION_RE.search(text):
                 continue
             category = _detect_category(text)
             key = (company_name.lower().strip(), title.lower().strip())
@@ -500,6 +680,7 @@ async def main() -> None:
                     "primary_domain": domain,
                     "job_title": title,
                     "location": location,
+                    "workplace_type": workplace_type,
                     "category": category,
                     "source": hit.source_key,
                     "source_url": hit.source_url,
@@ -539,6 +720,7 @@ async def main() -> None:
                     "primary_domain",
                     "job_title",
                     "location",
+                    "workplace_type",
                     "category",
                     "source",
                     "source_url",
