@@ -18,6 +18,7 @@ from uuid import UUID
 import httpx
 
 from services.source_engine.adapters.base import BaseSourceAdapter
+from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
 
 
@@ -280,6 +281,16 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
             routes.append({"type": "business_phone", "value": phone, "is_verified": False})
         if website:
             routes.append({"type": "sales_form", "value": website, "is_verified": False})
+
+        operator = str(tags.get("operator", "")).strip()
+        if operator and _is_plausible_person_name(operator):
+            routes.append(
+                {
+                    "type": "named_contact",
+                    "value": f"{operator} (Owner/Operator)",
+                    "is_verified": False,
+                }
+            )
 
         address_parts = []
         for key in (

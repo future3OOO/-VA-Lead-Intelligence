@@ -779,7 +779,7 @@ def _parse_named_route(value: str) -> dict[str, str]:
 
 
 def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
-    """Return the best named hiring contact (email or LinkedIn) for a company."""
+    """Return the best named hiring contact (name, email, LinkedIn) for a company."""
     best: dict[str, str] = {}
     for r in routes:
         if r["type"] != "named_work_email_approved":
@@ -798,6 +798,28 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
             if parsed and parsed.get("value", "").startswith("http"):
                 best.update(parsed)
                 best.setdefault("linkedin", parsed.get("value", ""))
+                break
+    # Fallback to a plain named contact (e.g. OpenStreetMap operator or team page name).
+    if not best.get("name"):
+        for r in routes:
+            if r["type"] != "named_contact":
+                continue
+            text = r["value"].strip()
+            m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", text)
+            if not m:
+                continue
+            name = m.group(1).strip()
+            title = _clean_title_text((m.group(2) or "").strip())
+            if title and (len(title) > 60 or len(title.split()) > 8):
+                title = ""
+            if _is_plausible_person_name(name):
+                best = {
+                    "name": name,
+                    "title": title,
+                    "value": text,
+                    "email": "",
+                    "linkedin": "",
+                }
                 break
     return best
 
