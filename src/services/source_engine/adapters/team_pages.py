@@ -554,6 +554,9 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
         txt = _clean_title(tag.get_text(separator=" ", strip=True))
         if not _is_plausible_person_name(txt):
             continue
+        name_words = txt.split()
+        if not (2 <= len(name_words) <= 3):
+            continue
         person_key = txt.lower()
         if person_key in people:
             continue
@@ -567,6 +570,8 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 if _is_plausible_title(cand):
                     title = cand
                     break
+        if not title:
+            continue
         people[person_key] = _PersonResult(name=txt, title=title)
 
     routes: list[dict[str, Any]] = []
