@@ -19,6 +19,8 @@ from db.session import AsyncSessionLocal
 
 EXPORT_SOURCES = {
     "openstreetmap",
+    "finance_directory",
+    "nz_finance_advisers",
 }
 
 ANZ_REGION_RE = re.compile(

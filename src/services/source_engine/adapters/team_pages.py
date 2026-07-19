@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -48,9 +49,33 @@ _TITLE_KEYWORDS = [
     "Maintenance",
     "Supervisor",
     "Estimator",
+    "Chairman",
+    "Chairwoman",
+    "Chairperson",
+    "Directors",
+    "Managing",
+    "Executive",
+    "Senior",
+    "Junior",
+    "Officer",
+    "Head",
+    "Lead",
+    "Member",
+    "Trustee",
+    "Representative",
+    "Analyst",
+    "Administrator",
     "Coordinator",
+    "Assistant",
+    "Secretary",
+    "Receptionist",
+    "Controller",
+    "Planner",
+    "Strategist",
     "Specialist",
     "Consultant",
+    "Advisor",
+    "Adviser",
     "General Counsel",
     "Attorney",
     "CPA",
@@ -179,17 +204,247 @@ _NAV_WORDS = {
     "home",
 }
 
+_BUSINESS_WORDS = {
+    "bank",
+    "ltd",
+    "limited",
+    "pty",
+    "inc",
+    "corp",
+    "corporation",
+    "group",
+    "holdings",
+    "trust",
+    "fund",
+    "funds",
+    "services",
+    "solutions",
+    "partners",
+    "co",
+    "association",
+    "union",
+    "credit",
+    "plc",
+    "llp",
+    "lp",
+    "australia",
+    "australian",
+    "insurance",
+    "finance",
+    "financial",
+    "mortgage",
+    "broker",
+    "brokers",
+    "broking",
+    "accounting",
+    "accountant",
+    "bookkeeping",
+    "bookkeeper",
+    "adviser",
+    "advisor",
+    "tax",
+    "legal",
+    "law",
+    "lawyers",
+    "real",
+    "estate",
+    "property",
+    "construction",
+    "plumbing",
+    "electrician",
+    "roofing",
+    "painting",
+    "carpenter",
+    "hvac",
+    "institute",
+    "bachelor",
+    "diploma",
+    "business",
+    "commerce",
+    "university",
+    "college",
+    "school",
+    "st",
+    "street",
+    "road",
+    "avenue",
+    "drive",
+    "lane",
+    "place",
+    "nsw",
+    "vic",
+    "qld",
+    "sa",
+    "wa",
+    "tas",
+    "act",
+    "nt",
+    "queensland",
+    "victoria",
+    "loans",
+    "loan",
+    "lending",
+    "advice",
+    "advisory",
+    "wealth",
+    "capital",
+    "money",
+    "investment",
+    "investing",
+    "investments",
+    "smsf",
+    "accountants",
+    "planning",
+    "management",
+    "consulting",
+    "commercial",
+    "residential",
+    "home",
+    "house",
+    "building",
+    "build",
+    "builders",
+    "maintenance",
+    "repairs",
+    "renovations",
+    "select",
+    "plus",
+    "market",
+    "first",
+    "network",
+    "global",
+    "united",
+    "preferred",
+    "premier",
+    "choice",
+    "expert",
+    "consultant",
+    "ca",
+    "cpa",
+    "anziif",
+    "mfaa",
+    "fbaa",
+    "afca",
+    "asic",
+    "banking",
+    "mortgages",
+    "lender",
+    "lenders",
+    "brokerage",
+    "debt",
+    "consolidation",
+    "cash",
+    "flow",
+    "online",
+    "chartered",
+    "crossing",
+    "hoppers",
+    "north",
+    "south",
+    "east",
+    "west",
+    "new",
+    "york",
+    "great",
+    "wall",
+    "happy",
+    "bean",
+    "sydney",
+    "melbourne",
+    "brisbane",
+    "perth",
+    "adelaide",
+    "canberra",
+    "darwin",
+    "hobart",
+    "auckland",
+    "wellington",
+    "christchurch",
+    "dunedin",
+    "hamilton",
+    "tauranga",
+    "napier",
+    "rotorua",
+    "palmerston",
+    "newcastle",
+    "wollongong",
+    "geelong",
+    "gold coast",
+    "sunshine coast",
+    "cairns",
+    "townsville",
+    "toowoomba",
+    "ballarat",
+    "bendigo",
+    "albury",
+    "mandurah",
+    "launceston",
+    "devonport",
+    "chairman",
+    "chairwoman",
+    "chairperson",
+    "directors",
+    "managing",
+    "executive",
+    "senior",
+    "junior",
+    "officer",
+    "head",
+    "lead",
+    "member",
+    "members",
+    "committee",
+    "council",
+    "trustee",
+    "representative",
+    "professional",
+    "analyst",
+    "administrator",
+    "coordinator",
+    "assistant",
+    "secretary",
+    "receptionist",
+    "operator",
+    "controller",
+    "planner",
+    "strategist",
+    "specialist",
+}
+
 _LINKEDIN_RE = re.compile(r"https?://(?:[\w\-]+\.)?linkedin\.com/in/([^/?\s]+)", re.I)
 
 _TEAM_PAGE_PATHS = [
     "/team",
-    "/about",
+    "/about/team",
+    "/about/people",
     "/about-us",
+    "/about",
     "/leadership",
+    "/leadership-team",
     "/people",
     "/our-team",
+    "/our-people",
     "/meet-the-team",
+    "/team-members",
     "/executive-team",
+    "/executives",
+    "/management",
+    "/directors",
+    "/board",
+    "/staff",
+    "/our-staff",
+    "/who-we-are",
+    "/company",
+    "/company/team",
+    "/company/people",
+    "/about-us/team",
+    "/about-us/our-team",
+    "/agents",
+    "/our-agents",
+    "/meet-our-team",
+    "/contact",
+    "/contact-us",
+    "/get-in-touch",
 ]
 
 
@@ -265,7 +520,8 @@ def _is_plausible_person_name(name: str) -> bool:
     words = name.split()
     if not (2 <= len(words) <= 4):
         return False
-    if any(w.lower() in _GENERIC_NAME_WORDS or w.lower() in _TITLE_KEYWORDS_LOWER for w in words):
+    stopwords = _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS
+    if any(w.lower() in stopwords for w in words):
         return False
     return not all(w.isupper() and len(w) <= 3 for w in words)
 
@@ -351,6 +607,15 @@ class _PersonResult:
                     }
                 )
         return routes
+
+
+def _has_contact_pattern(text: str) -> bool:
+    """Return True if text contains an email, phone number, or LinkedIn URL."""
+    return (
+        bool(re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text))
+        or bool(re.search(r"\b\+?\d[\d\s().-]{7,}\d\b", text))
+        or bool(_LINKEDIN_RE.search(text))
+    )
 
 
 def _is_plausible_title(text: str) -> bool:
@@ -526,7 +791,38 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 p = _PersonResult(name=name, title=title, linkedin=linkedin)
                 people[linkedin] = p
 
-    # 3. Visible text emails that appear next to a name
+    # 3. data-* attributes (common on directory/contact widgets)
+    data_attrs: list[tuple[str, str, Callable[[str], str]]] = [
+        ("data-email", "email", lambda v: v.strip().lower()),
+        ("data-phone", "phone", lambda v: v.strip()),
+        ("data-mobile", "phone", lambda v: v.strip()),
+        ("data-tel", "phone", lambda v: v.strip()),
+    ]
+    for attr_name, route_type, normalise in data_attrs:
+        for tag in soup.find_all(attrs={attr_name: True}):
+            raw = tag.get(attr_name)
+            if not raw or not isinstance(raw, str):
+                continue
+            value = normalise(raw)
+            if not value or "example.com" in value or "test.com" in value:
+                continue
+            if value in people:
+                continue
+            name, title = _name_and_title_from_parent(tag)
+            if not name:
+                text_name = tag.get_text(strip=True)
+                if _is_plausible_person_name(text_name):
+                    name = text_name
+            if route_type == "email" and not name:
+                name = _name_from_email(value)
+            people[value] = _PersonResult(
+                name=name,
+                title=title,
+                email=value if route_type == "email" else "",
+                phone=value if route_type == "phone" else "",
+            )
+
+    # 4. Visible text emails that appear next to a name
     for email_match in re.finditer(
         r"[\w.+-]+@[\w-]+\.[\w.-]+", soup.get_text(separator=" ", strip=True)
     ):
@@ -571,7 +867,9 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                     title = cand
                     break
         if not title:
-            continue
+            parent_text = parent.get_text(separator=" ", strip=True) if parent else ""
+            if not _has_contact_pattern(parent_text):
+                continue
         people[person_key] = _PersonResult(name=txt, title=title)
 
     routes: list[dict[str, Any]] = []

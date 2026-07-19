@@ -142,3 +142,80 @@ sources:
       requests_per_second: 2
       max_concurrency_per_host: 1
     kill_switch: sources.team_pages.enabled
+
+  company_web:
+    source_class: company_web
+    access_mode: scoped_public_web_crawl
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - contact_route
+      - company_lead
+    allowed_fields:
+      - company_name
+      - company_domain
+      - contact_routes
+      - social_profiles
+      - names
+      - titles
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.company_web.enabled
+    adapter_config:
+      max_pages_per_domain: 6
+      max_depth: 2
+
+  finance_directory:
+    source_class: finance_directory
+    access_mode: scoped_public_web_crawl
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - contact_route
+      - company_lead
+    allowed_fields:
+      - company_name
+      - company_domain
+      - contact_routes
+      - names
+      - titles
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 2
+      max_concurrency_per_host: 1
+    kill_switch: sources.finance_directory.enabled
+    adapter_config:
+      max_profile_pages: 1200
+
+  nz_finance_advisers:
+    source_class: nz_finance_advisers
+    access_mode: scoped_public_web_crawl
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - contact_route
+      - company_lead
+    allowed_fields:
+      - company_name
+      - company_domain
+      - contact_routes
+      - names
+      - titles
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 1
+      max_concurrency_per_host: 1
+    kill_switch: sources.nz_finance_advisers.enabled
+    adapter_config:
+      max_list_pages: 30
