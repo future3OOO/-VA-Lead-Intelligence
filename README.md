@@ -109,6 +109,19 @@ python scripts/export_leads_csv.py \
 
 The first command fetches the latest OpenStreetMap business listings. The second command scores them and writes the two CSV files. Change `--leads-path` and `--companies-path` to wherever you want the files saved.
 
+### Optional: add named contacts
+
+If you want named hiring managers (e.g. "John Smith, Office Manager") instead of generic inboxes, you can run the bounded `team_pages` enrichment. It reads the domains already found by OpenStreetMap, visits the `/team` and `/about` pages those companies publish themselves, and extracts real people, titles, emails, and LinkedIn profiles. It checks `robots.txt` and only looks at the pages the site makes public.
+
+```bash
+python scripts/extract_team_pages.py \
+  --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
+  --campaign-id 2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc \
+  --max-domains 100
+```
+
+Then run `export_leads_csv.py` again and the `named_contact_*` columns will be filled where available.
+
 ## Handover
 
 `make handover` is the production-readiness gate. It fails if generated artifacts drift, tests fail, Terraform is invalid, or any DOD item lacks evidence.

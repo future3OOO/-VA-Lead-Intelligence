@@ -55,7 +55,7 @@ This means anyone can open the CSV and immediately understand why a company was 
 
 ## 5. We export everything into two CSV files
 
-- `anz_remote_leads_with_contacts.csv` — one row per lead, with the company, role, score, rank, explanation, and best contact route.
+- `anz_remote_leads_with_contacts.csv` — one row per lead, with the company, role, score, rank, explanation, best contact route, and optional named-contact fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_linkedin`).
 - `anz_all_companies.csv` — one row per company, with the primary domain and all collected contact routes.
 
 ## 6. How to run it yourself
@@ -87,6 +87,19 @@ python scripts/export_leads_csv.py \
 
 Change the `--leads-path` and `--companies-path` values to save the CSV files wherever you like.
 
-## 7. Want to add more sources?
+## 7. Optional: get named hiring contacts
 
-The platform can also use job-board APIs, company websites, and paid enrichment APIs such as Hunter.io or LinkedIn Sales Navigator. These are configured in `config/sources/source-registry.yaml`. OpenStreetMap is the default, free, no-API-key source that gets you started immediately.
+If you want named people rather than generic email addresses, you can run the bounded `team_pages` enrichment. It takes the domains found by OpenStreetMap, visits each company's own `/team`, `/about`, `/people`, or `/leadership` pages, and extracts real names, job titles, emails, phones, and LinkedIn profiles. It checks `robots.txt` first and only visits pages the site makes public.
+
+```bash
+python scripts/extract_team_pages.py \
+  --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
+  --campaign-id 2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc \
+  --max-domains 100
+```
+
+Then export again and the `named_contact_*` columns will be filled where the company publishes them.
+
+## 8. What about other sources?
+
+The platform is built so you can add licensed or permissioned sources later (for example Hunter.io or a job-board API with an API key). OpenStreetMap and the optional `team_pages` enrichment are the default, free, no-API-key sources that get you started immediately.
