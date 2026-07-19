@@ -91,3 +91,4 @@ class ContactRouteType(str, Enum):
     SUPPORT_ROUTE = "support_route"
     NAMED_WORK_EMAIL_APPROVED = "named_work_email_approved"
     SOCIAL_PROFILE_REVIEW_ONLY = "social_profile_review_only"
+    NAMED_CONTACT = "named_contact"
