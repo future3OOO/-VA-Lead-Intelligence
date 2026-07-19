@@ -340,6 +340,16 @@ class _PersonResult:
                         "is_verified": False,
                     }
                 )
+        if self.name and not self._is_generic_name():
+            display = f"{self.name} ({self.title})" if self.title else self.name
+            if len(display) <= 255:
+                routes.append(
+                    {
+                        "type": "named_contact",
+                        "value": display,
+                        "is_verified": False,
+                    }
+                )
         return routes
 
 
@@ -539,6 +549,26 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             name = _name_from_email(email)
         people[email] = _PersonResult(name=name, title=title, email=email)
 
+    # 4. Generic heading-based team grid extraction
+    for tag in soup.find_all(["h2", "h3", "h4"]):
+        txt = _clean_title(tag.get_text(separator=" ", strip=True))
+        if not _is_plausible_person_name(txt):
+            continue
+        person_key = txt.lower()
+        if person_key in people:
+            continue
+        title = ""
+        parent = tag.find_parent(["div", "article", "li", "section"])
+        if parent:
+            for t in parent.find_all(["span", "div", "p", "h5", "h6"]):
+                cand = _clean_title(t.get_text(separator=" ", strip=True))
+                if cand.lower() == txt.lower():
+                    continue
+                if _is_plausible_title(cand):
+                    title = cand
+                    break
+        people[person_key] = _PersonResult(name=txt, title=title)
+
     routes: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for person in people.values():
@@ -558,6 +588,9 @@ class TeamPagesAdapter(BaseSourceAdapter):
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._robots_cache: dict[str, RobotFileParser] = {}
+        self._sem = asyncio.Semaphore(15)
+        self._counter = 0
+        self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
             follow_redirects=True,
@@ -591,26 +624,26 @@ class TeamPagesAdapter(BaseSourceAdapter):
         self._robots_cache[robots_url] = rp
         return rp.can_fetch("VALeadBot/1.0", url)
 
-    async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
-        domains = query.get("domains") or self.config.adapter_config.get("domains")
-        if not domains:
-            single = query.get("domain") or self.config.adapter_config.get("domain")
-            domains = [single] if single else []
-        if not domains:
-            return []
-        paths = query.get("paths", self.config.adapter_config.get("paths", _TEAM_PAGE_PATHS))
+    async def _process_domain(
+        self, domain: str, paths: list[str], total: int
+    ) -> list[dict[str, Any]]:
+        async with self._counter_lock:
+            self._counter += 1
+            idx = self._counter
+        print(f"[team_pages] {idx}/{total}: {domain}", flush=True)
+        base_url = f"https://{domain}"
         results: list[dict[str, Any]] = []
-        print(f"[team_pages] starting extraction for {len(domains)} domains", flush=True)
-        for idx, domain in enumerate(domains, 1):
-            print(f"[team_pages] {idx}/{len(domains)}: {domain}", flush=True)
-            base_url = f"https://{domain}"
-            for path in paths[:8]:
-                url = urljoin(base_url, path)
+        for path in paths[:8]:
+            url = urljoin(base_url, path)
+            async with self._sem:
                 if not await self._allowed(url):
                     continue
                 try:
                     response = await self.client.get(url)
                     response.raise_for_status()
+                    content_type = response.headers.get("content-type", "").lower()
+                    if "text/html" not in content_type:
+                        continue
                     html = response.text
                     soup = BeautifulSoup(html, "html.parser")
                     routes = _extract_from_soup(soup, str(response.url), domain)
@@ -623,23 +656,52 @@ class TeamPagesAdapter(BaseSourceAdapter):
                                 "contact_routes": routes,
                             }
                         )
+                        break
                 except httpx.HTTPError:
                     continue
                 except Exception as exc:  # noqa: BLE001
                     print(f"[team_pages] error {url}: {exc}", flush=True)
                     continue
-                await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
+        return results
+
+    async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
+        domains = query.get("domains") or self.config.adapter_config.get("domains")
+        if not domains:
+            single = query.get("domain") or self.config.adapter_config.get("domain")
+            domains = [single] if single else []
+        if not domains:
+            return []
+        paths = query.get("paths", self.config.adapter_config.get("paths", _TEAM_PAGE_PATHS))
+        results: list[dict[str, Any]] = []
+        print(f"[team_pages] starting extraction for {len(domains)} domains", flush=True)
+        self._counter = 0
+        tasks = [
+            asyncio.create_task(self._process_domain(domain, paths, len(domains)))
+            for domain in domains
+        ]
+        for task in asyncio.as_completed(tasks):
+            results.extend(await task)
         print(f"[team_pages] extracted {len(results)} pages with routes", flush=True)
         return results
+
+    def _clean_text(self, text: str) -> str:
+        """Remove null bytes and invalid UTF-8 sequences from extracted text."""
+        text = text.replace("\x00", "")
+        return text.encode("utf-8", "ignore").decode("utf-8")
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:
         soup: BeautifulSoup = raw["soup"]
         title_tag = soup.find("title")
-        title = title_tag.get_text(strip=True) if title_tag else f"Team page for {raw['domain']}"
-        text = soup.get_text(separator=" ", strip=True)
+        title = (
+            self._clean_text(title_tag.get_text(strip=True))
+            if title_tag
+            else f"Team page for {raw['domain']}"
+        )
+        text = self._clean_text(soup.get_text(separator=" ", strip=True))
         # Try to determine a clean company name from the page title or first h1
         h1 = soup.find("h1")
-        h1_text = h1.get_text(strip=True) if h1 else ""
+        h1_text = self._clean_text(h1.get_text(strip=True)) if h1 else ""
         company_name = (
             h1_text if (3 <= len(h1_text) <= 80 and "@" not in h1_text) else raw["domain"]
         )
