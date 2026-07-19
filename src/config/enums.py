@@ -66,23 +66,8 @@ class SourceType(str, Enum):
     GREENHOUSE = "greenhouse"
     LEVER = "lever"
     ASHBY = "ashby"
-    SMARTRECRUITERS = "smartrecruiters"
     COMPANY_WEB = "company_web"
     SEARCH = "search"
-    JOB_SEARCH_PROVIDER = "job_search_provider"
-    HUNTER_DOMAIN = "hunter_domain"
-    MANUAL_SEED = "manual_seed"
-    UPWORK_MARKETPLACE = "upwork_marketplace"
-    FREELANCER_MARKETPLACE = "freelancer_marketplace"
-    COMPANY_DATASET = "company_dataset"
-    COMPANY_NEWS = "company_news"
-    OFFICIAL_REGISTRY = "official_registry"
-    APOLLO_OR_PDL_ENRICHMENT = "apollo_or_pdl_enrichment"
-    META_PAGES = "meta_pages"
-    X_POSTS = "x_posts"
-    REDDIT_POSTS = "reddit_posts"
-    YOUTUBE_CONTENT = "youtube_content"
-    PLACES_OR_DIRECTORY = "places_or_directory"
 
 
 class IntentLabel(str, Enum):

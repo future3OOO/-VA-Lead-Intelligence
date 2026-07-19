@@ -18,16 +18,6 @@ from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
 
 EXPORT_SOURCES = {
-    "workable_jobs",
-    "workable_search",
-    "workable_company",
-    "workable_html_search",
-    "breezy_jobs",
-    "greenhouse_jobs",
-    "lever_jobs",
-    "ashby_jobs",
-    "smartrecruiters_postings",
-    "jobicy",
     "openstreetmap",
 }
 

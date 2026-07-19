@@ -48,23 +48,8 @@ enums:
     - greenhouse
     - lever
     - ashby
-    - smartrecruiters
     - company_web
     - search
-    - job_search_provider
-    - hunter_domain
-    - manual_seed
-    - upwork_marketplace
-    - freelancer_marketplace
-    - company_dataset
-    - company_news
-    - official_registry
-    - apollo_or_pdl_enrichment
-    - meta_pages
-    - x_posts
-    - reddit_posts
-    - youtube_content
-    - places_or_directory
 
   IntentLabel:
     - buyer_request
@@ -1048,44 +1033,6 @@ entities:
         type: datetime
         auto: true
 
-  external_opportunity:
-    route: /external-opportunities
-    description: Explicit work posting with unresolved client.
-    fields:
-      - name: id
-        type: uuid
-        primary: true
-      - name: workspace_id
-        type: fk:workspace
-        index: true
-      - name: source_hit_id
-        type: fk:source_hit
-        index: true
-      - name: platform
-        type: str
-      - name: external_opportunity_id
-        type: str
-      - name: title
-        type: str
-      - name: description
-        type: text
-      - name: buyer_intent_label
-        type: enum:IntentLabel
-        default: "'unresolved'"
-      - name: budget_hint
-        type: str
-      - name: country_code
-        type: str
-      - name: status
-        type: str
-        default: "'open'"
-      - name: created_at
-        type: datetime
-        auto: true
-      - name: updated_at
-        type: datetime
-        auto: true
-
   source_registry:
     route: /source-registry
     description: Configured source adapter registration.
@@ -1126,36 +1073,6 @@ entities:
         default: {}
       - name: kill_switch
         type: str
-      - name: created_at
-        type: datetime
-        auto: true
-      - name: updated_at
-        type: datetime
-        auto: true
-
-  query_family:
-    route: /query-families
-    description: Versioned query set for source discovery.
-    fields:
-      - name: id
-        type: uuid
-        primary: true
-      - name: workspace_id
-        type: fk:workspace
-        index: true
-      - name: family_key
-        type: str
-      - name: version
-        type: str
-      - name: positive_titles
-        type: list_str
-        default: []
-      - name: positive_task_phrases
-        type: list_str
-        default: []
-      - name: negative_terms
-        type: list_str
-        default: []
       - name: created_at
         type: datetime
         auto: true
