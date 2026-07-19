@@ -498,3 +498,98 @@ sources:
         - "operations assistant"
         - "customer support"
       count: 100
+
+  openstreetmap:
+    source_class: openstreetmap
+    access_mode: public_api
+    status: enabled
+    owner: data-platform
+    terms_review_status: approved
+    terms_reviewed_at: "2026-07-15T00:00:00+00:00"
+    allowed_outputs:
+      - company_lead
+      - demand_signal
+      - contact_route
+    allowed_fields:
+      - company_name
+      - company_domain
+      - title
+      - description
+      - location
+      - contact_routes
+      - source_url
+    raw_retention_days: 90
+    normalized_retention_days: 730
+    rate_limit:
+      requests_per_second: 0.2
+      max_concurrency_per_host: 1
+    kill_switch: sources.openstreetmap.enabled
+    adapter_config:
+      areas:
+        - "Australia"
+        - "New Zealand"
+      tags:
+        - key: "office"
+          value: "estate_agent"
+          title: "Property Manager / Real Estate Office"
+          category: "real estate agency providing property management and property services"
+        - key: "office"
+          value: "property_manager"
+          title: "Property Manager / Real Estate Office"
+          category: "real estate agency providing property management and property services"
+        - key: "office"
+          value: "real_estate"
+          title: "Property Manager / Real Estate Office"
+          category: "real estate agency providing property management and property services"
+        - key: "office"
+          value: "accountant"
+          title: "Accountant / Accounting Practice"
+          category: "accounting and tax services practice"
+        - key: "office"
+          value: "lawyer"
+          title: "Lawyer / Legal Practice"
+          category: "law firm and legal services practice"
+        - key: "office"
+          value: "insurance"
+          title: "Insurance Broker / Insurance Office"
+          category: "insurance brokerage and financial services"
+        - key: "office"
+          value: "financial_advisor"
+          title: "Financial Planner / Financial Advisory"
+          category: "financial planning and advisory practice"
+        - key: "office"
+          value: "bookkeeper"
+          title: "Bookkeeper / Bookkeeping Practice"
+          category: "bookkeeping and accounting support practice"
+        - key: "office"
+          value: "construction_company"
+          title: "Operations Coordinator / Construction Office"
+          category: "construction and home services business"
+        - key: "office"
+          value: "administrative"
+          title: "Administrative Assistant / Office"
+          category: "administrative and business support services"
+        - key: "craft"
+          value: "plumber"
+          title: "Maintenance Coordinator / Plumbing Services"
+          category: "plumbing and home services trade"
+        - key: "craft"
+          value: "electrician"
+          title: "Maintenance Coordinator / Electrical Services"
+          category: "electrical contractor and home services trade"
+        - key: "craft"
+          value: "carpenter"
+          title: "Maintenance Coordinator / Carpentry Services"
+          category: "carpentry and home services trade"
+        - key: "craft"
+          value: "painter"
+          title: "Maintenance Coordinator / Painting Services"
+          category: "painting and home services trade"
+        - key: "craft"
+          value: "roofer"
+          title: "Maintenance Coordinator / Roofing Services"
+          category: "roofing and home services trade"
+        - key: "craft"
+          value: "hvac"
+          title: "Maintenance Coordinator / HVAC Services"
+          category: "hvac and home services trade"

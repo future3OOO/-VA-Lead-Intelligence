@@ -11,6 +11,7 @@ from services.source_engine.adapters.hunter import HunterDomainAdapter
 from services.source_engine.adapters.jobicy import JobicyAdapter
 from services.source_engine.adapters.lever import LeverJobsAdapter
 from services.source_engine.adapters.manual_seed import ManualSeedAdapter
+from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.adapters.search_discovery import SearchDiscoveryAdapter
 from services.source_engine.adapters.smartrecruiters import SmartRecruitersAdapter
 from services.source_engine.adapters.team_pages import TeamPagesAdapter
@@ -31,6 +32,7 @@ ADAPTER_MAP: dict[str, type[BaseSourceAdapter]] = {
     "hunter_domain": HunterDomainAdapter,
     "jobicy": JobicyAdapter,
     "manual_seed": ManualSeedAdapter,
+    "openstreetmap": OpenStreetMapAdapter,
     "team_pages": TeamPagesAdapter,
     "workable_jobs": WorkableJobsAdapter,
     "workable_company": WorkableCompanyAdapter,
@@ -49,6 +51,7 @@ __all__ = [
     "JobicyAdapter",
     "LeverJobsAdapter",
     "ManualSeedAdapter",
+    "OpenStreetMapAdapter",
     "SearchDiscoveryAdapter",
     "SmartRecruitersAdapter",
     "TeamPagesAdapter",

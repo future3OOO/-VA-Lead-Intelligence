@@ -31,6 +31,7 @@ ALWAYS_RESOLVE_SOURCES = {
     "breezy_jobs",
     "jobicy",
     "team_pages",
+    "openstreetmap",
 }
 
 

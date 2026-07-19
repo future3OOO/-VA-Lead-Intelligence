@@ -17,7 +17,7 @@ from db.models.contact_route import ContactRoute
 from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
 
-JOB_BOARD_SOURCES = {
+EXPORT_SOURCES = {
     "workable_jobs",
     "workable_search",
     "workable_company",
@@ -28,6 +28,7 @@ JOB_BOARD_SOURCES = {
     "ashby_jobs",
     "smartrecruiters_postings",
     "jobicy",
+    "openstreetmap",
 }
 
 ANZ_REGION_RE = re.compile(
@@ -140,6 +141,12 @@ STAFFING_DENY = [
     "teamified",
     "steadfast solutions",
     "steadfastsolutions",
+    "kg talent",
+    "kgtalent",
+    "inautalent",
+    "inaudalent",
+    "hire resolve",
+    "hire resolve.com",
 ]
 
 NON_TARGET_DENY = [
@@ -185,103 +192,306 @@ NON_TARGET_DENY = [
     "isthmus",
     "apexfocusgroup",
     "apex focus group",
+    "tmgm",
+    "fleetpartners",
+    "fleet partners",
+    "corto",
+    "corto pty ltd",
+    "legalvision",
+    "the halo trust",
+    "grant thornton",
+    "grant thornton new zealand",
+    "australian payments plus",
+    "australianpaymentsplus",
+    "ofload",
+    "compass education",
+    "compasseducation",
+    "peopleworth",
+    "civica",
+    "infosys",
+    "natterbox",
+    "vizrt",
+    "genetec",
+    "veracross",
+    "timescapes",
+    "hire resolve.com",
+    "hire resolve",
+    "moreton capital partners",
+    "red energy",
+    "sasmar",
+    "lyka",
+    "eatclub",
+    "mathspace",
+    "hosting.com",
+    "hostingcom",
+    "rfi global",
+    "squared away",
+    "dext",
+    "valsoft",
+    "valsoft corporation",
+    "efm",
+    "infosys singapore & australia",
+    "natterbox ltd",
+    "redenergy",
+    "today",
+    "genetec inc",
+    "vizrt ltd",
 ]
 
-ALWAYS_STRONG_TITLES = [
-    "property manager",
-    "assistant property manager",
-    "property management assistant",
-    "property administrator",
-    "leasing consultant",
-    "transaction coordinator",
-    "maintenance coordinator",
-    "real estate assistant",
-    "mortgage broker",
-    "insurance broker",
-    "mortgage broker assistant",
-    "mortgage assistant",
-    "insurance assistant",
-    "mortgage adviser",
-    "mortgage advisor",
-    "insurance adviser",
-    "insurance advisor",
-    "loan processor",
-    "paraplanner",
-    "conveyancing assistant",
-    "conveyancer",
-    "body corporate manager",
-    "facilities manager",
-    "facilities coordinator",
-]
-
-SECTOR_DEPENDENT_TITLES = [
-    "bookkeeper",
-    "senior bookkeeper",
-    "bookkeeping manager",
-    "accountant",
-    "senior accountant",
-    "assistant accountant",
-    "accounting manager",
-    "accounts assistant",
-    "accounts payable",
-    "accounts receivable",
-    "payroll",
-    "payroll officer",
-    "payroll administrator",
-    "payroll specialist",
-    "tax accountant",
-    "tax manager",
-    "finance officer",
+# Role-based signals.  A "direct" role is something a VA can fill or directly
+# support; an "operational support" role indicates the company has admin
+# workload that a VA can take off the team.  The scoring model weights the
+# company sector + role signal together so a senior accountant at an
+# accounting practice still scores as a medium lead (the firm needs admin),
+# while a senior accountant at a tech company is dropped.
+DIRECT_VA_ROLES = [
+    "virtual assistant",
+    "executive assistant",
+    "senior executive assistant",
+    "personal assistant",
+    "administrative assistant",
+    "admin assistant",
     "admin officer",
     "administration officer",
     "administrative officer",
-    "company secretary",
-    "company secretarial",
-    "operations coordinator",
-    "project coordinator",
-    "scheduling coordinator",
-    "appointment setter",
-    "sales support",
-    "crm administrator",
-    "contracts administrator",
-    "sales administrator",
-    "insurance coordinator",
-    "customer support coordinator",
-    "remote services administrator",
-    "collections officer",
-    "retentions officer",
-    "novated leasing consultant",
-    "lease administrator",
-    "operations assistant",
-]
-
-UNIVERSAL_ADMIN_TITLES = [
-    "virtual assistant",
-    "executive assistant",
-    "administrative assistant",
     "office manager",
+    "office administrator",
+    "office assistant",
     "receptionist",
+    "front desk receptionist",
+    "front desk",
     "data entry",
+    "data entry clerk",
+    "data entry operator",
+    "bookkeeper",
+    "bookkeeping",
+    "senior bookkeeper",
+    "payroll officer",
+    "payroll administrator",
+    "payroll specialist",
+    "payroll clerk",
+    "accounts payable",
+    "accounts receivable",
+    "accounts assistant",
+    "accounts clerk",
+    "finance assistant",
+    "assistant accountant",
+    "accounting assistant",
+    "tax assistant",
+    "paralegal",
+    "senior paralegal",
     "legal assistant",
     "legal secretary",
-    "paralegal",
+    "law clerk",
+    "conveyancing assistant",
+    "conveyancing clerk",
+    "property administrator",
+    "property management assistant",
+    "property assistant",
+    "leasing consultant",
+    "leasing assistant",
+    "leasing coordinator",
+    "maintenance coordinator",
+    "maintenance assistant",
+    "scheduling coordinator",
+    "appointment setter",
+    "appointment scheduler",
+    "customer support",
+    "customer service",
+    "customer care",
+    "sales support",
+    "sales administrator",
+    "operations assistant",
+    "operations coordinator",
+    "operations administrator",
+    "project coordinator",
+    "claims officer",
+    "retentions officer",
+    "collections officer",
+    "loan processor",
+    "loan administrator",
+    "insurance administrator",
+    "mortgage assistant",
+    "insurance assistant",
+    "underwriter assistant",
+    "mortgage broker assistant",
+    "finance broker",
+    "remote services administrator",
+    "company secretary",
+    "company secretarial",
 ]
 
-STRONG_ADMIN_TITLES = ALWAYS_STRONG_TITLES + SECTOR_DEPENDENT_TITLES + UNIVERSAL_ADMIN_TITLES
-
-MEDIUM_ADMIN_TITLES = [
-    "coordinator",
-    "assistant",
-    "admin",
-    "support",
-    "officer",
-    "clerk",
-    "operations",
-    "service delivery",
-    "client operations",
-    "people operations",
-    "business operations",
+# Roles that carry heavy administrative burden and are commonly supported by VAs.
+OPERATIONAL_SUPPORT_ROLES = [
+    "property manager",
+    "assistant property manager",
+    "property coordinator",
+    "leasing manager",
+    "facilities manager",
+    "facilities coordinator",
+    "body corporate manager",
+    "strata manager",
+    "building manager",
+    "operations manager",
+    "practice manager",
+    "business manager",
+    "project manager",
+    "maintenance manager",
+    "claims consultant",
+    "claims assessor",
+    "claims officer",
+    "retentions officer",
+    "collections officer",
+    "loan processor",
+    "loan administrator",
+    "insurance administrator",
+    "mortgage assistant",
+    "insurance assistant",
+    "underwriter assistant",
+    "business support",
+    "client services",
+    "client services manager",
+    "sales support",
+    "sales administrator",
+    "sales coordinator",
+    "customer support",
+    "customer service",
+    "customer care",
 ]
+
+# Client-facing roles that create admin follow-up work but are not pure admin.
+CLIENT_FACING_ROLES = [
+    "account manager",
+    "customer success manager",
+    "client success manager",
+    "client relationship",
+    "account executive",
+]
+
+# Professional service-provider roles.  The open job is not a VA role, but the
+# firm itself is a strong VA prospect because professionals produce admin work.
+PROFESSIONAL_ROLES = [
+    "mortgage broker",
+    "insurance broker",
+    "financial planner",
+    "paraplanner",
+    "conveyancer",
+    "lawyer",
+    "solicitor",
+    "barrister",
+    "attorney",
+    "associate",
+    "senior associate",
+    "accountant",
+    "tax accountant",
+    "senior accountant",
+    "accounting manager",
+    "finance manager",
+    "tax manager",
+    "payroll manager",
+    "accounts manager",
+    "credit controller",
+    "billing officer",
+    "debt collector",
+    "ar manager",
+    "ap manager",
+    "administration manager",
+    "office coordinator",
+]
+
+# Titles that are clearly not VA-relevant, regardless of sector.
+NON_ADMIN_ROLES_RE = re.compile(
+    r"\b(?:software engineer|data engineer|data scientist|devops|sre|nurse|registered nurse|doctor|gp|chef|cook|truck driver|forklift|warehouse|mechanic|electrician|plumber|carpenter|painter|teacher|lecturer|scientist|pharmacist|physiotherapist|psychologist|social worker|sales development|business development manager|sales manager|sales lead|outbound sales|account executive|marketing manager|brand manager|product manager|program manager|hr manager|people manager|recruitment manager|talent acquisition|recruiter|data analyst|business analyst|ai engineer|machine learning engineer)\b",
+    re.I,
+)
+
+SENIOR_PROFESSIONAL_RE = re.compile(
+    r"\b(?:senior|lead|principal|managing director|chief\s+\w+\s+officer|chief\s+\w+|head of|vice president|vp)\b",
+    re.I,
+)
+
+# Senior professional titles that signal the open role is not a VA hire.
+# The firm may still need admin support, but the advertised role itself is not
+# suitable for a virtual assistant.
+NOT_VA_SENIOR_RE = re.compile(
+    r"\b(?:senior\s+(?:accountant|financial\s+accountant|tax\s+accountant|accounting\s+manager|finance\s+manager|tax\s+manager|payroll\s+manager|accounts\s+manager|credit\s+controller|lawyer|solicitor|associate|paralegal|conveyancer|underwriter|loan\s+officer)|lead\s+(?:accountant|lawyer|solicitor)|principal\s+(?:accountant|lawyer|solicitor))\b",
+    re.I,
+)
+
+# Signals that the company is a technology vendor, not the small/midsize
+# service business that would hire a VA.
+TECH_VENDOR_RE = re.compile(
+    r"\b(?:software\s+(?:company|business|provider|platform|vendor|solutions|product|products)|saas|cloud\s+platform|technology\s+(?:company|provider|solutions|platform|start-up|startup)|tech\s+(?:company|start-up|startup)|ai\s+(?:agent|platform|solution|powered)|ai[-\s]?powered\s+(?:software|platform|solution|legal)|voice\s+ai|education\s+technology|vertical\s+market\s+software|enterprise\s+(?:software|solutions)|software\s+acquisition|acquire\s+.*\bsoftware|trusted\s+by\s+.*\b(?:firms|companies|law\s+firms|businesses)\s+worldwide)\b",
+    re.I,
+)
+
+# Phrases in the company/job description that indicate a high administrative
+# workload that a VA can relieve.
+ADMIN_BURDEN_RE = re.compile(
+    r"\b(?:high volume|heavy workload|busy|fast[\s\-]?paced|growing|expanding|new office|multiple sites|administrative support|admin support|inbox|crm|data entry|scheduling|diary management|client onboarding|tenant|maintenance request|claims processing|loan files|invoicing|billing|accounts|reconciliation|compliance|documentation|filing|phones|emails|correspondence|coordination|coordinating|paperwork|reporting|deadlines|backlog|expanding team|small team)\b",
+    re.I,
+)
+
+VA_USE_CASES = {
+    "Property/Facilities": "Property management firms handle tenant enquiries, maintenance coordination, lease admin, and rent-roll data entry — core VA workloads.",
+    "Real Estate": "Real estate agencies need listing admin, CRM updates, buyer/tenant follow-up, and appointment scheduling.",
+    "Financial Services": "Accounting, bookkeeping, mortgage, and insurance firms produce high volumes of client files, claims, loan paperwork, scheduling, and compliance admin.",
+    "Home Services/Construction": "Trade and home-service businesses with field staff need scheduling, dispatch, invoicing, and customer follow-up.",
+    "Legal/Professional": "Small law firms and professional practices need document prep, client intake, diary management, and billing admin.",
+    "Other": "The company is building operational/admin support and may need flexible VA capacity.",
+}
+
+# Common words used in job titles so we don't mistake them for a person's name.
+VA_ROLE_WORDS: set[str] = set()
+for _phrase in DIRECT_VA_ROLES + OPERATIONAL_SUPPORT_ROLES:
+    VA_ROLE_WORDS.update(w.lower() for w in _phrase.split())
+VA_ROLE_WORDS.update(
+    {
+        "manager",
+        "assistant",
+        "officer",
+        "coordinator",
+        "consultant",
+        "specialist",
+        "admin",
+        "support",
+        "executive",
+        "director",
+        "partner",
+        "associate",
+        "senior",
+        "lead",
+        "principal",
+    }
+)
+
+
+def _has_role(title: str, roles: list[str]) -> bool:
+    title_lower = title.lower()
+    return any(role in title_lower for role in roles)
+
+
+def _is_direct_va_role(title: str) -> bool:
+    return _has_role(title, DIRECT_VA_ROLES)
+
+
+def _is_operational_support_role(title: str) -> bool:
+    return _has_role(title, OPERATIONAL_SUPPORT_ROLES) and not _is_direct_va_role(title)
+
+
+def _is_client_facing_role(title: str) -> bool:
+    return _has_role(title, CLIENT_FACING_ROLES)
+
+
+def _is_professional_role(title: str) -> bool:
+    return _has_role(title, PROFESSIONAL_ROLES)
+
+
+def _is_senior_professional(title: str) -> bool:
+    # A "Senior Executive Assistant" or "Senior Paralegal" is still a direct admin role.
+    if _is_direct_va_role(title):
+        return False
+    return bool(SENIOR_PROFESSIONAL_RE.search(title))
 
 
 def _detect_category(text: str) -> str:
@@ -301,12 +511,18 @@ def _is_target(text: str, title: str = "") -> bool:
         if term in text_lower:
             return False
     title_lower = title.lower()
-    if any(t in title_lower for t in STRONG_ADMIN_TITLES):
-        return True
-    if not any(t in title_lower for t in MEDIUM_ADMIN_TITLES):
+    # Senior professional postings (e.g., Senior Accountant, Lead Lawyer) are
+    # not themselves VA roles even when the firm is in a target sector.
+    if NOT_VA_SENIOR_RE.search(title_lower):
         return False
     category = _detect_category(text)
-    return category != "Other"
+    # Target-sector companies are leads even when the open role is senior,
+    # because the firm itself likely needs VA support.  Screen out obviously
+    # unrelated technical/health/trade titles.
+    if category != "Other":
+        return not bool(NON_ADMIN_ROLES_RE.search(title_lower))
+    # Non-target companies only make the cut if the role is clearly admin.
+    return _is_direct_va_role(title) or _is_operational_support_role(title)
 
 
 def _qualification_score(
@@ -316,49 +532,69 @@ def _qualification_score(
     location: str,
     published_at: datetime,
     routes: dict[str, str],
-) -> tuple[int, str]:
+    workplace_type: str = "",
+) -> tuple[int, str, list[str]]:
     text = f"{title} {body} {company_name} {location}".lower()
-    score = 40
-    rank = "Low"
-    reasons: list[str] = []
-
     title_lower = title.lower()
     category = _detect_category(text)
+    score = 0
+    reasons: list[str] = []
 
-    if any(t in title_lower for t in ALWAYS_STRONG_TITLES):
-        score += 30
-        reasons.append("title is a strong, sector-specific VA-adjacent role")
-    elif any(t in title_lower for t in UNIVERSAL_ADMIN_TITLES):
-        if category != "Other":
-            score += 30
-            reasons.append("title is a universal admin role in a target sector")
-        else:
-            score += 15
-            reasons.append("title is a universal admin role, but the sector is not clearly target")
-    elif any(t in title_lower for t in SECTOR_DEPENDENT_TITLES):
-        if category != "Other":
-            score += 30
-            reasons.append("title is a finance/operations admin role in a target sector")
-        else:
-            score += 15
-            reasons.append(
-                "title is a finance/operations admin role, but the sector is not clearly target"
-            )
-    elif any(t in title_lower for t in MEDIUM_ADMIN_TITLES):
-        score += 15
-        reasons.append("title shows admin/coordination responsibilities")
+    # 0. Technology/software vendor check.  Vendors sell tools to target
+    # businesses but are rarely the end-user service business that needs a VA.
+    is_tech_vendor = bool(TECH_VENDOR_RE.search(f"{company_name} {body}".lower()))
 
-    if category != "Other":
-        score += 10
-        reasons.append(f"company/role in {category} sector")
-
-    if REMOTE_KEYWORDS_RE.search(text):
-        score += 10
-        reasons.append("role is remote/hybrid (well suited to a VA)")
-    if ONSITE_KEYWORDS_RE.search(text):
+    # 1. Sector fit (company-level signal)
+    if is_tech_vendor:
+        category = "Other"
         score -= 25
-        reasons.append("on-site language detected (red flag for remote VA fit)")
+        reasons.append("company appears to be a technology/software vendor, not a service business")
+    elif category != "Other":
+        score += 30
+        reasons.append(f"company/role is in the {category} sector")
+    elif _is_direct_va_role(title):
+        score += 5
+        reasons.append("role is a direct admin/VA role")
 
+    # 2. Role signal (is the open job admin/VA, operational, professional, or unrelated?)
+    if _is_direct_va_role(title):
+        score += 25
+        reasons.append("role is a direct VA/admin function")
+    elif _is_operational_support_role(title):
+        score += 15
+        reasons.append("role is operational support that creates admin burden")
+    elif _is_client_facing_role(title):
+        score += 10
+        reasons.append("role is client-facing and likely creates admin follow-up")
+    elif _is_professional_role(title):
+        score += 10
+        reasons.append(
+            "role is a professional service provider role; the firm likely needs admin support"
+        )
+    elif NON_ADMIN_ROLES_RE.search(title_lower):
+        score -= 10
+        reasons.append("title appears senior/technical/sales-only, less direct VA fit")
+
+    # 3. Seniority/leadership penalty (direct VA roles are exempt)
+    if _is_senior_professional(title):
+        score -= 10
+        reasons.append("senior/leadership title; the firm may still need admin support")
+
+    # 4. Admin burden in the description
+    if ADMIN_BURDEN_RE.search(text):
+        score += 10
+        reasons.append("description signals high administrative workload")
+
+    # 5. Workplace fit
+    wp = (workplace_type or "").lower()
+    if wp in {"remote", "hybrid"} or REMOTE_KEYWORDS_RE.search(text):
+        score += 10
+        reasons.append("role is remote/hybrid (ideal for a VA)")
+    if ONSITE_KEYWORDS_RE.search(text):
+        score -= 20
+        reasons.append("on-site language detected — harder to service remotely")
+
+    # 6. Recency
     if published_at:
         try:
             age_days = (datetime.now(timezone.utc) - published_at).days
@@ -371,16 +607,18 @@ def _qualification_score(
         except Exception:
             pass
 
-    if routes.get("best_email") or routes.get("best_phone"):
+    # 7. Contact route available
+    if routes.get("best_email") or routes.get("best_phone") or routes.get("best_form"):
         score += 5
-        reasons.append("verified contact route available")
+        reasons.append("contact route available")
 
-    score = min(score, 100)
-    if score >= 85:
+    score = max(0, min(score, 100))
+    rank = "Low"
+    if score >= 75:
         rank = "High"
-    elif score >= 60:
+    elif score >= 55:
         rank = "Medium"
-    return score, rank
+    return score, rank, reasons
 
 
 def _build_explanation(
@@ -391,6 +629,8 @@ def _build_explanation(
     score: int,
     rank: str,
     routes: dict[str, str],
+    reasons: list[str],
+    source_key: str = "",
 ) -> str:
     contact_parts = []
     if routes.get("best_email"):
@@ -400,12 +640,21 @@ def _build_explanation(
     if routes.get("best_form"):
         contact_parts.append(f"contact form {routes['best_form']}")
     contact = "; ".join(contact_parts) if contact_parts else "no direct contact route yet"
-    explanation = (
-        f"{rank} fit ({score}/100): {company_name} ({category}) is hiring a '{title}' in {location}. "
-        f"This role indicates operational/administrative workload that a VA can support "
-        f"(inbox/CRM management, scheduling, bookkeeping, maintenance/vendor coordination, or customer follow-up). "
-        f"Best contact: {contact}."
+    use_case = VA_USE_CASES.get(category, VA_USE_CASES["Other"])
+    top_reasons = (
+        "; ".join(reasons[:3]) if reasons else "company and role profile match VA support patterns"
     )
+    if source_key == "openstreetmap":
+        explanation = (
+            f"{rank} fit ({score}/100): {company_name} ({category}) in {location} "
+            f"is an OpenStreetMap business listing tagged as '{title}'. {use_case} "
+            f"Key signal: {top_reasons}. Best contact: {contact}."
+        )
+    else:
+        explanation = (
+            f"{rank} fit ({score}/100): {company_name} ({category}) in {location} is advertising "
+            f"'{title}'. {use_case} Key signal: {top_reasons}. Best contact: {contact}."
+        )
     return explanation
 
 
@@ -505,10 +754,7 @@ def _is_plausible_person_name(name: str) -> bool:
         "link",
         "follow",
     }
-    if any(
-        w.lower() in generic or w.lower() in STRONG_ADMIN_TITLES or w.lower() in MEDIUM_ADMIN_TITLES
-        for w in words
-    ):
+    if any(w.lower() in generic or w.lower() in VA_ROLE_WORDS for w in words):
         return False
     return not all(w.isupper() and len(w) <= 3 for w in words)
 
@@ -566,6 +812,9 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
     return best
 
 
+RANK_ORDER = {"low": 1, "medium": 2, "high": 3}
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Export qualified leads and company contacts")
     parser.add_argument(
@@ -579,12 +828,19 @@ async def main() -> None:
         default="all",
         help="Filter leads to a region (anz = Australia + New Zealand)",
     )
+    parser.add_argument(
+        "--min-rank",
+        choices=["low", "medium", "high"],
+        default="low",
+        help="Only export leads with at least this rank (low = all)",
+    )
     args = parser.parse_args()
 
     workspace_id = args.workspace_id
     leads_path = args.leads_path
     companies_path = args.companies_path
     region_filter = args.region
+    min_rank = args.min_rank
 
     async with AsyncSessionLocal() as session:
         # Load all contact routes keyed by company_id
@@ -632,7 +888,7 @@ async def main() -> None:
                         select(func.count()).where(
                             SourceHit.workspace_id == workspace_id,
                             SourceHit.company_id == c.id,
-                            SourceHit.source_key.in_(JOB_BOARD_SOURCES),
+                            SourceHit.source_key.in_(EXPORT_SOURCES),
                         )
                     )
                 ).scalar()
@@ -658,7 +914,7 @@ async def main() -> None:
             await session.scalars(
                 select(SourceHit).where(
                     SourceHit.workspace_id == workspace_id,
-                    SourceHit.source_key.in_(JOB_BOARD_SOURCES),
+                    SourceHit.source_key.in_(EXPORT_SOURCES),
                 )
             )
         ).all()
@@ -691,12 +947,29 @@ async def main() -> None:
                 else (hit.company_domain_raw or "")
             )
             best_routes = _best_contact(contact_by_company.get(company.id, [])) if company else {}
-            score, rank = _qualification_score(
-                company_name, title, body, location, hit.published_at, best_routes
+            score, rank, reasons = _qualification_score(
+                company_name,
+                title,
+                body,
+                location,
+                hit.published_at,
+                best_routes,
+                hit.workplace_type,
             )
             explanation = _build_explanation(
-                company_name, title, location, category, score, rank, best_routes
+                company_name,
+                title,
+                location,
+                category,
+                score,
+                rank,
+                best_routes,
+                reasons,
+                hit.source_key,
             )
+
+            if RANK_ORDER.get(rank.lower(), 0) < RANK_ORDER.get(min_rank, 1):
+                continue
 
             named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
             lead_rows.append(
