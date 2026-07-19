@@ -4,6 +4,7 @@
 |--------|-------------|----------------|------------|--------------------|-------------|
 | manual_seed | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual.enabled` |
 | openstreetmap | public_api | real ANZ business name, address, phone, email, website, business category | 0.2 req/s | none | `sources.openstreetmap.enabled` |
+| team_pages | scoped_public_web_crawl | named contacts, job titles, emails, phones, LinkedIn profiles from `/team` and `/about` pages | 2 req/s | none | `sources.team_pages.enabled` |
 
 ## Prohibited Access Modes
 

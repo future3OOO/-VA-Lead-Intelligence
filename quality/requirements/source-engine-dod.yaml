@@ -28,7 +28,7 @@ requirements:
 
   - id: SE-05
     title: Contact enrichment
-    description: Contact routes extracted from the OpenStreetMap source are persisted only after a company is resolved and qualified.
+    description: Contact routes extracted from OpenStreetMap and the optional team_pages source are persisted only after a company is resolved and qualified.
     verification: integration test
     status: implemented
 

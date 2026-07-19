@@ -23,6 +23,7 @@ EXCLUDED_INTENTS = {
 ALWAYS_RESOLVE_SOURCES = {
     "manual_seed",
     "openstreetmap",
+    "team_pages",
 }
 
 
