@@ -891,7 +891,6 @@ class TeamPagesAdapter(BaseSourceAdapter):
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._robots_cache: dict[str, RobotFileParser] = {}
-        self._sem = asyncio.Semaphore(15)
         self._counter = 0
         self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
@@ -916,11 +915,13 @@ class TeamPagesAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = await self.client.get(
-                robots_url,
-                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
+            parsed = urlparse(robots_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(
+                    robots_url,
+                    timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
+                    headers={"User-Agent": "VALeadBot/1.0"},
+                )
             rp.parse(response.text.splitlines())
         except Exception:
             pass
@@ -929,44 +930,58 @@ class TeamPagesAdapter(BaseSourceAdapter):
 
     async def _process_domain(
         self, domain: str, paths: list[str], total: int
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         async with self._counter_lock:
             self._counter += 1
             idx = self._counter
         print(f"[team_pages] {idx}/{total}: {domain}", flush=True)
         base_url = f"https://{domain}"
-        results: list[dict[str, Any]] = []
-        for path in paths[:8]:
+        max_pages = int(self.config.adapter_config.get("max_pages_per_domain", 5))
+        seen_route_keys: set[tuple[str, str]] = set()
+        all_routes: list[dict[str, Any]] = []
+        first_soup: BeautifulSoup | None = None
+        first_url = ""
+        pages_crawled = 0
+        for path in paths[:max_pages]:
             url = urljoin(base_url, path)
-            async with self._sem:
-                if not await self._allowed(url):
-                    continue
-                try:
+            parsed = urlparse(url)
+            if not await self._allowed(url):
+                continue
+            try:
+                async with self.rate_limiter.acquire(parsed.netloc):
                     response = await self.client.get(url)
-                    response.raise_for_status()
-                    content_type = response.headers.get("content-type", "").lower()
-                    if "text/html" not in content_type:
-                        continue
-                    html = response.text
-                    soup = BeautifulSoup(html, "html.parser")
-                    routes = _extract_from_soup(soup, str(response.url), domain)
-                    if routes:
-                        results.append(
-                            {
-                                "domain": domain,
-                                "url": str(response.url),
-                                "soup": soup,
-                                "contact_routes": routes,
-                            }
-                        )
-                        break
-                except httpx.HTTPError:
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "").lower()
+                if "text/html" not in content_type:
                     continue
-                except Exception as exc:  # noqa: BLE001
-                    print(f"[team_pages] error {url}: {exc}", flush=True)
-                    continue
-            await asyncio.sleep(0.2)
-        return results
+                html = response.text
+                soup = BeautifulSoup(html, "html.parser")
+                routes = _extract_from_soup(soup, str(response.url), domain)
+                pages_crawled += 1
+                if routes:
+                    if first_soup is None:
+                        first_soup = soup
+                        first_url = str(response.url)
+                    for route in routes:
+                        key = (str(route["type"]), str(route["value"]).lower())
+                        if key in seen_route_keys:
+                            continue
+                        seen_route_keys.add(key)
+                        all_routes.append(route)
+            except httpx.HTTPError:
+                continue
+            except Exception as exc:  # noqa: BLE001
+                print(f"[team_pages] error {url}: {exc}", flush=True)
+                continue
+        if not all_routes or first_soup is None:
+            return None
+        return {
+            "domain": domain,
+            "url": first_url,
+            "soup": first_soup,
+            "contact_routes": all_routes,
+            "pages_crawled": pages_crawled,
+        }
 
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
         domains = query.get("domains") or self.config.adapter_config.get("domains")
@@ -984,8 +999,13 @@ class TeamPagesAdapter(BaseSourceAdapter):
             for domain in domains
         ]
         for task in asyncio.as_completed(tasks):
-            results.extend(await task)
-        print(f"[team_pages] extracted {len(results)} pages with routes", flush=True)
+            result = await task
+            if result:
+                results.append(result)
+        print(
+            f"[team_pages] extracted routes for {len(results)} domains",
+            flush=True,
+        )
         return results
 
     def _clean_text(self, text: str) -> str:

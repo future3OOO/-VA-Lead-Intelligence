@@ -50,7 +50,6 @@ class CompanyWebAdapter(BaseSourceAdapter):
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._robots_cache: dict[str, RobotFileParser] = {}
-        self._sem = asyncio.Semaphore(15)
         self._counter = 0
         self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
@@ -71,11 +70,13 @@ class CompanyWebAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = await self.client.get(
-                robots_url,
-                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
+            parsed = urlparse(robots_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(
+                    robots_url,
+                    timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
+                    headers={"User-Agent": "VALeadBot/1.0"},
+                )
             rp.parse(response.text.splitlines())
         except Exception:
             pass
@@ -101,9 +102,10 @@ class CompanyWebAdapter(BaseSourceAdapter):
         if not await self._allowed(sitemap_url):
             return []
         try:
-            async with self._sem:
+            parsed = urlparse(sitemap_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
                 response = await self.client.get(sitemap_url)
-                response.raise_for_status()
+            response.raise_for_status()
             content_type = response.headers.get("content-type", "").lower()
             if content_type and "xml" not in content_type:
                 return []
@@ -120,18 +122,19 @@ class CompanyWebAdapter(BaseSourceAdapter):
     async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup] | None:
         if not await self._allowed(url):
             return None
-        async with self._sem:
-            try:
+        parsed = urlparse(url)
+        try:
+            async with self.rate_limiter.acquire(parsed.netloc):
                 response = await self.client.get(url)
-                response.raise_for_status()
-                content_type = response.headers.get("content-type", "").lower()
-                if content_type and "text/html" not in content_type:
-                    return None
-                return str(response.url), BeautifulSoup(response.text, "html.parser")
-            except httpx.HTTPError:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").lower()
+            if content_type and "text/html" not in content_type:
                 return None
-            except Exception:
-                return None
+            return str(response.url), BeautifulSoup(response.text, "html.parser")
+        except httpx.HTTPError:
+            return None
+        except Exception:
+            return None
 
     async def _crawl_domain(self, domain: str, total: int) -> dict[str, Any] | None:
         async with self._counter_lock:
@@ -197,7 +200,6 @@ class CompanyWebAdapter(BaseSourceAdapter):
                     queue.append((clean, depth + 1))
             except Exception:
                 continue
-            await asyncio.sleep(0.2)
 
         if not routes:
             return None

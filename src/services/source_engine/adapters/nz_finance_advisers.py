@@ -7,7 +7,6 @@ fetches the provider page for the FAP's website and phone.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -58,7 +57,6 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self._sem = asyncio.Semaphore(1)
         self._provider_cache: dict[str, dict[str, Any]] = {}
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
@@ -79,10 +77,10 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         return re.sub(r"^www\.", "", parsed.netloc.lower())
 
     async def _get(self, url: str) -> str:
-        async with self._sem:
+        parsed = urlparse(url)
+        async with self.rate_limiter.acquire(parsed.netloc):
             response = await self.client.get(url)
-            response.raise_for_status()
-            await asyncio.sleep(1.0)
+        response.raise_for_status()
         return response.text
 
     def _extract_jsonld_by_type(self, html: str, type_name: str) -> dict[str, Any] | None:

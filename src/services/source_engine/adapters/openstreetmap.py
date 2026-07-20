@@ -9,7 +9,6 @@ rather than from active job posts.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -186,11 +185,13 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         last_error: Exception | None = None
         for endpoint in self._ENDPOINTS:
             try:
-                response = await self.client.post(
-                    endpoint,
-                    content=query,
-                    headers={"Content-Type": "text/plain"},
-                )
+                parsed = urlparse(endpoint)
+                async with self.rate_limiter.acquire(parsed.netloc):
+                    response = await self.client.post(
+                        endpoint,
+                        content=query,
+                        headers={"Content-Type": "text/plain"},
+                    )
             except Exception as exc:
                 last_error = exc
                 continue
@@ -378,11 +379,8 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
                     data = await self._execute_query(overpass_query)
                     if data is not None:
                         break
-                    # If a heavy query fails, try a lighter node-only query.
-                    await asyncio.sleep(1.0)
 
                 if data is None:
-                    await asyncio.sleep(2.0)
                     continue
 
                 for element in data.get("elements", []):
@@ -395,9 +393,6 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
                     )
                     if normalized:
                         results.append(normalized)
-
-                # Polite delay between Overpass requests.
-                await asyncio.sleep(2.0)
 
         return results
 

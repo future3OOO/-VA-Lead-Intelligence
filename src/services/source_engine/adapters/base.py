@@ -86,7 +86,6 @@ class BaseSourceAdapter(ABC):
         """Fetch and normalize records with rate limiting and metrics."""
         if not self.enabled or self.kill_switched():
             return []
-        await self.rate_limiter.acquire()
         raw_records = await self.fetch(workspace_id, query)
         self.metrics.record_hits(len(raw_records))
         normalized: list[dict[str, Any]] = []

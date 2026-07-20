@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -47,7 +48,6 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self._sem = asyncio.Semaphore(5)
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
             follow_redirects=True,
@@ -158,20 +158,65 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             return None
         return candidates[0]
 
+    _SOCIAL_HOSTS = {
+        "facebook.com",
+        "fb.com",
+        "linkedin.com",
+        "instagram.com",
+        "twitter.com",
+        "x.com",
+        "tiktok.com",
+        "youtube.com",
+        "youtu.be",
+    }
+
     def _coerce_domain(self, url: str) -> str:
-        if not url or not url.startswith(("http://", "https://")):
+        if not url:
             return ""
+        if "//" not in url and ":" not in url:
+            url = "https://" + url
         parsed = urlparse(url)
-        return re.sub(r"^www\.", "", parsed.netloc.lower())
+        host = re.sub(r"^www\.", "", parsed.netloc.lower())
+        if host in self._SOCIAL_HOSTS or host.endswith(("facebook.com", "linkedin.com")):
+            return ""
+        return host
+
+    def _best_website(self, data: dict[str, Any]) -> str:
+        """Prefer a real business website over social/directory URLs."""
+        candidates: list[str] = []
+        url = str(data.get("url", "")).strip()
+        if url:
+            candidates.append(url)
+        same_as = data.get("sameAs", [])
+        if isinstance(same_as, str):
+            same_as = [same_as]
+        for link in same_as:
+            if isinstance(link, str):
+                candidates.append(link)
+
+        directory_host = urlparse(self._SITEMAP_URL).netloc.lower()
+        for link in candidates:
+            if not link:
+                continue
+            if not link.startswith(("http://", "https://")):
+                link = "https://" + link
+            parsed = urlparse(link)
+            host = re.sub(r"^www\.", "", parsed.netloc.lower())
+            if not host or host == directory_host or host in self._SOCIAL_HOSTS:
+                continue
+            if host.endswith(("facebook.com", "linkedin.com", "instagram.com", "twitter.com")):
+                continue
+            return link
+        return ""
 
     async def _fetch_profile(self, url: str) -> dict[str, Any] | None:
-        async with self._sem:
-            try:
+        parsed = urlparse(url)
+        try:
+            async with self.rate_limiter.acquire(parsed.netloc):
                 response = await self.client.get(url)
-                response.raise_for_status()
-            except httpx.HTTPError:
-                return None
-        await asyncio.sleep(0.4)
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return None
         soup = BeautifulSoup(response.text, "html.parser")
         data = self._extract_jsonld(soup)
         if not data:
@@ -183,16 +228,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         if not self._looks_like_small_business(name, description):
             return None
         telephone = str(data.get("telephone", "")).strip()
-        same_as = data.get("sameAs", [])
-        if isinstance(same_as, str):
-            same_as = [same_as]
-        website = ""
-        for link in same_as:
-            if isinstance(link, str) and link.startswith("http"):
-                website = link
-                break
-        if not website:
-            website = str(data.get("url", "")).strip()
+        website = self._best_website(data)
         address = data.get("address", {})
         location = ""
         if isinstance(address, dict):
@@ -234,8 +270,10 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             query.get("max_profile_pages")
             or self.config.adapter_config.get("max_profile_pages", 1200)
         )
+        parsed = urlparse(self._SITEMAP_URL)
         try:
-            sitemap_response = await self.client.get(self._SITEMAP_URL, timeout=30.0)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                sitemap_response = await self.client.get(self._SITEMAP_URL, timeout=30.0)
             sitemap_response.raise_for_status()
         except httpx.HTTPError:
             return []
@@ -245,7 +283,8 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         for loc in root.findall(".//ns:loc", ns):
             if loc.text and "/finance/" in loc.text and loc.text != self._SITEMAP_URL:
                 urls.append(loc.text)
-        # Shuffle slightly to spread across categories, then cap.
+        # Shuffle to spread across categories, then cap.
+        random.shuffle(urls)
         urls = urls[:max_profiles]
 
         results: list[dict[str, Any]] = []
