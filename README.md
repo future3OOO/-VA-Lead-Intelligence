@@ -17,6 +17,71 @@ Primary sources:
 
 Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web crawlers respect `robots.txt`.
 
+## How we use OpenStreetMap
+
+`openstreetmap` is the largest public source. It queries the Overpass API for real business nodes in Australia and New Zealand and turns each listing into a VA-fit lead.
+
+### Endpoints
+
+The adapter tries these public Overpass endpoints in order and falls back if one is rate-limited or overloaded:
+
+1. `https://z.overpass-api.de/api/interpreter`
+2. `https://lz4.overpass-api.de/api/interpreter`
+
+### Business tags we query
+
+These tags map to target sectors:
+
+| OSM key | OSM value | Synthetic title | VA-fit category |
+|---------|-----------|-----------------|-------------------|
+| `office` | `estate_agent` | Property Manager / Real Estate Office | real estate agency |
+| `office` | `property_manager` | Property Manager / Real Estate Office | real estate agency |
+| `office` | `real_estate` | Property Manager / Real Estate Office | real estate agency |
+| `office` | `accountant` | Accountant / Accounting Practice | accounting/tax practice |
+| `office` | `lawyer` | Lawyer / Legal Practice | legal practice |
+| `office` | `insurance` | Insurance Broker / Insurance Office | insurance brokerage |
+| `office` | `financial_advisor` | Financial Planner / Financial Advisory | financial advisory |
+| `office` | `bookkeeper` | Bookkeeper / Bookkeeping Practice | bookkeeping practice |
+| `office` | `construction_company` | Operations Coordinator / Construction Office | construction/home services |
+| `office` | `administrative` | Administrative Assistant / Office | business support |
+| `craft` | `plumber` | Maintenance Coordinator / Plumbing Services | plumbing trade |
+| `craft` | `electrician` | Maintenance Coordinator / Electrical Services | electrical trade |
+| `craft` | `carpenter` | Maintenance Coordinator / Carpentry Services | carpentry trade |
+| `craft` | `painter` | Maintenance Coordinator / Painting Services | painting trade |
+| `craft` | `roofer` | Maintenance Coordinator / Roofing Services | roofing trade |
+| `craft` | `hvac` | Maintenance Coordinator / HVAC Services | HVAC trade |
+
+### What we extract from each listing
+
+- `name` (with `branch` or `addr:suburb` appended when present)
+- `website`, `email`, `phone`
+- `operator` — used as a named contact when it looks like a person name
+- `addr:*` tags — turned into a location string
+- `brand` — added to the excerpt for context
+- Latitude/longitude if no address is present
+
+### How it becomes a lead
+
+For each business, the adapter creates a `SourceHit` with:
+
+- `title` = the synthetic VA role for that sector (e.g. "Maintenance Coordinator / Plumbing Services")
+- `body_excerpt` = a description of the business plus the typical remote admin tasks a VA could handle
+- `workplace_type` = `hybrid` (small-business admin is remote-friendly)
+- `contact_routes_raw` = any email, phone, website, and operator name found in OSM tags
+- `location_raw` = assembled address or lat/lon
+
+The resolver then creates or links a `Company`, and the contact routes are stored in `contact_route`.
+
+### Rate limits and retries
+
+- Overpass requests are made at ~0.2 req/s per the registry.
+- The adapter starts with `node`-only queries (the most reliable source in ANZ). If a query times out or is rate-limited, it tries the second endpoint.
+- A 2-second pause is added between each query.
+
+### Why it works for VA lead generation
+
+Instead of scraping job boards, the OSM source targets the businesses themselves. The synthetic title and body explain why each business type is likely to need remote admin support (scheduling, CRM updates, inbox management, customer enquiries, data entry, etc.).
+
 ## Quick start
 
 ### 1. Install and start the database
