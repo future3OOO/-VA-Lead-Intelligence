@@ -44,8 +44,7 @@
     "company_id",
     "source_event_id",
     "evidence_type",
-    "signal_strength",
-    "extracted_facts"
+    "signal_strength"
   ],
   "title": "EvidenceRecordCreate",
   "type": "object",

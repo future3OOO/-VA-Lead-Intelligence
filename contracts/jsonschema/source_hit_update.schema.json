@@ -106,7 +106,7 @@
     "intent_label": {
       "anyOf": [
         {
-          "$ref": "#/definitions/IntentLabel"
+          "$ref": "#/$defs/IntentLabel"
         },
         {
           "type": "null"
@@ -191,9 +191,6 @@
     "source_url": {
       "anyOf": [
         {
-          "format": "uri",
-          "maxLength": 2083,
-          "minLength": 1,
           "type": "string"
         },
         {

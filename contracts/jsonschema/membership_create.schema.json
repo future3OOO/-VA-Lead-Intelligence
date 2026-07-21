@@ -16,7 +16,7 @@
   "description": "Create request.",
   "properties": {
     "role": {
-      "$ref": "#/definitions/MembershipRole"
+      "$ref": "#/$defs/MembershipRole"
     },
     "user_id": {
       "format": "uuid",

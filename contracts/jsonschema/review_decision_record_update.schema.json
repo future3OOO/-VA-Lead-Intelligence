@@ -17,7 +17,7 @@
     "decision": {
       "anyOf": [
         {
-          "$ref": "#/definitions/ReviewDecision"
+          "$ref": "#/$defs/ReviewDecision"
         },
         {
           "type": "null"

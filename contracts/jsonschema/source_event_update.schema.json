@@ -44,7 +44,7 @@
     "source_type": {
       "anyOf": [
         {
-          "$ref": "#/definitions/SourceType"
+          "$ref": "#/$defs/SourceType"
         },
         {
           "type": "null"

@@ -215,6 +215,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
         if not domains:
             single = query.get("domain") or self.config.adapter_config.get("domain")
             domains = [single] if single else []
+        domains = [d for d in domains if self._is_safe_domain(str(d))]
         if not domains:
             return []
 

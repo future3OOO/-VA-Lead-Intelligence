@@ -47,7 +47,6 @@
     "evidence_record_id",
     "company_id",
     "fact_type",
-    "value",
     "confidence"
   ],
   "title": "Fact",

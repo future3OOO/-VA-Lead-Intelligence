@@ -13,8 +13,8 @@ class ClassifierRun(BaseModel):
     workspace_id: UUID
     company_id: UUID
     model_provider: str
-    input: dict[str, Any]
-    output: dict[str, Any]
+    input: dict[str, Any] = Field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -25,8 +25,8 @@ class ClassifierRunCreate(BaseModel):
     workspace_id: UUID | None = None
     company_id: UUID
     model_provider: str
-    input: dict[str, Any]
-    output: dict[str, Any]
+    input: dict[str, Any] = Field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
 
 
 class ClassifierRunUpdate(BaseModel):

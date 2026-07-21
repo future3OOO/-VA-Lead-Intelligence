@@ -33,7 +33,6 @@
   },
   "required": [
     "country_code",
-    "config",
     "effective_at"
   ],
   "title": "JurisdictionPolicyCreate",

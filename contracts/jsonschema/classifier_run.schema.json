@@ -41,9 +41,7 @@
   "required": [
     "workspace_id",
     "company_id",
-    "model_provider",
-    "input",
-    "output"
+    "model_provider"
   ],
   "title": "ClassifierRun",
   "type": "object",

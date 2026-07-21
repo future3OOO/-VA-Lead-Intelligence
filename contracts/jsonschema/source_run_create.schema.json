@@ -57,7 +57,7 @@
       "type": "string"
     },
     "status": {
-      "$ref": "#/definitions/RunStatus",
+      "$ref": "#/$defs/RunStatus",
       "default": "pending"
     },
     "workspace_id": {

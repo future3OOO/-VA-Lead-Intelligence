@@ -85,7 +85,7 @@
     "status": {
       "anyOf": [
         {
-          "$ref": "#/definitions/LeadStatus"
+          "$ref": "#/$defs/LeadStatus"
         },
         {
           "type": "null"
