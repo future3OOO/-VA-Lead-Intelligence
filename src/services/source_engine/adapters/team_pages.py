@@ -929,14 +929,20 @@ class TeamPagesAdapter(BaseSourceAdapter):
         return rp.can_fetch("VALeadBot/1.0", url)
 
     async def _process_domain(
-        self, domain: str, paths: list[str], total: int
+        self,
+        domain: str,
+        paths: list[str],
+        total: int,
+        max_pages_per_domain: int | None = None,
     ) -> dict[str, Any] | None:
         async with self._counter_lock:
             self._counter += 1
             idx = self._counter
         print(f"[team_pages] {idx}/{total}: {domain}", flush=True)
         base_url = f"https://{domain}"
-        max_pages = int(self.config.adapter_config.get("max_pages_per_domain", 5))
+        max_pages = max_pages_per_domain or int(
+            self.config.adapter_config.get("max_pages_per_domain", 50)
+        )
         seen_route_keys: set[tuple[str, str]] = set()
         all_routes: list[dict[str, Any]] = []
         first_soup: BeautifulSoup | None = None
@@ -992,11 +998,15 @@ class TeamPagesAdapter(BaseSourceAdapter):
         if not domains:
             return []
         paths = query.get("paths", self.config.adapter_config.get("paths", _TEAM_PAGE_PATHS))
+        max_pages = int(
+            query.get("max_pages_per_domain")
+            or self.config.adapter_config.get("max_pages_per_domain", 50)
+        )
         results: list[dict[str, Any]] = []
         print(f"[team_pages] starting extraction for {len(domains)} domains", flush=True)
         self._counter = 0
         tasks = [
-            asyncio.create_task(self._process_domain(domain, paths, len(domains)))
+            asyncio.create_task(self._process_domain(domain, paths, len(domains), max_pages))
             for domain in domains
         ]
         for task in asyncio.as_completed(tasks):

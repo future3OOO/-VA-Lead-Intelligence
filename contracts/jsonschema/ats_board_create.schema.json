@@ -1,17 +1,4 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "company_web",
-        "search"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/ats_board_create-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Create request.",
@@ -38,7 +25,8 @@
       "type": "string"
     },
     "provider": {
-      "$ref": "#/$defs/SourceType"
+      "title": "Provider",
+      "type": "string"
     },
     "workspace_id": {
       "anyOf": [

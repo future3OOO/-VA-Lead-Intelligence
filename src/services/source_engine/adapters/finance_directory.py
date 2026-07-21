@@ -194,7 +194,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             if isinstance(link, str):
                 candidates.append(link)
 
-        directory_host = urlparse(self._SITEMAP_URL).netloc.lower()
+        directory_host = re.sub(r"^www\.", "", urlparse(self._SITEMAP_URL).netloc.lower())
         for link in candidates:
             if not link:
                 continue
