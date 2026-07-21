@@ -8,11 +8,9 @@
       "type": "string"
     },
     "allowed_fields": {
-      "default": [],
       "title": "Allowed Fields"
     },
     "allowed_outputs": {
-      "default": [],
       "title": "Allowed Outputs"
     },
     "kill_switch": {
@@ -29,7 +27,6 @@
     },
     "rate_limit": {
       "additionalProperties": false,
-      "default": {},
       "title": "Rate Limit",
       "type": "object"
     },

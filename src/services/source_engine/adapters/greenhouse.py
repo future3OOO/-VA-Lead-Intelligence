@@ -31,7 +31,7 @@ class GreenhouseJobsAdapter(BaseSourceAdapter):
         if not board_token:
             return []
         url = f"/{board_token}/jobs?content=true"
-        response = await self.client.get(url)
+        response = await self._request("GET", url)
         response.raise_for_status()
         data = response.json()
         jobs = data.get("jobs", [])

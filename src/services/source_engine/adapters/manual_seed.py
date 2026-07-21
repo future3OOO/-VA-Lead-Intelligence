@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -19,9 +20,40 @@ class ManualSeedAdapter(BaseSourceAdapter):
     def source_key(self) -> str:
         return "manual_seed"
 
+    def _resolve_seed_path(self, workspace_id: UUID, raw: str | None) -> Path | None:
+        """Sandbox seed file access under ``MANUAL_SEED_DIR``.
+
+        - Relative paths are resolved under ``MANUAL_SEED_DIR/<workspace_id>``.
+        - Absolute paths are only allowed if they are inside ``MANUAL_SEED_DIR``.
+        - Non-JSON/CSV files and traversal attempts are rejected.
+        """
+        if not raw:
+            return None
+        base = Path(os.environ.get("MANUAL_SEED_DIR", "data/manual_seed")).resolve()
+        candidate = Path(raw)
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+            # Absolute paths must still live under the configured seed directory.
+            if not resolved.is_relative_to(base):
+                return None
+        else:
+            workspace_base = base / str(workspace_id)
+            workspace_base.mkdir(parents=True, exist_ok=True)
+            resolved = (workspace_base / candidate).resolve()
+            if not resolved.is_relative_to(workspace_base):
+                return None
+        if resolved.suffix.lower() not in {".json", ".csv"}:
+            return None
+        return resolved
+
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
-        path = Path(query.get("path", self.config.adapter_config.get("path", "/dev/null")))
-        if not path.exists():
+        raw = query.get("path") or (
+            self.config.adapter_config.get("path")
+            if isinstance(self.config.adapter_config, dict)
+            else None
+        )
+        path = self._resolve_seed_path(workspace_id, raw)
+        if not path or not path.exists():
             return []
         if path.suffix.lower() == ".json":
             return cast(list[dict[str, Any]], json.loads(path.read_text()))

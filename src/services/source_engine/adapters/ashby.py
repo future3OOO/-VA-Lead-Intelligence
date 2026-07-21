@@ -30,7 +30,7 @@ class AshbyJobsAdapter(BaseSourceAdapter):
         board = query.get("subdomain") or self.config.adapter_config.get("subdomain")
         if not board:
             return []
-        response = await self.client.get(f"/job-board/{board}")
+        response = await self._request("GET", f"/job-board/{board}")
         response.raise_for_status()
         data = response.json()
         return [{"subdomain": board, "posting": p} for p in data.get("jobs", [])]

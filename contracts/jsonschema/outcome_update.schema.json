@@ -58,7 +58,7 @@
     "outcome_type": {
       "anyOf": [
         {
-          "$ref": "#/definitions/OutcomeType"
+          "$ref": "#/$defs/OutcomeType"
         },
         {
           "type": "null"

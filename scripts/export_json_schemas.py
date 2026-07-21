@@ -41,7 +41,7 @@ def set_additional_properties_false(schema: dict[str, Any]) -> None:
 
 
 def export_model(cls: type[BaseModel], output_dir: Path) -> Path:
-    schema = cls.model_json_schema(by_alias=False, ref_template="#/definitions/{model}")
+    schema = cls.model_json_schema(by_alias=False, ref_template="#/$defs/{model}")
     set_additional_properties_false(schema)
 
     version = "1.0.0"

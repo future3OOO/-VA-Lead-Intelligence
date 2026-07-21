@@ -15,7 +15,7 @@ class EvidenceRecord(BaseModel):
     source_event_id: UUID
     evidence_type: str
     signal_strength: float
-    extracted_facts: dict[str, Any]
+    extracted_facts: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -28,7 +28,7 @@ class EvidenceRecordCreate(BaseModel):
     source_event_id: UUID
     evidence_type: str
     signal_strength: float
-    extracted_facts: dict[str, Any]
+    extracted_facts: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidenceRecordUpdate(BaseModel):

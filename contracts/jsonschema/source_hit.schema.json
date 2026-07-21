@@ -49,7 +49,6 @@
       "type": "string"
     },
     "contact_routes_raw": {
-      "default": [],
       "title": "Contact Routes Raw"
     },
     "content_hash": {
@@ -67,7 +66,7 @@
       "type": "string"
     },
     "intent_label": {
-      "$ref": "#/definitions/IntentLabel",
+      "$ref": "#/$defs/IntentLabel",
       "default": "unresolved"
     },
     "location_raw": {
@@ -98,9 +97,6 @@
       "type": "string"
     },
     "source_url": {
-      "format": "uri",
-      "maxLength": 2083,
-      "minLength": 1,
       "title": "Source Url",
       "type": "string"
     },

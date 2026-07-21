@@ -28,7 +28,8 @@ class HunterDomainAdapter(BaseSourceAdapter):
         api_key = query.get("api_key") or self.config.adapter_config.get("api_key")
         if not domain or not api_key:
             return []
-        response = await self.client.get(
+        response = await self._request(
+            "GET",
             "/domain-search",
             params={"domain": domain, "api_key": api_key},
         )

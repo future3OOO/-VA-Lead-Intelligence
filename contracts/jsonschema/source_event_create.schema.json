@@ -41,7 +41,7 @@
       "type": "string"
     },
     "source_type": {
-      "$ref": "#/definitions/SourceType"
+      "$ref": "#/$defs/SourceType"
     },
     "workspace_id": {
       "anyOf": [
@@ -59,8 +59,7 @@
   },
   "required": [
     "source_id",
-    "source_type",
-    "raw_payload"
+    "source_type"
   ],
   "title": "SourceEventCreate",
   "type": "object",

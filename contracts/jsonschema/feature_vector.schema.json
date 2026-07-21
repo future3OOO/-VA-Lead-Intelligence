@@ -49,8 +49,7 @@
     "workspace_id",
     "correlation_id",
     "producer",
-    "company_id",
-    "features"
+    "company_id"
   ],
   "title": "FeatureVector",
   "type": "object",

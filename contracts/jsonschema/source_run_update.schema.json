@@ -131,7 +131,7 @@
     "status": {
       "anyOf": [
         {
-          "$ref": "#/definitions/RunStatus"
+          "$ref": "#/$defs/RunStatus"
         },
         {
           "type": "null"

@@ -32,7 +32,8 @@ class SmartRecruitersAdapter(BaseSourceAdapter):
         if not company_id:
             return []
         headers = {"X-SmartToken": api_key} if api_key else {}
-        response = await self.client.get(
+        response = await self._request(
+            "GET",
             f"/v1/companies/{company_id}/postings",
             headers=headers,
         )

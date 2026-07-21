@@ -15,7 +15,7 @@
   "description": "Create request.",
   "properties": {
     "decision": {
-      "$ref": "#/definitions/ReviewDecision"
+      "$ref": "#/$defs/ReviewDecision"
     },
     "lead_id": {
       "format": "uuid",

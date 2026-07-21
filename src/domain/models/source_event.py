@@ -15,7 +15,7 @@ class SourceEvent(BaseModel):
     workspace_id: UUID
     source_id: str
     source_type: SourceType
-    raw_payload: dict[str, Any]
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
     received_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -26,7 +26,7 @@ class SourceEventCreate(BaseModel):
     workspace_id: UUID | None = None
     source_id: str
     source_type: SourceType
-    raw_payload: dict[str, Any]
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class SourceEventUpdate(BaseModel):

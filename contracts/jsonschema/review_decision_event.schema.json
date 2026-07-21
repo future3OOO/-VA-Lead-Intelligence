@@ -20,7 +20,7 @@
       "type": "string"
     },
     "decision": {
-      "$ref": "#/definitions/ReviewDecision"
+      "$ref": "#/$defs/ReviewDecision"
     },
     "event_id": {
       "format": "uuid",

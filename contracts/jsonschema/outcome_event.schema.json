@@ -38,7 +38,7 @@
       "type": "string"
     },
     "outcome_type": {
-      "$ref": "#/definitions/OutcomeType"
+      "$ref": "#/$defs/OutcomeType"
     },
     "producer": {
       "title": "Producer",

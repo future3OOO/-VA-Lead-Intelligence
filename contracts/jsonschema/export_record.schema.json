@@ -47,7 +47,7 @@
       "type": "array"
     },
     "status": {
-      "$ref": "#/definitions/ExportStatus",
+      "$ref": "#/$defs/ExportStatus",
       "default": "pending"
     },
     "workspace_id": {

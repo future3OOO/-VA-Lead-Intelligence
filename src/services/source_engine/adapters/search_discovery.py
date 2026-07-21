@@ -36,7 +36,7 @@ class SearchDiscoveryAdapter(BaseSourceAdapter):
         else:
             url = "https://www.googleapis.com/customsearch/v1"
             params = {"key": api_key, "cx": cx, "q": q, "num": 10}
-        response = await self.client.get(url, params=params)
+        response = await self._request("GET", url, params=params)
         response.raise_for_status()
         data = response.json()
         items = data.get("items", []) if "items" in data else data.get("organic_results", [])

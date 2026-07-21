@@ -151,9 +151,8 @@ class WorkableHtmlSearchAdapter(BaseSourceAdapter):
         """Fetch a search page and return the embedded jobs list."""
         category_slug = re.sub(r"[^a-z0-9-]+", "-", category.lower()).strip("-")
         path = f"/search/{country}/{category_slug}-jobs"
-        await self.rate_limiter.acquire()
         try:
-            response = await self.client.get(path)
+            response = await self._request("GET", path)
             response.raise_for_status()
         except httpx.HTTPError:
             return []

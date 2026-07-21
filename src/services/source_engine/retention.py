@@ -27,32 +27,30 @@ class RetentionPolicy:
         return observed_at < cutoff
 
     async def apply_to_workspace(self, session: AsyncSession, workspace_id: UUID) -> dict[str, int]:
-        """Delete stale source hits for a workspace and source."""
+        """Delete stale source hits for a workspace and source.
+
+        source_hit stores normalized records, so we retain them for the longer of the
+        raw and normalized retention windows. Deleting at the shorter window would
+        remove normalized data prematurely.
+        """
         raw_cutoff = datetime.now(timezone.utc) - timedelta(days=self.config.raw_retention_days)
         normalized_cutoff = datetime.now(timezone.utc) - timedelta(
             days=self.config.normalized_retention_days
         )
+        # Keep normalized records for the longest configured retention.
+        cutoff = max(raw_cutoff, normalized_cutoff)
 
-        raw_result = await session.execute(
+        result = await session.execute(
             delete(DBSourceHit)
             .where(
                 DBSourceHit.workspace_id == workspace_id,
                 DBSourceHit.source_key == self.config.source_key,
-                DBSourceHit.observed_at < raw_cutoff,
-            )
-            .execution_options(synchronize_session=False)
-        )
-        normalized_result = await session.execute(
-            delete(DBSourceHit)
-            .where(
-                DBSourceHit.workspace_id == workspace_id,
-                DBSourceHit.source_key == self.config.source_key,
-                DBSourceHit.observed_at < normalized_cutoff,
+                DBSourceHit.observed_at < cutoff,
             )
             .execution_options(synchronize_session=False)
         )
 
         return {
-            "raw_deleted": raw_result.rowcount or 0,  # type: ignore[attr-defined]
-            "normalized_deleted": normalized_result.rowcount or 0,  # type: ignore[attr-defined]
+            "raw_deleted": 0,
+            "normalized_deleted": result.rowcount or 0,  # type: ignore[attr-defined]
         }
