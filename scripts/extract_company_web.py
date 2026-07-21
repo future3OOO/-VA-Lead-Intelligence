@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run bounded team-page extraction against target company domains."""
+"""Run bounded company-website crawl against target company domains."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ from db.session import AsyncSessionLocal  # noqa: E402
 from services.source_engine.runner import SourceRunner  # noqa: E402
 
 
-async def get_target_domains(workspace_id: UUID, max_domains: int | None = None) -> list[str]:
+async def get_target_domains(
+    workspace_id: UUID, max_domains: int | None = None, offset: int = 0
+) -> list[str]:
     async with AsyncSessionLocal() as session:
         rows = (
             await session.execute(
@@ -35,17 +37,17 @@ async def get_target_domains(workspace_id: UUID, max_domains: int | None = None)
                       AND c.primary_domain NOT LIKE '%instagram.com%'
                     GROUP BY c.primary_domain
                     ORDER BY hit_count DESC, c.primary_domain
-                    LIMIT :limit
+                    LIMIT :limit OFFSET :offset
                     """
                 ),
-                {"ws": workspace_id, "limit": max_domains or 10000},
+                {"ws": workspace_id, "limit": max_domains or 10000, "offset": offset},
             )
         ).all()
         return [r[0] for r in rows]
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Run bounded team-page extraction")
+    parser = argparse.ArgumentParser(description="Run bounded company-website crawl")
     parser.add_argument(
         "--workspace-id", type=UUID, default=UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
     )
@@ -53,20 +55,21 @@ async def main() -> None:
         "--campaign-id", type=UUID, default=UUID("f2ec5156-d497-442c-a664-111ce7fabfa2")
     )
     parser.add_argument("--max-domains", type=int, default=None)
+    parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
 
     workspace_id = args.workspace_id
     campaign_id = args.campaign_id
-    domains = await get_target_domains(workspace_id, args.max_domains)
-    print(f"Running team_pages against {len(domains)} target domains")
+    domains = await get_target_domains(workspace_id, args.max_domains, args.offset)
+    print(f"Running company_web against {len(domains)} target domains")
     async with AsyncSessionLocal() as session:
         runner = SourceRunner()
         record = await runner.run(
             session,
             workspace_id,
             campaign_id,
-            source_keys=["team_pages"],
-            query_overrides={"team_pages": {"domains": domains}},
+            source_keys=["company_web"],
+            query_overrides={"company_web": {"domains": domains}},
         )
         print(
             json.dumps(

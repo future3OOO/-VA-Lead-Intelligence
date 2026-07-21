@@ -1,32 +1,4 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "smartrecruiters",
-        "company_web",
-        "search",
-        "job_search_provider",
-        "hunter_domain",
-        "manual_seed",
-        "upwork_marketplace",
-        "freelancer_marketplace",
-        "company_dataset",
-        "company_news",
-        "official_registry",
-        "apollo_or_pdl_enrichment",
-        "meta_pages",
-        "x_posts",
-        "reddit_posts",
-        "youtube_content",
-        "places_or_directory"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/ats_board_update-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Partial update request.",
@@ -87,13 +59,14 @@
     "provider": {
       "anyOf": [
         {
-          "$ref": "#/$defs/SourceType"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Provider"
     },
     "workspace_id": {
       "anyOf": [

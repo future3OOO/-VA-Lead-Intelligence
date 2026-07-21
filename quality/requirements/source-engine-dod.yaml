@@ -4,7 +4,7 @@ approved_at: "2026-07-15T00:00:00+00:00"
 requirements:
   - id: SE-01
     title: Source adapter interface
-    description: All P0 source adapters implement BaseSourceAdapter with fetch, normalize, rate limiting, checkpointing and kill switch support.
+    description: The openstreetmap and manual_seed adapters implement BaseSourceAdapter with fetch, normalize, rate limiting, checkpointing and kill switch support.
     verification: unit tests + source registry validation
     status: implemented
 
@@ -28,7 +28,7 @@ requirements:
 
   - id: SE-05
     title: Contact enrichment
-    description: Contact routes extracted from company_web and hunter_domain sources are persisted only after a company is resolved and qualified.
+    description: Contact routes extracted from OpenStreetMap and the optional team_pages source are persisted only after a company is resolved and qualified.
     verification: integration test
     status: implemented
 
@@ -40,7 +40,7 @@ requirements:
 
   - id: SE-07
     title: Operational controls
-    description: Idempotency via content_hash, checkpoints per adapter/workspace, token-bucket rate limits, concurrency caps, budget tracking, kill switches and retention policies.
+    description: Idempotency via content_hash, checkpoints per adapter/workspace, token-bucket rate limits, concurrency caps, kill switches and metrics.
     verification: unit tests + config-validate
     status: implemented
 
@@ -58,6 +58,6 @@ requirements:
 
   - id: SE-10
     title: Documentation and runbooks
-    description: Architecture diagrams, source access matrix, shutdown runbook and DOD traceability are committed.
+    description: Architecture diagrams, source access matrix and DOD traceability are committed.
     verification: make handover
     status: implemented

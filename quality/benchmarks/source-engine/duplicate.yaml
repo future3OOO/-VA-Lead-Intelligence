@@ -1,12 +1,12 @@
 description: Two identical source hits should be deduplicated.
 source_hits:
-  - source_key: greenhouse_jobs
+  - source_key: manual_seed
     source_native_id: "12345"
     title: "Virtual Assistant"
     body_excerpt: "Remote VA to handle inbox and scheduling."
     company_name_raw: "Hiring Co"
     content_hash: "abc123"
-  - source_key: greenhouse_jobs
+  - source_key: manual_seed
     source_native_id: "12345"
     title: "Virtual Assistant"
     body_excerpt: "Remote VA to handle inbox and scheduling."

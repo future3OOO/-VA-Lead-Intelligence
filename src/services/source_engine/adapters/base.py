@@ -127,8 +127,8 @@ class BaseSourceAdapter(ABC):
         return host
 
     async def _request(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        """Make an HTTP request with per-host rate limiting and concurrency."""
-        async with self.rate_limiter:
+        """Make an HTTP request with rate limiting and concurrency."""
+        async with self.rate_limiter.acquire():
             client = getattr(self, "client", None)
             if client is None:
                 raise RuntimeError(f"{self.source_key} adapter has no HTTP client")

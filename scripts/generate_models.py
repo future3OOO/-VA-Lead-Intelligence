@@ -514,6 +514,7 @@ def main() -> None:
         + ", ".join(f'"{n}"' for n in db_model_names)
         + "]\n"
     )
+    router_imports.append("from api.routers.source_engine import router as source_engine_router")
     router_names = [imp.split()[-1] for imp in router_imports]
     router_init = (
         "\n".join(router_imports)
