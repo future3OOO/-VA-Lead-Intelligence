@@ -1,99 +1,67 @@
-"""Bounded first-party company website verifier/extractor."""
+"""Bounded company-website crawler for named contacts and public contact routes.
+
+This adapter does a polite, breadth-first crawl of each company domain,
+concentrating on pages that are likely to contain people and contact details
+(/about, /team, /contact, /people, /leadership, etc.). It reuses the same
+extraction heuristics as team_pages but discovers more URLs per domain.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import json
-import re
+import xml.etree.ElementTree as ET
+from collections import deque
 from datetime import datetime, timezone
-from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 from uuid import UUID
 
 import httpx
+from bs4 import BeautifulSoup
 
 from services.source_engine.adapters.base import BaseSourceAdapter
+from services.source_engine.adapters.team_pages import _extract_from_soup
 from services.source_engine.config import SourceConfig
 
 
-class _TextExtractor(HTMLParser):
-    """Extract visible text from HTML."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.text: list[str] = []
-        self.skip = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in ("script", "style"):
-            self.skip += 1
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in ("script", "style"):
-            self.skip -= 1
-
-    def handle_data(self, data: str) -> None:
-        if self.skip == 0:
-            self.text.append(data)
-
-    def get_text(self) -> str:
-        return " ".join(self.text)
-
-
-class _TitleExtractor(HTMLParser):
-    """Extract the page <title>."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.in_title = False
-        self.title: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "title":
-            self.in_title = True
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "title":
-            self.in_title = False
-
-    def handle_data(self, data: str) -> None:
-        if self.in_title:
-            self.title.append(data)
-
-    def get_title(self) -> str:
-        return "".join(self.title).strip()
-
-
 class CompanyWebAdapter(BaseSourceAdapter):
-    """Fetch up to eight high-signal company pages and extract evidence."""
+    """Crawl company websites for contact routes and named people."""
 
-    DEFAULT_PATHS = [
-        "/",
-        "/careers",
-        "/contact",
-        "/contact-us",
-        "/about",
-        "/support",
-        "/services",
-        "/locations",
-    ]
+    source_key = "company_web"
+
+    _PRIORITY_KEYWORDS = {
+        "about",
+        "team",
+        "people",
+        "staff",
+        "leadership",
+        "management",
+        "executive",
+        "director",
+        "board",
+        "contact",
+        "meet",
+        "who",
+        "company",
+        "profile",
+    }
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._robots_cache: dict[str, RobotFileParser] = {}
+        self._counter = 0
+        self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
-            timeout=30.0,
+            timeout=httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
             follow_redirects=True,
             headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                )
             },
         )
-
-    @property
-    def source_key(self) -> str:
-        return "company_web"
 
     async def _allowed(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -102,187 +70,169 @@ class CompanyWebAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = await self._request(
-                "GET",
-                robots_url,
-                timeout=httpx.Timeout(10.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
+            parsed = urlparse(robots_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(
+                    robots_url,
+                    timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
+                    headers={"User-Agent": "VALeadBot/1.0"},
+                )
             rp.parse(response.text.splitlines())
         except Exception:
             pass
         self._robots_cache[robots_url] = rp
         return rp.can_fetch("VALeadBot/1.0", url)
 
-    def _extract_jsonld(self, html: str) -> dict[str, Any]:
-        for match in re.finditer(
-            r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-            html,
-            re.S | re.I,
-        ):
-            try:
-                data = json.loads(match.group(1))
-                if isinstance(data, dict) and data.get("@type") in (
-                    "Organization",
-                    "LocalBusiness",
-                ):
-                    return data
-            except json.JSONDecodeError:
-                continue
-        return {}
+    def _priority_score(self, path: str) -> int:
+        lower = path.lower()
+        return sum(10 for kw in self._PRIORITY_KEYWORDS if kw in lower)
 
-    _PHONE_RE = re.compile(
-        r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}",
-        re.UNICODE,
-    )
-    _DATE_RE = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
-    _IP_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3,}$")
-    _TRAILING_ZIP_RE = re.compile(r"^(.*)\s+\d{5}$")
-    _LEADING_ZIP_RE = re.compile(r"^\d{5}\s+(.*)$")
-    _STRAY_LEADING_DIGIT_RE = re.compile(r"^([2-9])\s+(.+)$")
-    _ASSET_EXTS = {
-        ".css",
-        ".js",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".svg",
-        ".gif",
-        ".woff",
-        ".woff2",
-        ".min",
-    }
+    def _same_domain(self, url: str, domain: str) -> bool:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        target = domain.lower()
+        if target.startswith("www."):
+            target = target[4:]
+        return host == target
 
-    def _clean_value(self, value: str) -> str | None:
-        cleaned = re.sub(r"\s+", " ", value).strip()
-        if not cleaned or set(cleaned) <= {" ", "\t", "\n", "\r"}:
+    async def _sitemap_urls(self, domain: str) -> list[str]:
+        sitemap_url = f"https://{domain}/sitemap.xml"
+        if not await self._allowed(sitemap_url):
+            return []
+        try:
+            parsed = urlparse(sitemap_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(sitemap_url)
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").lower()
+            if content_type and "xml" not in content_type:
+                return []
+            root = ET.fromstring(response.content)
+            urls: list[str] = []
+            ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            for loc in root.findall(".//ns:loc", ns):
+                if loc.text:
+                    urls.append(loc.text)
+            return urls
+        except Exception:
+            return []
+
+    async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup] | None:
+        if not await self._allowed(url):
             return None
-        if any(c.isdigit() for c in cleaned):
-            digits = sum(c.isdigit() for c in cleaned)
-            if digits < 7 or digits > 15:
+        parsed = urlparse(url)
+        try:
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(url)
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").lower()
+            if content_type and "text/html" not in content_type:
                 return None
-            compact = re.sub(r"[^0-9./-]", "", cleaned)
-            if self._DATE_RE.match(compact) or self._IP_RE.match(compact):
-                return None
-            # Strip a trailing 5-digit zip that got attached to a phone number.
-            match = self._TRAILING_ZIP_RE.match(cleaned)
-            if match:
-                prefix_digits = sum(c.isdigit() for c in match.group(1))
-                if prefix_digits >= 10:
-                    cleaned = match.group(1).strip()
-                    digits = prefix_digits
-            # Strip a leading 5-digit ZIP that was captured before the phone number.
-            leading_zip_match = self._LEADING_ZIP_RE.match(cleaned)
-            if leading_zip_match:
-                leading_zip_digits = sum(c.isdigit() for c in leading_zip_match.group(1))
-                if leading_zip_digits >= 10:
-                    cleaned = leading_zip_match.group(1).strip()
-                    digits = leading_zip_digits
-            # Strip a stray single digit prefix (e.g. "6 313-555-1212") that is not a country code.
-            stray_match = self._STRAY_LEADING_DIGIT_RE.match(cleaned)
-            if stray_match:
-                stray_digits = sum(c.isdigit() for c in stray_match.group(2))
-                if stray_digits >= 10:
-                    cleaned = stray_match.group(2).strip()
-                    digits = stray_digits
-            # Reject bare digit strings that don't look like formatted phone numbers.
-            if all((c.isdigit() or c.isspace()) for c in cleaned) and digits not in (10, 11):
-                return None
-            # Reject over-long captures that are almost certainly not a single phone number.
-            if digits > 14:
-                return None
-        return cleaned
+            return str(response.url), BeautifulSoup(response.text, "html.parser")
+        except httpx.HTTPError:
+            return None
+        except Exception:
+            return None
 
-    def _extract_contact_routes(self, text: str, html: str) -> list[dict[str, str]]:
-        routes: list[dict[str, str]] = []
-        seen: set[str] = set()
-        emails = re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
-        for email in set(emails):
-            email = email.strip().lower()
-            if "example.com" in email or "test.com" in email or email in seen:
+    async def _crawl_domain(self, domain: str, total: int) -> dict[str, Any] | None:
+        async with self._counter_lock:
+            self._counter += 1
+            idx = self._counter
+        print(f"[company_web] {idx}/{total}: {domain}", flush=True)
+
+        visited: set[str] = set()
+        routes: list[dict[str, Any]] = []
+        discovered: set[str] = set()
+
+        sitemap_urls = await self._sitemap_urls(domain)
+        sitemap_urls = [u for u in sitemap_urls if self._same_domain(u, domain)][:50]
+
+        queue: deque[tuple[str, int]] = deque()
+        for u in sitemap_urls:
+            if u not in visited:
+                queue.append((u, 0))
+                visited.add(u)
+        queue.append((f"https://{domain}", 0))
+
+        pages_crawled = 0
+        max_pages = self.config.adapter_config.get("max_pages_per_domain", 20)
+        max_depth = self.config.adapter_config.get("max_depth", 2)
+
+        while queue and pages_crawled < max_pages:
+            # Prioritise likely contact/team pages first.
+            queue = deque(
+                sorted(
+                    queue, key=lambda item: (-self._priority_score(urlparse(item[0]).path), item[1])
+                )
+            )
+            url, depth = queue.popleft()
+            result = await self._fetch_page(url)
+            if not result:
                 continue
-            seen.add(email)
-            routes.append({"type": "generic_email", "value": email})
-        for match in self._PHONE_RE.finditer(text):
-            phone = self._clean_value(match.group(0))
-            if phone and phone not in seen:
-                seen.add(phone)
-                routes.append({"type": "business_phone", "value": phone})
-        for match in re.finditer(
-            r'href=["\'](https?://[^"\']+(?:contact|demo|book|quote|sales|careers|apply|get-started)[^"\']*)["\']',
-            html,
-            re.I,
-        ):
-            url = match.group(1)
-            parsed_url = urlparse(url)
-            path_lower = parsed_url.path.lower().split("?")[0]
-            if any(path_lower.endswith(ext) for ext in self._ASSET_EXTS) or any(
-                frag in path_lower
-                for frag in ["wp-content", "wp-json", "wp-includes", ".css", ".js"]
-            ):
+            final_url, soup = result
+            pages_crawled += 1
+
+            page_routes = _extract_from_soup(soup, final_url, domain)
+            routes.extend(page_routes)
+
+            if depth >= max_depth:
                 continue
-            if any(
-                domain in parsed_url.netloc.lower()
-                for domain in [
-                    "facebook.com",
-                    "fbcdn.net",
-                    "oembed",
-                    "joblinkapply.com",
-                    "careerplug.com",
-                    "idealtraits.com",
-                ]
-            ):
+            try:
+                for link in soup.find_all("a", href=True):
+                    href = link.get("href", "")
+                    absolute = urljoin(final_url, href)
+                    parsed = urlparse(absolute)
+                    if parsed.scheme not in ("http", "https"):
+                        continue
+                    if not self._same_domain(absolute, domain):
+                        continue
+                    # Drop anchors, query params that are not pagination/filters, fragments.
+                    clean = absolute.split("#")[0]
+                    if clean in visited or clean in discovered:
+                        continue
+                    if depth > 0 and not any(
+                        kw in parsed.path.lower() for kw in self._PRIORITY_KEYWORDS
+                    ):
+                        continue
+                    discovered.add(clean)
+                    queue.append((clean, depth + 1))
+            except Exception:
                 continue
-            if len(url) > 250:
-                continue
-            if url not in seen:
-                seen.add(url)
-                routes.append({"type": "sales_form", "value": url})
-        return routes
+
+        if not routes:
+            return None
+
+        return {
+            "domain": domain,
+            "url": f"https://{domain}",
+            "contact_routes": routes,
+        }
 
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
-        domain = query.get("domain") or self.config.adapter_config.get("domain")
-        domain = self._safe_domain(str(domain))
-        if not domain:
+        domains = query.get("domains") or self.config.adapter_config.get("domains")
+        if not domains:
+            single = query.get("domain") or self.config.adapter_config.get("domain")
+            domains = [single] if single else []
+        domains = [d for d in domains if self._is_safe_domain(str(d))]
+        if not domains:
             return []
-        scheme = "https"
-        base_url = f"{scheme}://{domain}"
-        paths = query.get("paths", self.config.adapter_config.get("paths", self.DEFAULT_PATHS))
+
+        self._counter = 0
+        tasks = [
+            asyncio.create_task(self._crawl_domain(domain, len(domains))) for domain in domains
+        ]
         results: list[dict[str, Any]] = []
-        for path in paths[:8]:
-            url = urljoin(base_url, path)
-            if not self._allowed(url):
-                continue
-            try:
-                response = await self._request("GET", url)
-                response.raise_for_status()
-                html = response.text
-                extractor = _TextExtractor()
-                extractor.feed(html)
-                visible = extractor.get_text()
-                title_extractor = _TitleExtractor()
-                title_extractor.feed(html)
-                jsonld = self._extract_jsonld(html)
-                contact_routes = self._extract_contact_routes(visible, html)
-                results.append(
-                    {
-                        "domain": domain,
-                        "url": str(response.url),
-                        "text": visible,
-                        "title": title_extractor.get_title(),
-                        "jsonld": jsonld,
-                        "contact_routes": contact_routes,
-                    }
-                )
-            except httpx.HTTPError:
-                continue
-            await asyncio.sleep(1.0)
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            if result:
+                results.append(result)
+        print(f"[company_web] extracted routes for {len(results)} domains", flush=True)
         return results
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:
-        jsonld = raw.get("jsonld", {})
-        name = jsonld.get("name") or raw.get("title") or raw["domain"]
-        text = raw.get("text", "")
+        domain = raw["domain"]
         return {
             "workspace_id": workspace_id,
             "source_key": self.source_key,
@@ -290,11 +240,11 @@ class CompanyWebAdapter(BaseSourceAdapter):
             "source_url": raw["url"],
             "observed_at": datetime.now(timezone.utc),
             "published_at": datetime.now(timezone.utc),
-            "title": name,
-            "body_excerpt": text[:2000],
-            "company_name_raw": name,
-            "company_domain_raw": raw["domain"],
-            "location_raw": jsonld.get("address", {}).get("addressLocality", ""),
+            "title": f"Company website for {domain}",
+            "body_excerpt": f"Crawled contact/team pages on {domain}",
+            "company_name_raw": domain,
+            "company_domain_raw": domain,
+            "location_raw": "",
             "workplace_type": "",
             "contact_routes_raw": raw.get("contact_routes", []),
             "raw_snapshot_uri": "",

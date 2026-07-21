@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -48,9 +49,33 @@ _TITLE_KEYWORDS = [
     "Maintenance",
     "Supervisor",
     "Estimator",
+    "Chairman",
+    "Chairwoman",
+    "Chairperson",
+    "Directors",
+    "Managing",
+    "Executive",
+    "Senior",
+    "Junior",
+    "Officer",
+    "Head",
+    "Lead",
+    "Member",
+    "Trustee",
+    "Representative",
+    "Analyst",
+    "Administrator",
     "Coordinator",
+    "Assistant",
+    "Secretary",
+    "Receptionist",
+    "Controller",
+    "Planner",
+    "Strategist",
     "Specialist",
     "Consultant",
+    "Advisor",
+    "Adviser",
     "General Counsel",
     "Attorney",
     "CPA",
@@ -179,17 +204,247 @@ _NAV_WORDS = {
     "home",
 }
 
+_BUSINESS_WORDS = {
+    "bank",
+    "ltd",
+    "limited",
+    "pty",
+    "inc",
+    "corp",
+    "corporation",
+    "group",
+    "holdings",
+    "trust",
+    "fund",
+    "funds",
+    "services",
+    "solutions",
+    "partners",
+    "co",
+    "association",
+    "union",
+    "credit",
+    "plc",
+    "llp",
+    "lp",
+    "australia",
+    "australian",
+    "insurance",
+    "finance",
+    "financial",
+    "mortgage",
+    "broker",
+    "brokers",
+    "broking",
+    "accounting",
+    "accountant",
+    "bookkeeping",
+    "bookkeeper",
+    "adviser",
+    "advisor",
+    "tax",
+    "legal",
+    "law",
+    "lawyers",
+    "real",
+    "estate",
+    "property",
+    "construction",
+    "plumbing",
+    "electrician",
+    "roofing",
+    "painting",
+    "carpenter",
+    "hvac",
+    "institute",
+    "bachelor",
+    "diploma",
+    "business",
+    "commerce",
+    "university",
+    "college",
+    "school",
+    "st",
+    "street",
+    "road",
+    "avenue",
+    "drive",
+    "lane",
+    "place",
+    "nsw",
+    "vic",
+    "qld",
+    "sa",
+    "wa",
+    "tas",
+    "act",
+    "nt",
+    "queensland",
+    "victoria",
+    "loans",
+    "loan",
+    "lending",
+    "advice",
+    "advisory",
+    "wealth",
+    "capital",
+    "money",
+    "investment",
+    "investing",
+    "investments",
+    "smsf",
+    "accountants",
+    "planning",
+    "management",
+    "consulting",
+    "commercial",
+    "residential",
+    "home",
+    "house",
+    "building",
+    "build",
+    "builders",
+    "maintenance",
+    "repairs",
+    "renovations",
+    "select",
+    "plus",
+    "market",
+    "first",
+    "network",
+    "global",
+    "united",
+    "preferred",
+    "premier",
+    "choice",
+    "expert",
+    "consultant",
+    "ca",
+    "cpa",
+    "anziif",
+    "mfaa",
+    "fbaa",
+    "afca",
+    "asic",
+    "banking",
+    "mortgages",
+    "lender",
+    "lenders",
+    "brokerage",
+    "debt",
+    "consolidation",
+    "cash",
+    "flow",
+    "online",
+    "chartered",
+    "crossing",
+    "hoppers",
+    "north",
+    "south",
+    "east",
+    "west",
+    "new",
+    "york",
+    "great",
+    "wall",
+    "happy",
+    "bean",
+    "sydney",
+    "melbourne",
+    "brisbane",
+    "perth",
+    "adelaide",
+    "canberra",
+    "darwin",
+    "hobart",
+    "auckland",
+    "wellington",
+    "christchurch",
+    "dunedin",
+    "hamilton",
+    "tauranga",
+    "napier",
+    "rotorua",
+    "palmerston",
+    "newcastle",
+    "wollongong",
+    "geelong",
+    "gold coast",
+    "sunshine coast",
+    "cairns",
+    "townsville",
+    "toowoomba",
+    "ballarat",
+    "bendigo",
+    "albury",
+    "mandurah",
+    "launceston",
+    "devonport",
+    "chairman",
+    "chairwoman",
+    "chairperson",
+    "directors",
+    "managing",
+    "executive",
+    "senior",
+    "junior",
+    "officer",
+    "head",
+    "lead",
+    "member",
+    "members",
+    "committee",
+    "council",
+    "trustee",
+    "representative",
+    "professional",
+    "analyst",
+    "administrator",
+    "coordinator",
+    "assistant",
+    "secretary",
+    "receptionist",
+    "operator",
+    "controller",
+    "planner",
+    "strategist",
+    "specialist",
+}
+
 _LINKEDIN_RE = re.compile(r"https?://(?:[\w\-]+\.)?linkedin\.com/in/([^/?\s]+)", re.I)
 
 _TEAM_PAGE_PATHS = [
     "/team",
-    "/about",
+    "/about/team",
+    "/about/people",
     "/about-us",
+    "/about",
     "/leadership",
+    "/leadership-team",
     "/people",
     "/our-team",
+    "/our-people",
     "/meet-the-team",
+    "/team-members",
     "/executive-team",
+    "/executives",
+    "/management",
+    "/directors",
+    "/board",
+    "/staff",
+    "/our-staff",
+    "/who-we-are",
+    "/company",
+    "/company/team",
+    "/company/people",
+    "/about-us/team",
+    "/about-us/our-team",
+    "/agents",
+    "/our-agents",
+    "/meet-our-team",
+    "/contact",
+    "/contact-us",
+    "/get-in-touch",
 ]
 
 
@@ -265,7 +520,8 @@ def _is_plausible_person_name(name: str) -> bool:
     words = name.split()
     if not (2 <= len(words) <= 4):
         return False
-    if any(w.lower() in _GENERIC_NAME_WORDS or w.lower() in _TITLE_KEYWORDS_LOWER for w in words):
+    stopwords = _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS
+    if any(w.lower() in stopwords for w in words):
         return False
     return not all(w.isupper() and len(w) <= 3 for w in words)
 
@@ -340,7 +596,26 @@ class _PersonResult:
                         "is_verified": False,
                     }
                 )
+        if self.name and not self._is_generic_name():
+            display = f"{self.name} ({self.title})" if self.title else self.name
+            if len(display) <= 255:
+                routes.append(
+                    {
+                        "type": "named_contact",
+                        "value": display,
+                        "is_verified": False,
+                    }
+                )
         return routes
+
+
+def _has_contact_pattern(text: str) -> bool:
+    """Return True if text contains an email, phone number, or LinkedIn URL."""
+    return (
+        bool(re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text))
+        or bool(re.search(r"\b\+?\d[\d\s().-]{7,}\d\b", text))
+        or bool(_LINKEDIN_RE.search(text))
+    )
 
 
 def _is_plausible_title(text: str) -> bool:
@@ -516,7 +791,38 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 p = _PersonResult(name=name, title=title, linkedin=linkedin)
                 people[linkedin] = p
 
-    # 3. Visible text emails that appear next to a name
+    # 3. data-* attributes (common on directory/contact widgets)
+    data_attrs: list[tuple[str, str, Callable[[str], str]]] = [
+        ("data-email", "email", lambda v: v.strip().lower()),
+        ("data-phone", "phone", lambda v: v.strip()),
+        ("data-mobile", "phone", lambda v: v.strip()),
+        ("data-tel", "phone", lambda v: v.strip()),
+    ]
+    for attr_name, route_type, normalise in data_attrs:
+        for tag in soup.find_all(attrs={attr_name: True}):
+            raw = tag.get(attr_name)
+            if not raw or not isinstance(raw, str):
+                continue
+            value = normalise(raw)
+            if not value or "example.com" in value or "test.com" in value:
+                continue
+            if value in people:
+                continue
+            name, title = _name_and_title_from_parent(tag)
+            if not name:
+                text_name = tag.get_text(strip=True)
+                if _is_plausible_person_name(text_name):
+                    name = text_name
+            if route_type == "email" and not name:
+                name = _name_from_email(value)
+            people[value] = _PersonResult(
+                name=name,
+                title=title,
+                email=value if route_type == "email" else "",
+                phone=value if route_type == "phone" else "",
+            )
+
+    # 4. Visible text emails that appear next to a name
     for email_match in re.finditer(
         r"[\w.+-]+@[\w-]+\.[\w.-]+", soup.get_text(separator=" ", strip=True)
     ):
@@ -539,6 +845,33 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             name = _name_from_email(email)
         people[email] = _PersonResult(name=name, title=title, email=email)
 
+    # 4. Generic heading-based team grid extraction
+    for tag in soup.find_all(["h2", "h3", "h4"]):
+        txt = _clean_title(tag.get_text(separator=" ", strip=True))
+        if not _is_plausible_person_name(txt):
+            continue
+        name_words = txt.split()
+        if not (2 <= len(name_words) <= 3):
+            continue
+        person_key = txt.lower()
+        if person_key in people:
+            continue
+        title = ""
+        parent = tag.find_parent(["div", "article", "li", "section"])
+        if parent:
+            for t in parent.find_all(["span", "div", "p", "h5", "h6"]):
+                cand = _clean_title(t.get_text(separator=" ", strip=True))
+                if cand.lower() == txt.lower():
+                    continue
+                if _is_plausible_title(cand):
+                    title = cand
+                    break
+        if not title:
+            parent_text = parent.get_text(separator=" ", strip=True) if parent else ""
+            if not _has_contact_pattern(parent_text):
+                continue
+        people[person_key] = _PersonResult(name=txt, title=title)
+
     routes: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for person in people.values():
@@ -558,6 +891,8 @@ class TeamPagesAdapter(BaseSourceAdapter):
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._robots_cache: dict[str, RobotFileParser] = {}
+        self._counter = 0
+        self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
             follow_redirects=True,
@@ -580,17 +915,79 @@ class TeamPagesAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = await self._request(
-                "GET",
-                robots_url,
-                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
+            parsed = urlparse(robots_url)
+            async with self.rate_limiter.acquire(parsed.netloc):
+                response = await self.client.get(
+                    robots_url,
+                    timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
+                    headers={"User-Agent": "VALeadBot/1.0"},
+                )
             rp.parse(response.text.splitlines())
         except Exception:
             pass
         self._robots_cache[robots_url] = rp
         return rp.can_fetch("VALeadBot/1.0", url)
+
+    async def _process_domain(
+        self,
+        domain: str,
+        paths: list[str],
+        total: int,
+        max_pages_per_domain: int | None = None,
+    ) -> dict[str, Any] | None:
+        async with self._counter_lock:
+            self._counter += 1
+            idx = self._counter
+        print(f"[team_pages] {idx}/{total}: {domain}", flush=True)
+        base_url = f"https://{domain}"
+        max_pages = max_pages_per_domain or int(
+            self.config.adapter_config.get("max_pages_per_domain", 50)
+        )
+        seen_route_keys: set[tuple[str, str]] = set()
+        all_routes: list[dict[str, Any]] = []
+        first_soup: BeautifulSoup | None = None
+        first_url = ""
+        pages_crawled = 0
+        for path in paths[:max_pages]:
+            url = urljoin(base_url, path)
+            parsed = urlparse(url)
+            if not await self._allowed(url):
+                continue
+            try:
+                async with self.rate_limiter.acquire(parsed.netloc):
+                    response = await self.client.get(url)
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "").lower()
+                if "text/html" not in content_type:
+                    continue
+                html = response.text
+                soup = BeautifulSoup(html, "html.parser")
+                routes = _extract_from_soup(soup, str(response.url), domain)
+                pages_crawled += 1
+                if routes:
+                    if first_soup is None:
+                        first_soup = soup
+                        first_url = str(response.url)
+                    for route in routes:
+                        key = (str(route["type"]), str(route["value"]).lower())
+                        if key in seen_route_keys:
+                            continue
+                        seen_route_keys.add(key)
+                        all_routes.append(route)
+            except httpx.HTTPError:
+                continue
+            except Exception as exc:  # noqa: BLE001
+                print(f"[team_pages] error {url}: {exc}", flush=True)
+                continue
+        if not all_routes or first_soup is None:
+            return None
+        return {
+            "domain": domain,
+            "url": first_url,
+            "soup": first_soup,
+            "contact_routes": all_routes,
+            "pages_crawled": pages_crawled,
+        }
 
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
         domains = query.get("domains") or self.config.adapter_config.get("domains")
@@ -601,47 +998,44 @@ class TeamPagesAdapter(BaseSourceAdapter):
         if not domains:
             return []
         paths = query.get("paths", self.config.adapter_config.get("paths", _TEAM_PAGE_PATHS))
+        max_pages = int(
+            query.get("max_pages_per_domain")
+            or self.config.adapter_config.get("max_pages_per_domain", 50)
+        )
         results: list[dict[str, Any]] = []
         print(f"[team_pages] starting extraction for {len(domains)} domains", flush=True)
-        for idx, domain in enumerate(domains, 1):
-            print(f"[team_pages] {idx}/{len(domains)}: {domain}", flush=True)
-            base_url = f"https://{domain}"
-            for path in paths[:8]:
-                url = urljoin(base_url, path)
-                if not await self._allowed(url):
-                    continue
-                try:
-                    response = await self._request("GET", url)
-                    response.raise_for_status()
-                    html = response.text
-                    soup = BeautifulSoup(html, "html.parser")
-                    routes = _extract_from_soup(soup, str(response.url), domain)
-                    if routes:
-                        results.append(
-                            {
-                                "domain": domain,
-                                "url": str(response.url),
-                                "soup": soup,
-                                "contact_routes": routes,
-                            }
-                        )
-                except httpx.HTTPError:
-                    continue
-                except Exception as exc:  # noqa: BLE001
-                    print(f"[team_pages] error {url}: {exc}", flush=True)
-                    continue
-                await asyncio.sleep(0.5)
-        print(f"[team_pages] extracted {len(results)} pages with routes", flush=True)
+        self._counter = 0
+        tasks = [
+            asyncio.create_task(self._process_domain(domain, paths, len(domains), max_pages))
+            for domain in domains
+        ]
+        for task in asyncio.as_completed(tasks):
+            result = await task
+            if result:
+                results.append(result)
+        print(
+            f"[team_pages] extracted routes for {len(results)} domains",
+            flush=True,
+        )
         return results
+
+    def _clean_text(self, text: str) -> str:
+        """Remove null bytes and invalid UTF-8 sequences from extracted text."""
+        text = text.replace("\x00", "")
+        return text.encode("utf-8", "ignore").decode("utf-8")
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:
         soup: BeautifulSoup = raw["soup"]
         title_tag = soup.find("title")
-        title = title_tag.get_text(strip=True) if title_tag else f"Team page for {raw['domain']}"
-        text = soup.get_text(separator=" ", strip=True)
+        title = (
+            self._clean_text(title_tag.get_text(strip=True))
+            if title_tag
+            else f"Team page for {raw['domain']}"
+        )
+        text = self._clean_text(soup.get_text(separator=" ", strip=True))
         # Try to determine a clean company name from the page title or first h1
         h1 = soup.find("h1")
-        h1_text = h1.get_text(strip=True) if h1 else ""
+        h1_text = self._clean_text(h1.get_text(strip=True)) if h1 else ""
         company_name = (
             h1_text if (3 <= len(h1_text) <= 80 and "@" not in h1_text) else raw["domain"]
         )

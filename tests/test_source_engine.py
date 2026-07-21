@@ -48,7 +48,7 @@ def manual_seed_config() -> SourceConfig:
 def test_source_registry_loads() -> None:
     registry = SourceRegistryLoader().load()
     assert "manual_seed" in registry
-    assert "greenhouse_jobs" in registry
+    assert "openstreetmap" in registry
 
 
 def test_intent_classifier_buyer_request() -> None:

@@ -17,21 +17,13 @@ EXCLUDED_INTENTS = {
     IntentLabel.GENERAL_DISCUSSION.value,
 }
 
-# Job-board sources are signal collections about real employers; even an UNRESOLVED
-# intent hit should resolve to a company record so that we can enrich/domain it.
+# OpenStreetMap business listings and manual seed imports are signal collections
+# about real employers; even an UNRESOLVED intent hit should resolve to a
+# company record so we can persist a best contact route.
 ALWAYS_RESOLVE_SOURCES = {
-    "workable_jobs",
-    "workable_search",
-    "workable_company",
-    "workable_html_search",
-    "greenhouse_jobs",
-    "lever_jobs",
-    "ashby_jobs",
-    "smartrecruiters_postings",
-    "breezy_jobs",
-    "jobicy",
-    "team_pages",
+    "manual_seed",
     "openstreetmap",
+    "team_pages",
 }
 
 
@@ -43,7 +35,7 @@ async def resolve_company(
     """Resolve a source hit to an existing or new company record."""
     intent = source_hit.get("intent_label")
     source_key = source_hit.get("source_key", "")
-    can_resolve_unresolved = source_key in ALWAYS_RESOLVE_SOURCES or source_key == "company_web"
+    can_resolve_unresolved = source_key in ALWAYS_RESOLVE_SOURCES
     if intent in EXCLUDED_INTENTS and not can_resolve_unresolved:
         return None
 

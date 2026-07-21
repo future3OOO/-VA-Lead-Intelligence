@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run bounded team-page extraction against target company domains."""
+"""Run company_web crawl only on companies that have no named contact route."""
 
 from __future__ import annotations
 
@@ -17,24 +17,31 @@ from db.session import AsyncSessionLocal  # noqa: E402
 from services.source_engine.runner import SourceRunner  # noqa: E402
 
 
-async def get_target_domains(workspace_id: UUID, max_domains: int | None = None) -> list[str]:
+async def get_missing_contact_domains(
+    workspace_id: UUID, max_domains: int | None = None
+) -> list[str]:
     async with AsyncSessionLocal() as session:
         rows = (
             await session.execute(
                 text(
                     """
-                    SELECT c.primary_domain, COUNT(sh.id) AS hit_count
+                    SELECT c.primary_domain
                     FROM company c
-                    LEFT JOIN source_hit sh ON sh.company_id = c.id
+                    LEFT JOIN contact_route cr
+                      ON cr.company_id = c.id
+                      AND (
+                          cr.route_type = 'named_contact'
+                          OR (cr.route_type = 'named_work_email_approved' AND cr.value LIKE '%<%')
+                      )
                     WHERE c.workspace_id = :ws
                       AND c.primary_domain != ''
+                      AND cr.id IS NULL
                       AND c.primary_domain NOT LIKE '%example%'
                       AND c.primary_domain NOT LIKE '%facebook.com%'
                       AND c.primary_domain NOT LIKE '%linkedin.com%'
                       AND c.primary_domain NOT LIKE '%twitter.com%'
                       AND c.primary_domain NOT LIKE '%instagram.com%'
-                    GROUP BY c.primary_domain
-                    ORDER BY hit_count DESC, c.primary_domain
+                    ORDER BY c.primary_domain
                     LIMIT :limit
                     """
                 ),
@@ -45,28 +52,26 @@ async def get_target_domains(workspace_id: UUID, max_domains: int | None = None)
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Run bounded team-page extraction")
+    parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--workspace-id", type=UUID, default=UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
+        "--workspace-id", type=UUID, default=UUID("985cfd3b-a3af-4217-8b10-8c46b0915b92")
     )
     parser.add_argument(
-        "--campaign-id", type=UUID, default=UUID("f2ec5156-d497-442c-a664-111ce7fabfa2")
+        "--campaign-id", type=UUID, default=UUID("2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc")
     )
     parser.add_argument("--max-domains", type=int, default=None)
     args = parser.parse_args()
 
-    workspace_id = args.workspace_id
-    campaign_id = args.campaign_id
-    domains = await get_target_domains(workspace_id, args.max_domains)
-    print(f"Running team_pages against {len(domains)} target domains")
+    domains = await get_missing_contact_domains(args.workspace_id, args.max_domains)
+    print(f"Running company_web against {len(domains)} domains with no named contact")
     async with AsyncSessionLocal() as session:
         runner = SourceRunner()
         record = await runner.run(
             session,
-            workspace_id,
-            campaign_id,
-            source_keys=["team_pages"],
-            query_overrides={"team_pages": {"domains": domains}},
+            args.workspace_id,
+            args.campaign_id,
+            source_keys=["company_web"],
+            query_overrides={"company_web": {"domains": domains}},
         )
         print(
             json.dumps(
