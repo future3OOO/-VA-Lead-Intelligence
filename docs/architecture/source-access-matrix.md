@@ -1,7 +1,7 @@
 # Source Access Matrix
 
 | Source | Access Mode | Data Collected | Rate Limit | API Key / Credential | Kill Switch |
-|--------|-------------|----------------|------------|--------------------|-------------|
+|--------|-------------|----------------|------------|----------------------|-------------|
 | `manual_seed` | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual.enabled` |
 | `openstreetmap` | public_api | real ANZ business name, address, phone, email, website, operator, business category | 0.2 req/s | none | `sources.openstreetmap.enabled` |
 | `finance_directory` | scoped_public_web_crawl | Australian finance-professional profile pages: company, website, phone, named principal | 2 req/s | none | `sources.finance_directory.enabled` |

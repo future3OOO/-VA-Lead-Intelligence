@@ -2,11 +2,13 @@
 
 Production-ready lead-generation platform for virtual assistants, built on FastAPI, SQLAlchemy, Pydantic, Temporal, and Terraform.
 
-## What this does
+## What this does (in plain English)
 
-The engine finds small and midsize businesses in Australia and New Zealand that are likely to need virtual-assistant support. It pulls from public, bounded sources, normalizes the data, scores each lead, resolves companies, enriches contact routes, and exports a ranked CSV.
+This platform finds **real Australian and New Zealand businesses** that are likely to need remote virtual-assistant (VA) support, scores them, and exports a ranked list with contact details and a short explanation of *why* each one is a good prospect.
 
-Primary sources:
+### Where the leads come from
+
+The main live sources are public, bounded directories and the company's own website:
 
 - `openstreetmap` — public Overpass API for real ANZ business listings (real estate, property management, accounting, legal, insurance/financial advisory, bookkeeping, construction, trades).
 - `finance_directory` — public Australian finance-professionals directory (`financedirectory.net.au`).
@@ -14,6 +16,43 @@ Primary sources:
 - `team_pages` — bounded crawl of `/team`, `/about`, `/people`, `/leadership`, `/directors`, `/contact`, etc., to extract named contacts, emails, phones, and LinkedIn profiles.
 - `company_web` — bounded breadth-first website crawl for contact routes.
 - `manual_seed` — CSV/JSON seed import.
+
+We do **not** scrape LinkedIn, Google, or private business directories, and we do **not** use fake data.
+
+### How we decide a company needs a VA
+
+Each business type is mapped to the kind of remote admin work that business usually needs:
+
+| Business type | Typical VA work |
+|---------------|-----------------|
+| Real estate / property management | Listing admin, CRM updates, buyer/tenant follow-up, appointment scheduling, rent-roll data entry |
+| Accounting / bookkeeping / tax | Client file admin, data entry, invoicing, reconciliations, inbox/CRM management, compliance paperwork |
+| Insurance / mortgage broking | Claims/loan file processing, scheduling, customer enquiries, CRM updates, documentation |
+| Legal / conveyancing | Client intake, document prep, diary management, billing admin, filing |
+| Trades / construction / home services | Job scheduling, dispatch, invoicing, customer follow-up, maintenance coordination |
+
+Every lead gets a **score out of 100** and a rank:
+
+- **High (75+)** — strong VA fit: the business type creates a clear admin burden, the role can be done remotely, and we have a contact route.
+- **Medium (55–74)** — good sector but the available signal is weaker.
+- **Low (<55)** — weaker fit or a senior professional role that the firm is hiring for directly.
+
+Senior professional job posts (for example "Senior Accountant" or "Lead Lawyer") are **excluded** from the top results because those are not VA roles.
+
+### What you get
+
+The export is a CSV with one row per lead:
+
+- `company_name` and `primary_domain`
+- `job_title` — the VA-suitable role we matched to that business type
+- `location` — city/suburb or lat/lon in Australia / New Zealand
+- `workplace_type` — `hybrid` or `remote` (on-site-only posts are filtered out)
+- `category` — Property/Facilities, Financial Services, Legal/Professional, Home Services/Construction, etc.
+- `qualification_score` and `rank` — 0–100 score and High/Medium/Low
+- `explanation` — a short, human-readable reason why this lead scored well
+- `best_email`, `best_phone`, `best_form` — best available contact route
+- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin` — named contact when available
+- `source_url` — link back to the OpenStreetMap page or the original posting
 
 Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web crawlers respect `robots.txt`.
 
@@ -33,7 +72,7 @@ The adapter tries these public Overpass endpoints in order and falls back if one
 These tags map to target sectors:
 
 | OSM key | OSM value | Synthetic title | VA-fit category |
-|---------|-----------|-----------------|-------------------|
+|---------|-----------|-----------------|-----------------|
 | `office` | `estate_agent` | Property Manager / Real Estate Office | real estate agency |
 | `office` | `property_manager` | Property Manager / Real Estate Office | real estate agency |
 | `office` | `real_estate` | Property Manager / Real Estate Office | real estate agency |
@@ -320,3 +359,12 @@ See `docs/architecture/source-access-matrix.md` for prohibited access modes.
 `make handover` is the production-readiness gate. It fails if generated artifacts drift, tests fail, Terraform is invalid, or any DOD item lacks evidence.
 
 Run `make handover` before every PR.
+
+## Architecture
+
+- `spec/domain.yaml` is the single source of truth for domain models, events, and API contracts.
+- `scripts/generate_models.py` regenerates Pydantic models, SQLAlchemy models, events, and FastAPI routers from `spec/domain.yaml`.
+- `config/scorecards/default.yaml` and `config/source-policy/default.yaml` drive runtime scoring and compliance.
+- `infra/terraform/` contains AWS ECS/RDS/Redis/ElastiCache modules and the environment catalogue.
+- `docs/adr/` contains accepted Architecture Decision Records.
+- `docs/runbooks/` contains operational playbooks.
