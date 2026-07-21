@@ -53,7 +53,7 @@
       "type": "string"
     },
     "provider": {
-      "$ref": "#/definitions/SourceType"
+      "$ref": "#/$defs/SourceType"
     },
     "workspace_id": {
       "anyOf": [

@@ -42,7 +42,7 @@
       "type": "string"
     },
     "status": {
-      "$ref": "#/definitions/RunStatus",
+      "$ref": "#/$defs/RunStatus",
       "default": "pending"
     },
     "total_discovered": {

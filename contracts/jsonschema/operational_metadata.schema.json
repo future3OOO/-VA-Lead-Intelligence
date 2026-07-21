@@ -30,8 +30,7 @@
   },
   "required": [
     "workspace_id",
-    "key",
-    "value"
+    "key"
   ],
   "title": "OperationalMetadata",
   "type": "object",

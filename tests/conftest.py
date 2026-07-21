@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import psycopg2
@@ -17,6 +18,9 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = (
     f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
 )
+# The manual_seed adapter sandboxes files under MANUAL_SEED_DIR. In tests the
+# existing temp-file fixtures live under the system temp directory.
+os.environ["MANUAL_SEED_DIR"] = tempfile.gettempdir()
 
 
 def _create_test_db() -> None:

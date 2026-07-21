@@ -25,7 +25,7 @@
       "type": "string"
     },
     "buyer_intent_label": {
-      "$ref": "#/definitions/IntentLabel",
+      "$ref": "#/$defs/IntentLabel",
       "default": "unresolved"
     },
     "country_code": {

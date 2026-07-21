@@ -69,9 +69,8 @@ class JobicyAdapter(BaseSourceAdapter):
         if not slug:
             self._company_domain_cache[company_name] = ""
             return ""
-        await self.rate_limiter.acquire()
         try:
-            response = await self.client.get(f"/company/{slug}")
+            response = await self._request("GET", f"/company/{slug}")
             response.raise_for_status()
             match = self._WEBSITE_RE.search(response.text)
             if match:
@@ -97,11 +96,10 @@ class JobicyAdapter(BaseSourceAdapter):
             if isinstance(self.config.adapter_config, dict)
             else 100
         )
-        await self.rate_limiter.acquire()
         params: dict[str, Any] = {"count": count, "geo": geo}
         params.update(extra_params)
         try:
-            response = await self.client.get("/api/v2/remote-jobs", params=params)
+            response = await self._request("GET", "/api/v2/remote-jobs", params=params)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError:

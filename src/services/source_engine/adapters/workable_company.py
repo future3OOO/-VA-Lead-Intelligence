@@ -85,9 +85,9 @@ class WorkableCompanyAdapter(BaseSourceAdapter):
             slug = re.sub(r"[^a-z0-9-]+", "-", slug.lower()).strip("-")
             if not slug:
                 continue
-            await self.rate_limiter.acquire()
             try:
-                response = await self.client.get(
+                response = await self._request(
+                    "GET",
                     f"https://apply.workable.com/api/v1/widget/accounts/{slug}",
                     params={"details": "true"},
                 )

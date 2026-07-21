@@ -82,8 +82,7 @@ class WorkableSearchAdapter(BaseSourceAdapter):
                         params["pageToken"] = page_token
                     elif "pageToken" in params:
                         del params["pageToken"]
-                    await self.rate_limiter.acquire()
-                    response = await self.client.get("/jobs", params=params)
+                    response = await self._request("GET", "/jobs", params=params)
                     response.raise_for_status()
                     data = response.json()
                     jobs = data.get("jobs", [])

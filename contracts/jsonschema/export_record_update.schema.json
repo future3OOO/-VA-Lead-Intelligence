@@ -71,7 +71,7 @@
     "status": {
       "anyOf": [
         {
-          "$ref": "#/definitions/ExportStatus"
+          "$ref": "#/$defs/ExportStatus"
         },
         {
           "type": "null"

@@ -53,8 +53,7 @@
     "correlation_id",
     "producer",
     "company_name",
-    "domain",
-    "source_payload"
+    "domain"
   ],
   "title": "CompanyCandidate",
   "type": "object",

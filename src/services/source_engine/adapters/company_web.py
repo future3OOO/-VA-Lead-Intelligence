@@ -82,6 +82,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
+        self._robots_cache: dict[str, RobotFileParser] = {}
         self.client = httpx.AsyncClient(
             timeout=30.0,
             follow_redirects=True,
@@ -94,21 +95,24 @@ class CompanyWebAdapter(BaseSourceAdapter):
     def source_key(self) -> str:
         return "company_web"
 
-    def _allowed(self, url: str) -> bool:
+    async def _allowed(self, url: str) -> bool:
         parsed = urlparse(url)
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        if robots_url in self._robots_cache:
+            return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = httpx.get(
+            response = await self._request(
+                "GET",
                 robots_url,
-                timeout=10.0,
+                timeout=httpx.Timeout(10.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
                 headers={"User-Agent": "VALeadBot/1.0"},
-                follow_redirects=True,
             )
             rp.parse(response.text.splitlines())
-            return rp.can_fetch("VALeadBot/1.0", url)
         except Exception:
-            return True
+            pass
+        self._robots_cache[robots_url] = rp
+        return rp.can_fetch("VALeadBot/1.0", url)
 
     def _extract_jsonld(self, html: str) -> dict[str, Any]:
         for match in re.finditer(
@@ -238,6 +242,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
 
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
         domain = query.get("domain") or self.config.adapter_config.get("domain")
+        domain = self._safe_domain(str(domain))
         if not domain:
             return []
         scheme = "https"
@@ -249,7 +254,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
             if not self._allowed(url):
                 continue
             try:
-                response = await self.client.get(url)
+                response = await self._request("GET", url)
                 response.raise_for_status()
                 html = response.text
                 extractor = _TextExtractor()

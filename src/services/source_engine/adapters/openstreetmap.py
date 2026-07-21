@@ -185,7 +185,8 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         last_error: Exception | None = None
         for endpoint in self._ENDPOINTS:
             try:
-                response = await self.client.post(
+                response = await self._request(
+                    "POST",
                     endpoint,
                     content=query,
                     headers={"Content-Type": "text/plain"},

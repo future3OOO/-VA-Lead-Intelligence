@@ -580,7 +580,8 @@ class TeamPagesAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            response = await self.client.get(
+            response = await self._request(
+                "GET",
                 robots_url,
                 timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
                 headers={"User-Agent": "VALeadBot/1.0"},
@@ -596,6 +597,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
         if not domains:
             single = query.get("domain") or self.config.adapter_config.get("domain")
             domains = [single] if single else []
+        domains = [d for d in domains if self._is_safe_domain(str(d))]
         if not domains:
             return []
         paths = query.get("paths", self.config.adapter_config.get("paths", _TEAM_PAGE_PATHS))
@@ -609,7 +611,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
                 if not await self._allowed(url):
                     continue
                 try:
-                    response = await self.client.get(url)
+                    response = await self._request("GET", url)
                     response.raise_for_status()
                     html = response.text
                     soup = BeautifulSoup(html, "html.parser")

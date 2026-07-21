@@ -30,7 +30,7 @@ class LeverJobsAdapter(BaseSourceAdapter):
         site = query.get("site") or self.config.adapter_config.get("site")
         if not site:
             return []
-        response = await self.client.get(f"/{site}?mode=json")
+        response = await self._request("GET", f"/{site}?mode=json")
         response.raise_for_status()
         postings = response.json()
         return [{"site": site, "posting": p} for p in postings]

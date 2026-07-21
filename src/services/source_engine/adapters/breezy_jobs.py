@@ -29,7 +29,7 @@ class BreezyJobsAdapter(BaseSourceAdapter):
         if not account:
             return []
         url = f"https://{account}.breezy.hr/json"
-        response = await self.client.get(url, params={"verbose": "true"})
+        response = await self._request("GET", url, params={"verbose": "true"})
         response.raise_for_status()
         jobs = response.json()
         return [{"account": account, "job": job} for job in jobs]

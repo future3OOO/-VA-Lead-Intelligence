@@ -94,6 +94,8 @@ class SourceRunner:
                     await self._persist_hit(session, scored)
             except Exception:
                 errors += 1
+            finally:
+                await adapter.aclose()
 
         source_run.status = RunStatus.SUCCEEDED.value
         source_run.completed_at = datetime.now(timezone.utc)
@@ -146,11 +148,30 @@ class SourceRunner:
         hit["content_hash"] = hashlib.sha256(hash_input.encode()).hexdigest()
         return hit
 
-    async def _persist_hit(self, session: AsyncSession, data: dict[str, Any]) -> DBSourceHit:
-        """Persist the source hit and, if resolvable, the company and contact routes."""
+    async def _persist_hit(self, session: AsyncSession, data: dict[str, Any]) -> DBSourceHit | None:
+        """Persist the source hit and, if resolvable, the company and contact routes.
+
+        Skips inserts that would violate cross-run idempotency on content_hash.
+        """
         data.pop("source_hit_priority", None)
         data.setdefault("content_hash", "")
         workspace_id: UUID = data["workspace_id"]
+        source_key: str = data["source_key"]
+        content_hash: str = data["content_hash"]
+
+        if content_hash:
+            from sqlalchemy import select
+
+            existing = await session.execute(
+                select(DBSourceHit.id).where(
+                    DBSourceHit.workspace_id == workspace_id,
+                    DBSourceHit.source_key == source_key,
+                    DBSourceHit.content_hash == content_hash,
+                )
+            )
+            if existing.scalar_one_or_none():
+                return None
+
         company = await resolve_company(session, workspace_id, data)
         if company:
             data["company_id"] = company.id

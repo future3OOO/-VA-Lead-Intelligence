@@ -38,9 +38,7 @@
   },
   "required": [
     "company_id",
-    "model_provider",
-    "input",
-    "output"
+    "model_provider"
   ],
   "title": "ClassifierRunCreate",
   "type": "object",

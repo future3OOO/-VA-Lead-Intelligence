@@ -36,7 +36,6 @@
   "required": [
     "workspace_id",
     "country_code",
-    "config",
     "effective_at"
   ],
   "title": "JurisdictionPolicy",

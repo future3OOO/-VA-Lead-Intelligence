@@ -43,7 +43,7 @@
       "type": "number"
     },
     "status": {
-      "$ref": "#/definitions/LeadStatus",
+      "$ref": "#/$defs/LeadStatus",
       "default": "pending"
     },
     "workspace_id": {

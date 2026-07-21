@@ -2502,7 +2502,6 @@
             "type": "string"
           },
           "contact_routes_raw": {
-            "default": [],
             "title": "Contact Routes Raw"
           },
           "content_hash": {
@@ -2551,9 +2550,6 @@
             "type": "string"
           },
           "source_url": {
-            "format": "uri",
-            "maxLength": 2083,
-            "minLength": 1,
             "title": "Source Url",
             "type": "string"
           },
@@ -2624,7 +2620,6 @@
             "type": "string"
           },
           "contact_routes_raw": {
-            "default": [],
             "title": "Contact Routes Raw"
           },
           "content_hash": {
@@ -2663,9 +2658,6 @@
             "type": "string"
           },
           "source_url": {
-            "format": "uri",
-            "maxLength": 2083,
-            "minLength": 1,
             "title": "Source Url",
             "type": "string"
           },
@@ -2869,9 +2861,6 @@
           "source_url": {
             "anyOf": [
               {
-                "format": "uri",
-                "maxLength": 2083,
-                "minLength": 1,
                 "type": "string"
               },
               {
@@ -2927,11 +2916,9 @@
             "type": "string"
           },
           "allowed_fields": {
-            "default": [],
             "title": "Allowed Fields"
           },
           "allowed_outputs": {
-            "default": [],
             "title": "Allowed Outputs"
           },
           "created_at": {
@@ -2958,7 +2945,6 @@
           },
           "rate_limit": {
             "additionalProperties": true,
-            "default": {},
             "title": "Rate Limit",
             "type": "object"
           },
@@ -3023,11 +3009,9 @@
             "type": "string"
           },
           "allowed_fields": {
-            "default": [],
             "title": "Allowed Fields"
           },
           "allowed_outputs": {
-            "default": [],
             "title": "Allowed Outputs"
           },
           "kill_switch": {
@@ -3044,7 +3028,6 @@
           },
           "rate_limit": {
             "additionalProperties": true,
-            "default": {},
             "title": "Rate Limit",
             "type": "object"
           },

@@ -12,7 +12,7 @@ class JurisdictionPolicy(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
     country_code: str
-    config: dict[str, Any]
+    config: dict[str, Any] = Field(default_factory=dict)
     effective_at: datetime
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -23,7 +23,7 @@ class JurisdictionPolicyCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     country_code: str
-    config: dict[str, Any]
+    config: dict[str, Any] = Field(default_factory=dict)
     effective_at: datetime
 
 

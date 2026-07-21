@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field
 
 from config.enums import IntentLabel
 
@@ -16,7 +16,7 @@ class SourceHit(BaseModel):
     company_id: UUID | None
     source_key: str
     source_native_id: str
-    source_url: HttpUrl
+    source_url: str
     observed_at: datetime
     published_at: datetime
     title: str
@@ -26,7 +26,7 @@ class SourceHit(BaseModel):
     location_raw: str
     workplace_type: str
     intent_label: IntentLabel = IntentLabel.UNRESOLVED
-    contact_routes_raw: Any = []
+    contact_routes_raw: Any = Field(default_factory=list)
     raw_snapshot_uri: str = ""
     content_hash: str
     access_policy_version: str
@@ -41,7 +41,7 @@ class SourceHitCreate(BaseModel):
     company_id: UUID | None = None
     source_key: str
     source_native_id: str
-    source_url: HttpUrl
+    source_url: str
     observed_at: datetime
     published_at: datetime
     title: str
@@ -51,7 +51,7 @@ class SourceHitCreate(BaseModel):
     location_raw: str
     workplace_type: str
     intent_label: IntentLabel = IntentLabel.UNRESOLVED
-    contact_routes_raw: Any = []
+    contact_routes_raw: Any = Field(default_factory=list)
     raw_snapshot_uri: str = ""
     content_hash: str
     access_policy_version: str
@@ -65,7 +65,7 @@ class SourceHitUpdate(BaseModel):
     company_id: UUID | None = None
     source_key: str | None = None
     source_native_id: str | None = None
-    source_url: HttpUrl | None = None
+    source_url: str | None = None
     observed_at: datetime | None = None
     published_at: datetime | None = None
     title: str | None = None

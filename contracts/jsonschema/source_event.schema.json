@@ -51,7 +51,7 @@
       "type": "string"
     },
     "source_type": {
-      "$ref": "#/definitions/SourceType"
+      "$ref": "#/$defs/SourceType"
     },
     "workspace_id": {
       "format": "uuid",
@@ -62,8 +62,7 @@
   "required": [
     "workspace_id",
     "source_id",
-    "source_type",
-    "raw_payload"
+    "source_type"
   ],
   "title": "SourceEvent",
   "type": "object",

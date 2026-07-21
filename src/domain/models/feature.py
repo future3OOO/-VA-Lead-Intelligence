@@ -13,7 +13,7 @@ class Feature(BaseModel):
     workspace_id: UUID
     company_id: UUID
     feature_name: str
-    feature_value: dict[str, Any]
+    feature_value: dict[str, Any] = Field(default_factory=dict)
     source: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -25,7 +25,7 @@ class FeatureCreate(BaseModel):
     workspace_id: UUID | None = None
     company_id: UUID
     feature_name: str
-    feature_value: dict[str, Any]
+    feature_value: dict[str, Any] = Field(default_factory=dict)
     source: str
 
 

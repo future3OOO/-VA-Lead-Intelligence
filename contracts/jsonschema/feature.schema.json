@@ -41,7 +41,6 @@
     "workspace_id",
     "company_id",
     "feature_name",
-    "feature_value",
     "source"
   ],
   "title": "Feature",

@@ -36,7 +36,6 @@
   "required": [
     "workspace_id",
     "source_id",
-    "config",
     "effective_at"
   ],
   "title": "SourcePolicy",

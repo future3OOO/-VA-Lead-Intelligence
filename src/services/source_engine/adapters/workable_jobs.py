@@ -31,7 +31,7 @@ class WorkableJobsAdapter(BaseSourceAdapter):
         account = query.get("account") or self.config.adapter_config.get("account")
         if not account:
             return []
-        response = await self.client.get(f"/{account}?details=true")
+        response = await self._request("GET", f"/{account}?details=true")
         response.raise_for_status()
         data = response.json()
         account_name = data.get("name", account)

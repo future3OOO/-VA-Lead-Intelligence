@@ -35,7 +35,7 @@
     "buyer_intent_label": {
       "anyOf": [
         {
-          "$ref": "#/definitions/IntentLabel"
+          "$ref": "#/$defs/IntentLabel"
         },
         {
           "type": "null"
