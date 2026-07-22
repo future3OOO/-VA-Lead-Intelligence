@@ -17,6 +17,7 @@ from db.models.company import Company as DBCompany
 from db.models.workspace import Workspace
 from db.session import AsyncSessionLocal
 from services.source_engine.adapters.manual_seed import ManualSeedAdapter
+from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.classifier import classify_intent, score_intent
 from services.source_engine.config import SourceConfig, SourceRegistryLoader
 from services.source_engine.resolver import resolve_company
@@ -49,6 +50,23 @@ def test_source_registry_loads() -> None:
     registry = SourceRegistryLoader().load()
     assert "manual_seed" in registry
     assert "openstreetmap" in registry
+
+
+def test_openstreetmap_rejects_public_email_and_social_domains() -> None:
+    config = SourceConfig(
+        source_key="openstreetmap",
+        source_class="openstreetmap",
+        access_mode="public",
+        status="enabled",
+        owner="test",
+        terms_review_status="approved",
+        terms_reviewed_at="2026-07-15T00:00:00+00:00",
+    )
+    adapter = OpenStreetMapAdapter(config)
+    assert adapter._coerce_domain("https://gmail.com") == ""
+    assert adapter._coerce_domain("https://facebook.com/business") == ""
+    assert adapter._coerce_domain("https://bigpond.com.au") == ""
+    assert adapter._coerce_domain("https://acme.example.com") == "acme.example.com"
 
 
 def test_intent_classifier_buyer_request() -> None:

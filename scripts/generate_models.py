@@ -95,8 +95,10 @@ def pydantic_default(
     if for_create and field.get("nullable") and field.get("default") is None:
         return "None"
     default = field.get("default")
-    if default is None:
-        py = py_type(field["type"], {})
+    py = py_type(field["type"], {})
+    if default is None or default == [] or default == {}:
+        if py == "dict[str, Any]":
+            return "Field(default_factory=dict)"
         if py in ("list[str]", "Any"):
             return (
                 "Field(default_factory=list)"

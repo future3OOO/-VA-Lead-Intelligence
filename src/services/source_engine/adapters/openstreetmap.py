@@ -20,6 +20,78 @@ from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
 
+# Hosts that should never be treated as a company's primary domain.
+_DISALLOWED_PUBLIC_DOMAINS: frozenset[str] = frozenset(
+    {
+        # Global free email providers
+        "gmail.com",
+        "googlemail.com",
+        "hotmail.com",
+        "hotmail.co.uk",
+        "hotmail.com.au",
+        "outlook.com",
+        "live.com",
+        "msn.com",
+        "yahoo.com",
+        "yahoo.com.au",
+        "yahoo.co.nz",
+        "yahoo.co.uk",
+        "aol.com",
+        "icloud.com",
+        "me.com",
+        "mac.com",
+        "mail.com",
+        "gmx.com",
+        "gmx.net",
+        "gmx.at",
+        "protonmail.com",
+        "zoho.com",
+        "yandex.com",
+        "yandex.ru",
+        "mail.ru",
+        "fastmail.com",
+        # AU / NZ ISPs / free email
+        "bigpond.com",
+        "bigpond.com.au",
+        "tpg.com.au",
+        "optusnet.com.au",
+        "iinet.net.au",
+        "ozemail.com.au",
+        "internode.on.net",
+        "netspace.net.au",
+        "westnet.com.au",
+        "vodafone.co.nz",
+        "xtra.co.nz",
+        "clear.net.nz",
+        "slingshot.co.nz",
+        "orcon.net.nz",
+        "spark.co.nz",
+        # Social / directory / map hosts
+        "facebook.com",
+        "fb.com",
+        "instagram.com",
+        "linkedin.com",
+        "twitter.com",
+        "x.com",
+        "youtube.com",
+        "tiktok.com",
+        "pinterest.com",
+        "google.com",
+        "google.com.au",
+        "google.co.nz",
+        "maps.google.com",
+        "yellowpages.com.au",
+        "truelocal.com.au",
+        "whitepages.com.au",
+        "hotfrog.com.au",
+        "cylex.com.au",
+        "localsearch.com.au",
+        "bing.com",
+        "yelp.com",
+        "yelp.com.au",
+    }
+)
+
 
 class OpenStreetMapAdapter(BaseSourceAdapter):
     """Fetch ANZ small-business listings from OpenStreetMap via Overpass."""
@@ -141,8 +213,16 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
     def _escape(s: str) -> str:
         return s.replace('"', '\\"')
 
-    @staticmethod
-    def _coerce_domain(raw: str) -> str:
+    def _is_disallowed_domain(self, domain: str) -> bool:
+        """Reject public email, social, and directory hosts as company domains."""
+        if not domain:
+            return True
+        domain = domain.lower().strip()
+        if domain in _DISALLOWED_PUBLIC_DOMAINS:
+            return True
+        return any(domain.endswith("." + d) for d in _DISALLOWED_PUBLIC_DOMAINS)
+
+    def _coerce_domain(self, raw: str) -> str:
         if not raw:
             return ""
         if "://" not in raw:
@@ -152,6 +232,8 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         if domain.startswith("www."):
             domain = domain[4:]
         if "/" in domain or "?" in domain:
+            return ""
+        if self._is_disallowed_domain(domain):
             return ""
         return domain
 
@@ -328,7 +410,8 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
 
         domain = self._coerce_domain(website)
         if not domain and email and "@" in email:
-            domain = email.split("@")[-1].strip().lower()
+            email_domain = email.split("@")[-1].strip().lower()
+            domain = self._coerce_domain(email_domain)
 
         return {
             "workspace_id": workspace_id,
