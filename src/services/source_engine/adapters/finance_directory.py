@@ -158,7 +158,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             return None
         return candidates[0]
 
-    _SOCIAL_HOSTS = {
+    _DISALLOWED_HOSTS = {
         "facebook.com",
         "fb.com",
         "linkedin.com",
@@ -168,6 +168,17 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         "tiktok.com",
         "youtube.com",
         "youtu.be",
+        "gmail.com",
+        "googlemail.com",
+        "hotmail.com",
+        "outlook.com",
+        "icloud.com",
+        "yahoo.com",
+        "bigpond.com",
+        "bigpond.com.au",
+        "aol.com",
+        "yandex.com",
+        "protonmail.com",
     }
 
     def _coerce_domain(self, url: str) -> str:
@@ -177,7 +188,14 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             url = "https://" + url
         parsed = urlparse(url)
         host = re.sub(r"^www\.", "", parsed.netloc.lower())
-        if host in self._SOCIAL_HOSTS or host.endswith(("facebook.com", "linkedin.com")):
+        if not host:
+            return ""
+        directory_host = re.sub(r"^www\.", "", urlparse(self._SITEMAP_URL).netloc.lower())
+        if host == directory_host or host.endswith("." + directory_host):
+            return ""
+        if host in self._DISALLOWED_HOSTS or any(
+            host.endswith("." + d) for d in self._DISALLOWED_HOSTS
+        ):
             return ""
         return host
 
@@ -202,9 +220,13 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
                 link = "https://" + link
             parsed = urlparse(link)
             host = re.sub(r"^www\.", "", parsed.netloc.lower())
-            if not host or host == directory_host or host in self._SOCIAL_HOSTS:
+            if not host:
                 continue
-            if host.endswith(("facebook.com", "linkedin.com", "instagram.com", "twitter.com")):
+            if host == directory_host or host.endswith("." + directory_host):
+                continue
+            if host in self._DISALLOWED_HOSTS or any(
+                host.endswith("." + d) for d in self._DISALLOWED_HOSTS
+            ):
                 continue
             return link
         return ""

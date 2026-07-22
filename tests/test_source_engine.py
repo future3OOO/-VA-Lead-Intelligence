@@ -16,7 +16,9 @@ from db.models.campaign import Campaign
 from db.models.company import Company as DBCompany
 from db.models.workspace import Workspace
 from db.session import AsyncSessionLocal
+from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
 from services.source_engine.adapters.manual_seed import ManualSeedAdapter
+from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdvisersAdapter
 from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.classifier import classify_intent, score_intent
 from services.source_engine.config import SourceConfig, SourceRegistryLoader
@@ -66,6 +68,42 @@ def test_openstreetmap_rejects_public_email_and_social_domains() -> None:
     assert adapter._coerce_domain("https://gmail.com") == ""
     assert adapter._coerce_domain("https://facebook.com/business") == ""
     assert adapter._coerce_domain("https://bigpond.com.au") == ""
+    assert adapter._coerce_domain("https://acme.example.com") == "acme.example.com"
+
+
+def test_finance_directory_rejects_directory_and_public_domains() -> None:
+    config = SourceConfig(
+        source_key="finance_directory",
+        source_class="finance_directory",
+        access_mode="scoped_public_web_crawl",
+        status="enabled",
+        owner="test",
+        terms_review_status="approved",
+        terms_reviewed_at="2026-07-15T00:00:00+00:00",
+    )
+    adapter = FinanceDirectoryAdapter(config)
+    assert adapter._coerce_domain("https://financedirectory.net.au/profile") == ""
+    assert adapter._coerce_domain("https://www.financedirectory.net.au/profile") == ""
+    assert adapter._coerce_domain("https://facebook.com/page") == ""
+    assert adapter._coerce_domain("https://gmail.com") == ""
+    assert adapter._coerce_domain("https://acme.example.com") == "acme.example.com"
+
+
+def test_nz_finance_advisers_rejects_directory_and_public_domains() -> None:
+    config = SourceConfig(
+        source_key="nz_finance_advisers",
+        source_class="nz_finance_advisers",
+        access_mode="scoped_public_web_crawl",
+        status="enabled",
+        owner="test",
+        terms_review_status="approved",
+        terms_reviewed_at="2026-07-15T00:00:00+00:00",
+    )
+    adapter = NzFinanceAdvisersAdapter(config)
+    assert adapter._coerce_domain("https://financeadvisers.co.nz/adviser") == ""
+    assert adapter._coerce_domain("https://www.financeadvisers.co.nz/adviser") == ""
+    assert adapter._coerce_domain("https://facebook.com/page") == ""
+    assert adapter._coerce_domain("https://gmail.com") == ""
     assert adapter._coerce_domain("https://acme.example.com") == "acme.example.com"
 
 

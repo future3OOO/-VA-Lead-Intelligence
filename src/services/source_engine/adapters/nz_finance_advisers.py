@@ -55,6 +55,29 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
 
     _BASE_URL = "https://financeadvisers.co.nz"
 
+    _DISALLOWED_HOSTS = {
+        "facebook.com",
+        "fb.com",
+        "linkedin.com",
+        "instagram.com",
+        "twitter.com",
+        "x.com",
+        "tiktok.com",
+        "youtube.com",
+        "youtu.be",
+        "gmail.com",
+        "googlemail.com",
+        "hotmail.com",
+        "outlook.com",
+        "icloud.com",
+        "yahoo.com",
+        "bigpond.com",
+        "bigpond.com.au",
+        "aol.com",
+        "yandex.com",
+        "protonmail.com",
+    }
+
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._provider_cache: dict[str, dict[str, Any]] = {}
@@ -74,7 +97,17 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         if not url or not url.startswith(("http://", "https://")):
             return ""
         parsed = urlparse(url)
-        return re.sub(r"^www\.", "", parsed.netloc.lower())
+        host = re.sub(r"^www\.", "", parsed.netloc.lower())
+        if not host:
+            return ""
+        directory_host = re.sub(r"^www\.", "", urlparse(self._BASE_URL).netloc.lower())
+        if host == directory_host or host.endswith("." + directory_host):
+            return ""
+        if host in self._DISALLOWED_HOSTS or any(
+            host.endswith("." + d) for d in self._DISALLOWED_HOSTS
+        ):
+            return ""
+        return host
 
     async def _get(self, url: str) -> str:
         parsed = urlparse(url)
