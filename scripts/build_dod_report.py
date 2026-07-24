@@ -54,12 +54,24 @@ def main() -> int:
     blocking: list[str] = []
     for req in reqs.get("requirements", []):
         tests = req.get("tests", [])
-        status = "passed"
-        for test in tests:
-            if statuses.get(test, "missing") != "passed":
+        if tests:
+            status = "passed"
+            for test in tests:
+                if statuses.get(test, "missing") != "passed":
+                    status = "blocked"
+                    blocking.append(f"{req['id']} ({test}: {statuses.get(test, 'missing')})")
+            evidence = ", ".join(f"`{t}`" for t in tests)
+        else:
+            req_status = req.get("status", "")
+            verification = req.get("verification", "")
+            if req_status != "implemented" or not verification:
                 status = "blocked"
-                blocking.append(f"{req['id']} ({test}: {statuses.get(test, 'missing')})")
-        evidence = ", ".join(f"`{t}`" for t in tests)
+                blocking.append(
+                    f"{req['id']} (status={req_status or 'missing'}, verification={verification or 'missing'})"
+                )
+            else:
+                status = "passed"
+            evidence = verification or ""
         lines.append(f"| {req['id']} | {req['title']} | {len(tests)} | {status} | {evidence} |")
 
     lines.extend(["", "## Blockers"])

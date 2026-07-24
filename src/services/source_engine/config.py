@@ -11,6 +11,46 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_REGISTRY = REPO_ROOT / "config" / "sources" / "source-registry.yaml"
 DEFAULT_QUERY_LIBRARY = REPO_ROOT / "config" / "sources" / "query-library.yaml"
+DEFAULT_SOURCE_POLICY = REPO_ROOT / "config" / "sources" / "source-policies" / "default.yaml"
+
+
+@dataclass
+class SourcePolicy:
+    """Source access and jurisdiction policy gate."""
+
+    allowed_access_modes: set[str]
+    prohibited_access_modes: set[str]
+    max_raw_retention_days: int
+    max_normalized_retention_days: int
+    jurisdiction_requirements: list[str]
+
+    @classmethod
+    def load(cls, path: Path = DEFAULT_SOURCE_POLICY) -> SourcePolicy:
+        data = cast(dict[str, Any], yaml.safe_load(path.read_text()) or {})
+        retention = data.get("retention", {})
+        return cls(
+            allowed_access_modes=set(data.get("allowed_access_modes", [])),
+            prohibited_access_modes=set(data.get("prohibited_access_modes", [])),
+            max_raw_retention_days=int(retention.get("raw_snapshot_days", 90)),
+            max_normalized_retention_days=int(retention.get("normalized_record_days", 730)),
+            jurisdiction_requirements=list(data.get("jurisdiction_requirements", [])),
+        )
+
+    def validate(self, config: SourceConfig) -> tuple[bool, str]:
+        """Return (ok, reason) for the configured source."""
+        if config.access_mode in self.prohibited_access_modes:
+            return False, f"access_mode '{config.access_mode}' is prohibited by source policy"
+        if self.allowed_access_modes and config.access_mode not in self.allowed_access_modes:
+            return False, f"access_mode '{config.access_mode}' is not allowed by source policy"
+        if config.terms_review_status != "approved":
+            return False, f"terms_review_status '{config.terms_review_status}' is not approved"
+        if config.raw_retention_days > self.max_raw_retention_days:
+            return False, "raw_retention_days exceeds source policy maximum"
+        if config.normalized_retention_days > self.max_normalized_retention_days:
+            return False, "normalized_retention_days exceeds source policy maximum"
+        if not self.jurisdiction_requirements:
+            return False, "no jurisdiction requirements configured in source policy"
+        return True, ""
 
 
 @dataclass

@@ -22,7 +22,7 @@ class SourceRun(BaseModel):
     hits_qualified_total: int
     hits_duplicate_total: int
     errors_total: int
-    checkpoint: dict[str, Any]
+    checkpoint: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -40,7 +40,7 @@ class SourceRunCreate(BaseModel):
     hits_qualified_total: int
     hits_duplicate_total: int
     errors_total: int
-    checkpoint: dict[str, Any]
+    checkpoint: dict[str, Any] = Field(default_factory=dict)
 
 
 class SourceRunUpdate(BaseModel):

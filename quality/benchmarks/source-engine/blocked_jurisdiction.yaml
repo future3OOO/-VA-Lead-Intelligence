@@ -11,3 +11,6 @@ source_hits:
         value: jobs@global-consultants.example.com
     intent_label: buyer_request
     jurisdiction_action: block
+expected:
+  allowed: false
+  qualified: false

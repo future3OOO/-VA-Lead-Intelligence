@@ -19,7 +19,7 @@
       "type": "string"
     },
     "input": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Input",
       "type": "object"
     },
@@ -28,7 +28,7 @@
       "type": "string"
     },
     "output": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Output",
       "type": "object"
     },

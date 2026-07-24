@@ -44,13 +44,6 @@ enums:
     - succeeded
     - failed
     - rate_limited
-  SourceType:
-    - greenhouse
-    - lever
-    - ashby
-    - company_web
-    - search
-
   IntentLabel:
     - buyer_request
     - company_hiring
@@ -122,7 +115,7 @@ events:
       - name: board_url
         type: url
       - name: provider
-        type: enum:SourceType
+        type: str
       - name: board_token
         type: str
   job_signal:
@@ -495,7 +488,7 @@ entities:
         type: fk:company
         index: true
       - name: provider
-        type: enum:SourceType
+        type: str
       - name: board_url
         type: url
       - name: board_token
@@ -567,7 +560,7 @@ entities:
       - name: source_id
         type: str
       - name: source_type
-        type: enum:SourceType
+        type: str
       - name: raw_payload
         type: json
       - name: received_at
@@ -1000,7 +993,7 @@ entities:
       - name: source_native_id
         type: str
       - name: source_url
-        type: url
+        type: url_str
       - name: observed_at
         type: datetime
       - name: published_at

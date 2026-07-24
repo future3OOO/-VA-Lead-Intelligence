@@ -23,7 +23,7 @@
       "type": "string"
     },
     "payload": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Payload",
       "type": "object"
     },

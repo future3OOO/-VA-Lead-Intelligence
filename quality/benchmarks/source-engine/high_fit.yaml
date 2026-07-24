@@ -11,3 +11,6 @@ source_hits:
         value: hiring@acme-services.example.com
     intent_label: buyer_request
     source_hit_priority: 0.95
+expected:
+  allowed: true
+  qualified: true

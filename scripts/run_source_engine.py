@@ -22,8 +22,8 @@ async def run(
     campaign_id: UUID,
     source_keys: list[str] | None,
     query_overrides: dict[str, dict[str, str]],
-) -> None:
-    """Run the source engine portfolio."""
+) -> int:
+    """Run the source engine portfolio. Returns 0 on success, 1 on failure."""
     session: AsyncSession
     async with AsyncSessionLocal() as session:
         runner = SourceRunner()
@@ -47,6 +47,7 @@ async def run(
                 indent=2,
             )
         )
+        return 0 if record.status == "succeeded" else 1
 
 
 def main() -> int:
@@ -56,8 +57,9 @@ def main() -> int:
     parser.add_argument("--source-keys", nargs="+", default=None)
     parser.add_argument("--query-overrides", type=json.loads, default="{}")
     args = parser.parse_args()
-    asyncio.run(run(args.workspace_id, args.campaign_id, args.source_keys, args.query_overrides))
-    return 0
+    return asyncio.run(
+        run(args.workspace_id, args.campaign_id, args.source_keys, args.query_overrides)
+    )
 
 
 if __name__ == "__main__":

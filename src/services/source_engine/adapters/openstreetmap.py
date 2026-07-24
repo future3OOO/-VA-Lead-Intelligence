@@ -201,7 +201,6 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         super().__init__(source_config)
         self.client = httpx.AsyncClient(
             timeout=30.0,
-            follow_redirects=True,
             headers={"User-Agent": "VA-LeadIntelligence-OSM/1.0"},
         )
 
@@ -267,13 +266,11 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         last_error: Exception | None = None
         for endpoint in self._ENDPOINTS:
             try:
-                parsed = urlparse(endpoint)
-                async with self.rate_limiter.acquire(parsed.netloc):
-                    response = await self.client.post(
-                        endpoint,
-                        content=query,
-                        headers={"Content-Type": "text/plain"},
-                    )
+                response = await self._http_post(
+                    endpoint,
+                    content=query,
+                    headers={"Content-Type": "text/plain"},
+                )
             except Exception as exc:
                 last_error = exc
                 continue

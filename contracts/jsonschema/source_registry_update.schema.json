@@ -74,7 +74,7 @@
     "rate_limit": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {

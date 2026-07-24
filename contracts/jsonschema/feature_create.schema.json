@@ -13,7 +13,7 @@
       "type": "string"
     },
     "feature_value": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Feature Value",
       "type": "object"
     },

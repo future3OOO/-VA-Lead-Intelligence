@@ -9,3 +9,6 @@ source_hits:
     contact_routes_raw: []
     intent_label: seller_promotion
     source_hit_priority: 0.0
+expected:
+  allowed: true
+  qualified: false

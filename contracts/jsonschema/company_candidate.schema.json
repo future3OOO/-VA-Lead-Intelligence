@@ -36,7 +36,7 @@
       "type": "string"
     },
     "source_payload": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Source Payload",
       "type": "object"
     },

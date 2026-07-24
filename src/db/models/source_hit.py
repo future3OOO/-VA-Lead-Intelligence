@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,12 +13,6 @@ class SourceHit(Base):
     """Normalized record from a source adapter.."""
 
     __tablename__ = "source_hit"
-
-    __table_args__ = (
-        UniqueConstraint(
-            "workspace_id", "source_key", "content_hash", name="uq_source_hit_content_hash"
-        ),
-    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = mapped_column(

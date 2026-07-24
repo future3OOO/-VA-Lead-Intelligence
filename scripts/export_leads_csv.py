@@ -604,12 +604,17 @@ def _qualification_score(
         score += 5
         reasons.append("contact route available")
 
+    has_contact = bool(
+        routes.get("best_email") or routes.get("best_phone") or routes.get("best_form")
+    )
     score = max(0, min(score, 100))
     rank = "Low"
-    if score >= 75:
+    if score >= 75 and has_contact:
         rank = "High"
     elif score >= 55:
         rank = "Medium"
+        if score >= 75 and not has_contact:
+            reasons.append("contact route missing; rank capped at Medium")
     return score, rank, reasons
 
 

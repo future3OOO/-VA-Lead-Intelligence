@@ -1,5 +1,5 @@
 {
-  "total": 3,
+  "total": 7,
   "failures": 0,
   "results": [
     {
@@ -24,6 +24,57 @@
       "actual_pass": false,
       "score": 15.0,
       "jurisdiction_allowed": true,
+      "passed": true
+    },
+    {
+      "fixture_id": "A source hit from a jurisdiction that must be suppressed.",
+      "expected": {
+        "allowed": false,
+        "qualified": false
+      },
+      "actual": {
+        "allowed": false,
+        "qualified": false,
+        "duplicates": 0
+      },
+      "passed": true
+    },
+    {
+      "fixture_id": "Two identical source hits should be deduplicated.",
+      "expected": {
+        "duplicates": 1
+      },
+      "actual": {
+        "allowed": true,
+        "qualified": false,
+        "duplicates": 1
+      },
+      "passed": true
+    },
+    {
+      "fixture_id": "A company hiring a virtual assistant with clear tasks and contact routes.",
+      "expected": {
+        "allowed": true,
+        "qualified": true
+      },
+      "actual": {
+        "allowed": true,
+        "qualified": true,
+        "duplicates": 0
+      },
+      "passed": true
+    },
+    {
+      "fixture_id": "A job seeker post or training course, not a hiring company.",
+      "expected": {
+        "allowed": true,
+        "qualified": false
+      },
+      "actual": {
+        "allowed": true,
+        "qualified": false,
+        "duplicates": 0
+      },
       "passed": true
     }
   ]

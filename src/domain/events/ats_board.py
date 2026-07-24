@@ -1,6 +1,5 @@
 from pydantic import HttpUrl
 
-from config.enums import SourceType
 from domain.events.base import BaseEvent
 
 
@@ -9,7 +8,7 @@ class AtsBoard(BaseEvent):
 
     schema_version: str = "1.0.0"
     board_url: HttpUrl
-    provider: SourceType
+    provider: str
     board_token: str
 
 

@@ -83,7 +83,6 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         self._provider_cache: dict[str, dict[str, Any]] = {}
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
-            follow_redirects=True,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             headers={
                 "User-Agent": (
@@ -110,9 +109,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         return host
 
     async def _get(self, url: str) -> str:
-        parsed = urlparse(url)
-        async with self.rate_limiter.acquire(parsed.netloc):
-            response = await self.client.get(url)
+        response = await self._http_get(url)
         response.raise_for_status()
         return response.text
 
@@ -267,7 +264,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
                 )
             if result:
                 results.append(result)
-        await self.client.aclose()
+        await self.aclose()
         print(
             f"[nz_finance_advisers] extracted {len(results)} adviser records",
             flush=True,

@@ -21,6 +21,7 @@ PYDANTIC_TYPE_MAP = {
     "text": "str",
     "email": "EmailStr",
     "url": "HttpUrl",
+    "url_str": "str",
     "int": "int",
     "float": "float",
     "bool": "bool",
@@ -37,6 +38,7 @@ SQLALCHEMY_TYPE_MAP = {
     "text": "Text",
     "email": "String(255)",
     "url": "String(2048)",
+    "url_str": "String(2048)",
     "int": "Integer",
     "float": "Float",
     "bool": "Boolean",
@@ -238,19 +240,29 @@ def generate_event(
     event_fields = [response_field(f, enums) for f in spec.get("fields", [])]
     version = spec.get("schema_version", "1.0.0")
     used_types = {f["type"] for f in all_fields}
-    imports = ["from datetime import datetime, date"]
-    if any(t == "uuid" or t.startswith("fk:") for t in used_types):
+    needs_date = "date" in used_types
+    needs_uuid = any(t == "uuid" or t.startswith("fk:") for t in used_types)
+    needs_any = any(t in ("json", "json_list") for t in used_types)
+    needs_http_url = "url" in used_types
+    needs_email = "email" in used_types
+    needs_field = any("Field(" in f for f in event_fields)
+    imports = ["from datetime import datetime"]
+    if needs_date:
+        imports[0] = "from datetime import date, datetime"
+    if needs_uuid:
         imports.append("from uuid import UUID, uuid4")
-    imports.append("from typing import Any")
-    extra_pydantic = []
-    if any(t == "url" for t in used_types):
+    if needs_any:
+        imports.append("from typing import Any")
+    extra_pydantic: list[str] = []
+    if needs_http_url:
         extra_pydantic.append("HttpUrl")
-    if any(t == "email" for t in used_types):
+    if needs_email:
         extra_pydantic.append("EmailStr")
-    if extra_pydantic:
-        imports.append(f"from pydantic import Field, {', '.join(extra_pydantic)}")
-    else:
-        imports.append("from pydantic import Field")
+    pydantic_imports = extra_pydantic[:]
+    if needs_field:
+        pydantic_imports.insert(0, "Field")
+    if pydantic_imports:
+        imports.append(f"from pydantic import {', '.join(pydantic_imports)}")
     used_enums = {t.split(":", 1)[1] for t in used_types if t.startswith("enum:")}
     if used_enums:
         imports.append(f"from config.enums import {', '.join(sorted(used_enums))}")
@@ -274,23 +286,33 @@ def generate_pydantic_models(
     used_enums = {
         py_type(f["type"], enums) for f in spec["fields"] if f["type"].startswith("enum:")
     }
-    lines = [
-        "from datetime import date, datetime",
-        "from typing import Any",
-        "from uuid import UUID, uuid4",
-        "",
-        "from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl",
-    ]
+    used_types = {f["type"] for f in spec["fields"]}
+    needs_date = "date" in used_types
+    needs_any = any(t in ("json", "json_list") for t in used_types)
+    needs_http_url = "url" in used_types
+    needs_email = "email" in used_types
+    extra_pydantic: list[str] = []
+    if needs_http_url:
+        extra_pydantic.append("HttpUrl")
+    if needs_email:
+        extra_pydantic.append("EmailStr")
+    pydantic_import = "from pydantic import BaseModel, ConfigDict, Field"
+    if extra_pydantic:
+        pydantic_import += f", {', '.join(extra_pydantic)}"
+    imports = ["from datetime import datetime"]
+    if needs_date:
+        imports[0] = "from datetime import date, datetime"
+    if needs_any:
+        imports.append("from typing import Any")
+    imports.extend(["from uuid import UUID, uuid4", "", pydantic_import])
     if used_enums:
-        lines.append(f"from config.enums import {', '.join(sorted(used_enums))}")
-    lines.extend(
-        [
-            "",
-            f"class {class_name}(BaseModel):",
-            f'    """{spec.get("description", class_name)}."""',
-            '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
-        ]
-    )
+        imports.append(f"from config.enums import {', '.join(sorted(used_enums))}")
+    lines = imports + [
+        "",
+        f"class {class_name}(BaseModel):",
+        f'    """{spec.get("description", class_name)}."""',
+        '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
+    ]
     lines.extend(response_fields)
     lines.extend(
         [
@@ -318,15 +340,41 @@ def generate_sqlalchemy_model(name: str, class_name: str, spec: dict[str, Any]) 
     fields = [sqlalchemy_field(f) for f in spec["fields"]]
     has_json = any(f["type"] in ("json", "json_list") for f in spec["fields"])
     used_types = {f["type"] for f in spec["fields"]}
-    needs_datetime = any(t in ("datetime", "date") for t in used_types)
+    needed: set[str] = set()
+    for t in used_types:
+        if t in ("str", "email", "url", "url_str") or t.startswith("enum:"):
+            needed.add("String")
+        elif t == "text":
+            needed.add("Text")
+        elif t == "int":
+            needed.add("Integer")
+        elif t == "float":
+            needed.add("Float")
+        elif t == "bool":
+            needed.add("Boolean")
+        elif t == "date":
+            needed.add("Date")
+        elif t == "datetime":
+            needed.add("DateTime")
+        elif t in ("json", "json_list", "list_str"):
+            needed.add("JSON")
+    has_fk = any(t.startswith("fk:") for t in used_types)
+    has_auto = any(f.get("auto") for f in spec["fields"])
+    if has_auto:
+        needed.add("DateTime")
+        needed.add("func")
+    if has_fk:
+        needed.add("ForeignKey")
+    needs_datetime = any(t in ("datetime", "date") for t in used_types) or has_auto
     lines = ["import uuid"]
     if needs_datetime:
         lines.append("from datetime import date, datetime")
     if has_json:
         lines.append("from typing import Any")
+    sqlalchemy_imports = [c for c in sorted(needed) if c]
     lines.extend(
         [
-            "from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func",
+            f"from sqlalchemy import {', '.join(sqlalchemy_imports)}",
             "from sqlalchemy.dialects.postgresql import UUID",
             "from sqlalchemy.orm import Mapped, mapped_column",
             "",

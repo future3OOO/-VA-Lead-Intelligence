@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import os
 import re
+import socket
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
+
+import httpx
 
 from services.source_engine.checkpoint import CheckpointStore
 from services.source_engine.config import SourceConfig
@@ -25,6 +29,7 @@ class BaseSourceAdapter(ABC):
         self.rate_limiter = RateLimiter.from_config(source_config.rate_limit)
         self.checkpoint = CheckpointStore(source_config.source_key)
         self.metrics = SourceMetrics(source_config.source_key)
+        self.client: httpx.AsyncClient | None = None
 
     @property
     @abstractmethod
@@ -118,6 +123,40 @@ class BaseSourceAdapter(ABC):
             pass
         return re.match(r"^[a-z0-9][-a-z0-9]*(?:\.[-a-z0-9]+)+$", host) is not None
 
+    async def _is_safe_host(self, host: str) -> bool:
+        """Resolve a hostname and reject any non-public IP addresses."""
+        try:
+            infos = await asyncio.to_thread(
+                socket.getaddrinfo, host, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+            )
+        except socket.gaierror:
+            return False
+        if not infos:
+            return False
+        for _family, _socktype, _proto, _canonname, sockaddr in infos:
+            try:
+                ip = ipaddress.ip_address(sockaddr[0])
+            except ValueError:
+                continue
+            if not ip.is_global:
+                return False
+        return True
+
+    async def _is_safe_url(self, url: str) -> bool:
+        """Validate scheme, host syntax, and DNS resolution for an HTTP(S) URL."""
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            return False
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        host = parsed.hostname
+        if not host:
+            return False
+        if not self._is_safe_domain(host):
+            return False
+        return await self._is_safe_host(host)
+
     def _safe_domain(self, raw: str) -> str | None:
         """Return a sanitized public domain or None."""
         parsed = urlparse(raw)
@@ -126,13 +165,39 @@ class BaseSourceAdapter(ABC):
             return None
         return host
 
-    async def _request(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        """Make an HTTP request with rate limiting and concurrency."""
-        async with self.rate_limiter.acquire():
-            client = getattr(self, "client", None)
-            if client is None:
-                raise RuntimeError(f"{self.source_key} adapter has no HTTP client")
-            return await client.request(method, *args, **kwargs)
+    async def _http_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Make an HTTP request with per-host rate limiting and manual redirect validation."""
+        if self.client is None:
+            raise RuntimeError(f"{self.source_key} adapter has no HTTP client")
+        kwargs.pop("follow_redirects", None)
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 30.0
+        if not await self._is_safe_url(url):
+            raise httpx.HTTPError(f"Unsafe URL requested: {url}")
+        parsed = urlparse(url)
+        host = parsed.hostname or parsed.netloc
+        client = self.client
+        async with self.rate_limiter.acquire(host):
+            for _ in range(10):
+                response = await client.request(method, url, follow_redirects=False, **kwargs)
+                if response.status_code not in {301, 302, 303, 307, 308}:
+                    return response
+                location = response.headers.get("location")
+                if not location:
+                    return response
+                next_url = str(response.url.join(location))
+                if not await self._is_safe_url(next_url):
+                    raise httpx.HTTPError(f"Unsafe redirect to {next_url}")
+                url = next_url
+                if response.status_code in {301, 302, 303}:
+                    method = "GET"
+            raise httpx.TooManyRedirects("Maximum redirect count exceeded")
+
+    async def _http_get(self, url: str, **kwargs: Any) -> httpx.Response:
+        return await self._http_request("GET", url, **kwargs)
+
+    async def _http_post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return await self._http_request("POST", url, **kwargs)
 
     async def aclose(self) -> None:
         """Close the adapter's HTTP client and release resources."""

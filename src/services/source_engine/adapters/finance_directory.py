@@ -50,7 +50,6 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         super().__init__(source_config)
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
-            follow_redirects=True,
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
             headers={
                 "User-Agent": (
@@ -232,10 +231,8 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         return ""
 
     async def _fetch_profile(self, url: str) -> dict[str, Any] | None:
-        parsed = urlparse(url)
         try:
-            async with self.rate_limiter.acquire(parsed.netloc):
-                response = await self.client.get(url)
+            response = await self._http_get(url)
             response.raise_for_status()
         except httpx.HTTPError:
             return None
@@ -292,10 +289,8 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             query.get("max_profile_pages")
             or self.config.adapter_config.get("max_profile_pages", 1200)
         )
-        parsed = urlparse(self._SITEMAP_URL)
         try:
-            async with self.rate_limiter.acquire(parsed.netloc):
-                sitemap_response = await self.client.get(self._SITEMAP_URL, timeout=30.0)
+            sitemap_response = await self._http_get(self._SITEMAP_URL, timeout=30.0)
             sitemap_response.raise_for_status()
         except httpx.HTTPError:
             return []
@@ -322,7 +317,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
                 if result:
                     results.append(result)
         print(f"[finance_directory] extracted {len(results)} profile pages", flush=True)
-        await self.client.aclose()
+        await self.aclose()
         return results
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:

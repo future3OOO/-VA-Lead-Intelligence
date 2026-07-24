@@ -895,7 +895,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
         self._counter_lock = asyncio.Lock()
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
-            follow_redirects=True,
+            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -915,13 +915,11 @@ class TeamPagesAdapter(BaseSourceAdapter):
             return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
         rp = RobotFileParser(robots_url)
         try:
-            parsed = urlparse(robots_url)
-            async with self.rate_limiter.acquire(parsed.netloc):
-                response = await self.client.get(
-                    robots_url,
-                    timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                    headers={"User-Agent": "VALeadBot/1.0"},
-                )
+            response = await self._http_get(
+                robots_url,
+                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
+                headers={"User-Agent": "VALeadBot/1.0"},
+            )
             rp.parse(response.text.splitlines())
         except Exception:
             pass
@@ -950,12 +948,10 @@ class TeamPagesAdapter(BaseSourceAdapter):
         pages_crawled = 0
         for path in paths[:max_pages]:
             url = urljoin(base_url, path)
-            parsed = urlparse(url)
             if not await self._allowed(url):
                 continue
             try:
-                async with self.rate_limiter.acquire(parsed.netloc):
-                    response = await self.client.get(url)
+                response = await self._http_get(url)
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" not in content_type:

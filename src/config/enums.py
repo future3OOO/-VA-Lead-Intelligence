@@ -62,14 +62,6 @@ class CrawlStatus(str, Enum):
     RATE_LIMITED = "rate_limited"
 
 
-class SourceType(str, Enum):
-    GREENHOUSE = "greenhouse"
-    LEVER = "lever"
-    ASHBY = "ashby"
-    COMPANY_WEB = "company_web"
-    SEARCH = "search"
-
-
 class IntentLabel(str, Enum):
     BUYER_REQUEST = "buyer_request"
     COMPANY_HIRING = "company_hiring"

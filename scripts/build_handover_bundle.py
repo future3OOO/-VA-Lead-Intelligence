@@ -48,6 +48,7 @@ def check_policies() -> tuple[bool, list[str]]:
     for rel in [
         "config/source-policy/default.yaml",
         "config/jurisdiction-policy/default.yaml",
+        "config/sources/source-policies/default.yaml",
     ]:
         path = REPO_ROOT / rel
         data = yaml.safe_load(path.read_text()) or {}
@@ -155,21 +156,34 @@ def main() -> int:
             return fail(f"Step '{name}' failed (exit {result.returncode})")
         print(f"OK: {name}")
 
-    # Regenerate DOD report (no JUnit yet -> will be marked blocked, but we still produce)
-    dod_result = run(
-        [
-            sys.executable,
-            "scripts/build_dod_report.py",
-            "--requirements",
+    # Regenerate DOD reports from both the core definition-of-done and source-engine DOD.
+    dod_reports = [
+        (
             "quality/definition-of-done.yaml",
-            "--junit",
-            "reports/junit.xml",
-            "--output",
             "quality/traceability/production-v1.md",
-        ]
-    )
-    if dod_result.returncode != 0:
-        print("DOD report flagged blockers (expected until all tests are wired and run).")
+        ),
+        (
+            "quality/requirements/source-engine-dod.yaml",
+            "quality/traceability/source-engine-v1.md",
+        ),
+    ]
+    for req_path, out_path in dod_reports:
+        dod_result = run(
+            [
+                sys.executable,
+                "scripts/build_dod_report.py",
+                "--requirements",
+                req_path,
+                "--junit",
+                "reports/junit.xml",
+                "--output",
+                out_path,
+            ]
+        )
+        if dod_result.returncode != 0:
+            print(dod_result.stdout)
+            print(dod_result.stderr)
+            return fail(f"DOD report {req_path} flagged blockers")
 
     # Validation gates
     clean, dirty_files = check_git_clean()

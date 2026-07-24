@@ -6,7 +6,7 @@
     "config": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {

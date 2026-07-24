@@ -31,7 +31,7 @@
     "extracted_facts": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {

@@ -22,7 +22,7 @@
       "type": "string"
     },
     "value": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Value",
       "type": "object"
     },

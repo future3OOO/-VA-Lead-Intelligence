@@ -31,7 +31,11 @@ def deep_sort(obj: dict[str, Any] | list[Any]) -> dict[str, Any] | list[Any]:
 
 def set_additional_properties_false(schema: dict[str, Any]) -> None:
     if isinstance(schema, dict):
-        if schema.get("type") == "object":
+        if (
+            schema.get("type") == "object"
+            and "properties" in schema
+            and "additionalProperties" not in schema
+        ):
             schema["additionalProperties"] = False
         for value in schema.values():
             set_additional_properties_false(value)

@@ -2851,8 +2851,7 @@
           "hits_total",
           "hits_qualified_total",
           "hits_duplicate_total",
-          "errors_total",
-          "checkpoint"
+          "errors_total"
         ],
         "title": "SourceRun",
         "type": "object"
@@ -2926,8 +2925,7 @@
           "hits_total",
           "hits_qualified_total",
           "hits_duplicate_total",
-          "errors_total",
-          "checkpoint"
+          "errors_total"
         ],
         "title": "SourceRunCreate",
         "type": "object"

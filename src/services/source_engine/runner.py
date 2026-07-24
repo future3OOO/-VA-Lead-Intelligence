@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.enums import IntentLabel, RunStatus
@@ -17,7 +19,7 @@ from db.models.source_run import SourceRun as DBSourceRun
 from services.source_engine.adapters import ADAPTER_MAP
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.classifier import classify_intent
-from services.source_engine.config import SourceConfig, SourceRegistryLoader
+from services.source_engine.config import SourceConfig, SourcePolicy, SourceRegistryLoader
 from services.source_engine.enricher import enrich_contact_routes
 from services.source_engine.resolver import resolve_company
 from services.source_engine.scorer import _to_intent_label, score_source_hit
@@ -28,10 +30,15 @@ class SourceRunner:
 
     def __init__(self, registry: dict[str, SourceConfig] | None = None) -> None:
         self.registry = registry or SourceRegistryLoader().load()
+        self.policy = SourcePolicy.load()
 
     def get_adapter(self, source_key: str) -> BaseSourceAdapter | None:
         cfg = self.registry.get(source_key)
         if not cfg:
+            return None
+        ok, reason = self.policy.validate(cfg)
+        if not ok:
+            print(f"[SourceRunner] policy violation for {source_key}: {reason}", flush=True)
             return None
         adapter_cls = ADAPTER_MAP.get(cfg.source_class)
         if not adapter_cls:
@@ -97,7 +104,7 @@ class SourceRunner:
             finally:
                 await adapter.aclose()
 
-        source_run.status = RunStatus.SUCCEEDED.value
+        source_run.status = RunStatus.FAILED.value if errors else RunStatus.SUCCEEDED.value
         source_run.completed_at = datetime.now(timezone.utc)
         source_run.hits_total = hits_total
         source_run.hits_qualified_total = qualified
@@ -151,34 +158,45 @@ class SourceRunner:
     async def _persist_hit(self, session: AsyncSession, data: dict[str, Any]) -> DBSourceHit | None:
         """Persist the source hit and, if resolvable, the company and contact routes.
 
-        Skips inserts that would violate cross-run idempotency on content_hash.
+        Uses an atomic PostgreSQL upsert so concurrent runs do not race on
+        content_hash idempotency.
         """
         data.pop("source_hit_priority", None)
         data.setdefault("content_hash", "")
         workspace_id: UUID = data["workspace_id"]
-        source_key: str = data["source_key"]
         content_hash: str = data["content_hash"]
 
-        if content_hash:
-            from sqlalchemy import select
+        if not content_hash:
+            company = await resolve_company(session, workspace_id, data)
+            if company:
+                data["company_id"] = company.id
+                routes = data.get("contact_routes_raw", [])
+                if routes:
+                    await enrich_contact_routes(session, company.workspace_id, company.id, routes)
+            record = DBSourceHit(**data)
+            session.add(record)
+            await session.flush()
+            return record
 
-            existing = await session.execute(
-                select(DBSourceHit.id).where(
-                    DBSourceHit.workspace_id == workspace_id,
-                    DBSourceHit.source_key == source_key,
-                    DBSourceHit.content_hash == content_hash,
-                )
-            )
-            if existing.scalar_one_or_none():
-                return None
+        data.setdefault("id", uuid4())
+        stmt = (
+            pg_insert(DBSourceHit)
+            .values(data)
+            .on_conflict_do_nothing(index_elements=["workspace_id", "source_key", "content_hash"])
+            .returning(DBSourceHit.id)
+        )
+        result = await session.execute(stmt)
+        hit_id = result.scalar_one_or_none()
+        if not hit_id:
+            return None
 
         company = await resolve_company(session, workspace_id, data)
         if company:
             data["company_id"] = company.id
+            await session.execute(
+                update(DBSourceHit).where(DBSourceHit.id == hit_id).values(company_id=company.id)
+            )
             routes = data.get("contact_routes_raw", [])
             if routes:
                 await enrich_contact_routes(session, company.workspace_id, company.id, routes)
-        record = DBSourceHit(**data)
-        session.add(record)
-        await session.flush()
-        return record
+        return await session.get(DBSourceHit, hit_id)

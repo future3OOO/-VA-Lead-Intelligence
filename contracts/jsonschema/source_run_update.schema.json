@@ -32,7 +32,7 @@
     "checkpoint": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {
