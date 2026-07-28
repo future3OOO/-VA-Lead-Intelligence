@@ -54,7 +54,7 @@ The export is a CSV with one row per lead:
 - `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin` — named contact when available
 - `source_url` — link back to the OpenStreetMap page or the original posting
 
-Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web crawlers respect `robots.txt`.
+Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. The bounded web crawlers (`team_pages` and `company_web`) fetch and respect `robots.txt`. The finance-directory adapters (`finance_directory` and `nz_finance_advisers`) read only public sitemap/profile pages and do not perform broad web crawling, so `robots.txt` is not applicable.
 
 ## How we use OpenStreetMap
 
@@ -324,7 +324,7 @@ More detail is in `docs/architecture/source-engine-data-flow.md` and `docs/archi
 
 | Source | Access Mode | Data Collected | Rate Limit | API Key | Kill Switch |
 |--------|-------------|----------------|------------|---------|-------------|
-| `manual_seed` | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual.enabled` |
+| `manual_seed` | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual_seed.enabled` |
 | `openstreetmap` | public_api | real ANZ business name, address, phone, email, website, operator, business category | 0.2 req/s | none | `sources.openstreetmap.enabled` |
 | `finance_directory` | scoped_public_web_crawl | Australian finance-professional profile pages: company, website, phone, named principal | 2 req/s | none | `sources.finance_directory.enabled` |
 | `nz_finance_advisers` | scoped_public_web_crawl | NZ FSPR adviser profiles and provider pages: adviser name, FAP, website, phone | 1 req/s | none | `sources.nz_finance_advisers.enabled` |

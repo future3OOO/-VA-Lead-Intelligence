@@ -48,9 +48,9 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
-            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+        self.client = self._new_async_client(
+            httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
+            httpx.Limits(max_connections=50, max_keepalive_connections=20),
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

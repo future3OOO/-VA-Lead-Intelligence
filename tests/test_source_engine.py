@@ -45,6 +45,8 @@ def manual_seed_config() -> SourceConfig:
         owner="test",
         terms_review_status="approved",
         terms_reviewed_at="2026-07-15T00:00:00+00:00",
+        allowed_outputs=["company_lead"],
+        allowed_fields=["company_name", "company_domain", "title", "body"],
     )
 
 

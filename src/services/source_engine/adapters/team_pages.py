@@ -893,9 +893,9 @@ class TeamPagesAdapter(BaseSourceAdapter):
         self._robots_cache: dict[str, RobotFileParser] = {}
         self._counter = 0
         self._counter_lock = asyncio.Lock()
-        self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
-            limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+        self.client = self._new_async_client(
+            httpx.Timeout(10.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
+            httpx.Limits(max_connections=50, max_keepalive_connections=20),
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

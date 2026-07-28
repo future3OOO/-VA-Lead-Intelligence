@@ -17,7 +17,12 @@
     },
     "allowed_fields": {
       "anyOf": [
-        {},
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         {
           "type": "null"
         }
@@ -27,7 +32,12 @@
     },
     "allowed_outputs": {
       "anyOf": [
-        {},
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         {
           "type": "null"
         }

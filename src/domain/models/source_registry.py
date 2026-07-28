@@ -18,8 +18,8 @@ class SourceRegistry(BaseModel):
     owner: str
     terms_review_status: str
     terms_reviewed_at: datetime
-    allowed_outputs: Any = Field(default_factory=list)
-    allowed_fields: Any = Field(default_factory=list)
+    allowed_outputs: list[str] = Field(default_factory=list)
+    allowed_fields: list[str] = Field(default_factory=list)
     raw_retention_days: int
     normalized_retention_days: int
     rate_limit: dict[str, Any] = Field(default_factory=dict)
@@ -40,8 +40,8 @@ class SourceRegistryCreate(BaseModel):
     owner: str
     terms_review_status: str
     terms_reviewed_at: datetime
-    allowed_outputs: Any = Field(default_factory=list)
-    allowed_fields: Any = Field(default_factory=list)
+    allowed_outputs: list[str] = Field(default_factory=list)
+    allowed_fields: list[str] = Field(default_factory=list)
     raw_retention_days: int
     normalized_retention_days: int
     rate_limit: dict[str, Any] = Field(default_factory=dict)
@@ -60,8 +60,8 @@ class SourceRegistryUpdate(BaseModel):
     owner: str | None = None
     terms_review_status: str | None = None
     terms_reviewed_at: datetime | None = None
-    allowed_outputs: Any | None = None
-    allowed_fields: Any | None = None
+    allowed_outputs: list[str] | None = None
+    allowed_fields: list[str] | None = None
     raw_retention_days: int | None = None
     normalized_retention_days: int | None = None
     rate_limit: dict[str, Any] | None = None

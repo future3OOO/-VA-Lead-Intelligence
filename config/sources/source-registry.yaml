@@ -22,7 +22,7 @@ sources:
     rate_limit:
       requests_per_second: 10
       max_concurrency_per_host: 1
-    kill_switch: ""
+    kill_switch: sources.manual_seed.enabled
 
   openstreetmap:
     source_class: openstreetmap

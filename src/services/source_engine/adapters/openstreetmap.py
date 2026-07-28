@@ -199,8 +199,9 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self.client = httpx.AsyncClient(
+        self.client = self._new_async_client(
             timeout=30.0,
+            limits=httpx.Limits(),
             headers={"User-Agent": "VA-LeadIntelligence-OSM/1.0"},
         )
 

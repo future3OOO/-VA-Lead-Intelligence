@@ -80,6 +80,18 @@ def main() -> int:
 
     steps = [
         (
+            "generate models",
+            [sys.executable, "scripts/generate_models.py"],
+        ),
+        (
+            "lint generated code",
+            [sys.executable, "-m", "ruff", "check", "--fix", "src"],
+        ),
+        (
+            "format generated code",
+            [sys.executable, "-m", "ruff", "format", "src"],
+        ),
+        (
             "contracts",
             [
                 sys.executable,

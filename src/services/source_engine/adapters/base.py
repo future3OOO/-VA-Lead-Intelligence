@@ -21,6 +21,108 @@ from services.source_engine.metrics import SourceMetrics
 from services.source_engine.rate_limit import RateLimiter
 
 
+def _is_safe_domain(domain: str) -> bool:
+    """Reject internal, local, and IP-like hosts to prevent SSRF."""
+    if not domain:
+        return False
+    host = domain.split(":")[0].lower().strip()
+    if not host or "." not in host:
+        return False
+    if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}:
+        return False
+    if any(
+        host.endswith(suffix)
+        for suffix in {".local", ".internal", ".localhost", ".svc", ".cluster.local"}
+    ):
+        return False
+    if host in {"metadata.google.internal", "169.254.169.254", "metadata.aws.internal"}:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        pass
+    return re.match(r"^[a-z0-9][-a-z0-9]*(?:\.[-a-z0-9]+)+$", host) is not None
+
+
+async def _resolve_public_ips(host: str) -> list[str]:
+    """Resolve a hostname and return only public IP addresses.
+
+    Raises httpx.HTTPError if the host cannot be resolved or has no public IP.
+    """
+    try:
+        infos = await asyncio.to_thread(
+            socket.getaddrinfo, host, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
+    except socket.gaierror as exc:
+        raise httpx.HTTPError(f"DNS resolution failed for {host}: {exc}") from exc
+    if not infos:
+        raise httpx.HTTPError(f"No DNS records for {host}")
+
+    ips: list[str] = []
+    for _family, _socktype, _proto, _canonname, sockaddr in infos:
+        try:
+            ip = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+        if not ip.is_global:
+            raise httpx.HTTPError(f"Non-public IP resolved for {host}: {ip}")
+        ips.append(str(ip))
+    if not ips:
+        raise httpx.HTTPError(f"No public IP for {host}")
+    return ips
+
+
+async def _is_safe_host(host: str) -> bool:
+    """Return True if the hostname resolves to at least one public IP."""
+    try:
+        await _resolve_public_ips(host)
+    except httpx.HTTPError:
+        return False
+    return True
+
+
+class _SafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
+    """httpx transport that pins each connection to a validated public IP.
+
+    DNS resolution is performed immediately before the TCP connect, the Host
+    header and TLS SNI are preserved from the original hostname, and the
+    connection is made directly to the validated IP. This closes the DNS
+    rebinding window where a hostname resolves to a public address at validation
+    time and a private address at connect time.
+    """
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        original_url = request.url
+        host = original_url.host
+
+        if not _is_safe_domain(host):
+            raise httpx.HTTPError(f"Unsafe host requested: {host}")
+
+        # Resolve and validate public IP(s) immediately before connecting.
+        ips = await _resolve_public_ips(host)
+        ip = ips[0]
+        if isinstance(ipaddress.ip_address(ip), ipaddress.IPv6Address):
+            ip = f"[{ip}]"
+
+        # Build an origin pointing to the validated IP while keeping the Host
+        # header and TLS SNI on the original domain.
+        new_url = original_url.copy_with(host=ip)
+        headers = httpx.Headers(request.headers)
+        headers["host"] = host
+        extensions = dict(request.extensions)
+        extensions.setdefault("sni_hostname", host)
+
+        new_request = httpx.Request(
+            method=request.method,
+            url=new_url,
+            headers=headers,
+            content=request.content,
+            extensions=extensions,
+        )
+        return await super().handle_async_request(new_request)
+
+
 class BaseSourceAdapter(ABC):
     """Abstract base for a compliant source adapter."""
 
@@ -102,48 +204,18 @@ class BaseSourceAdapter(ABC):
     @staticmethod
     def _is_safe_domain(domain: str) -> bool:
         """Reject internal, local, and IP-like hosts to prevent SSRF."""
-        if not domain:
-            return False
-        host = domain.split(":")[0].lower().strip()
-        if not host or "." not in host:
-            return False
-        if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}:
-            return False
-        if any(
-            host.endswith(suffix)
-            for suffix in {".local", ".internal", ".localhost", ".svc", ".cluster.local"}
-        ):
-            return False
-        if host in {"metadata.google.internal", "169.254.169.254", "metadata.aws.internal"}:
-            return False
-        try:
-            ipaddress.ip_address(host)
-            return False
-        except ValueError:
-            pass
-        return re.match(r"^[a-z0-9][-a-z0-9]*(?:\.[-a-z0-9]+)+$", host) is not None
+        return _is_safe_domain(domain)
 
     async def _is_safe_host(self, host: str) -> bool:
         """Resolve a hostname and reject any non-public IP addresses."""
-        try:
-            infos = await asyncio.to_thread(
-                socket.getaddrinfo, host, None, socket.AF_UNSPEC, socket.SOCK_STREAM
-            )
-        except socket.gaierror:
-            return False
-        if not infos:
-            return False
-        for _family, _socktype, _proto, _canonname, sockaddr in infos:
-            try:
-                ip = ipaddress.ip_address(sockaddr[0])
-            except ValueError:
-                continue
-            if not ip.is_global:
-                return False
-        return True
+        return await _is_safe_host(host)
 
     async def _is_safe_url(self, url: str) -> bool:
-        """Validate scheme, host syntax, and DNS resolution for an HTTP(S) URL."""
+        """Validate scheme and host syntax for an HTTP(S) URL.
+
+        The _SafeAsyncHTTPTransport performs the actual DNS resolution and IP
+        validation at connect time, so DNS rebinding cannot bypass this gate.
+        """
         try:
             parsed = urlparse(url)
         except Exception:
@@ -153,17 +225,27 @@ class BaseSourceAdapter(ABC):
         host = parsed.hostname
         if not host:
             return False
-        if not self._is_safe_domain(host):
-            return False
-        return await self._is_safe_host(host)
+        return _is_safe_domain(host)
 
     def _safe_domain(self, raw: str) -> str | None:
         """Return a sanitized public domain or None."""
         parsed = urlparse(raw)
         host = (parsed.netloc or raw).split(":")[0].lower().strip()
-        if not self._is_safe_domain(host):
+        if not _is_safe_domain(host):
             return None
         return host
+
+    def _new_async_client(
+        self,
+        timeout: httpx.Timeout | float,
+        limits: httpx.Limits,
+        headers: dict[str, str],
+        retries: int = 0,
+    ) -> httpx.AsyncClient:
+        """Create an httpx client whose transport pins DNS to a public IP."""
+        transport = _SafeAsyncHTTPTransport(limits=limits, retries=retries)
+        httpx_timeout = timeout if isinstance(timeout, httpx.Timeout) else httpx.Timeout(timeout)
+        return httpx.AsyncClient(timeout=httpx_timeout, transport=transport, headers=headers)
 
     async def _http_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Make an HTTP request with per-host rate limiting and manual redirect validation."""
@@ -201,7 +283,7 @@ class BaseSourceAdapter(ABC):
 
     async def aclose(self) -> None:
         """Close the adapter's HTTP client and release resources."""
-        client = getattr(self, "client", None)
+        client = self.client
         if client is not None:
             await client.aclose()
 

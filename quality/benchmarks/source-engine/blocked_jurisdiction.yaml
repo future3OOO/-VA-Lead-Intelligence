@@ -5,12 +5,11 @@ source_hits:
     body_excerpt: "Hiring a remote assistant to manage calendar and customer support."
     company_name_raw: "Global Consultants"
     company_domain_raw: "global-consultants.example.com"
-    location_raw: "EU-DE"
+    location_raw: "CN"
     contact_routes_raw:
       - type: generic_email
         value: jobs@global-consultants.example.com
     intent_label: buyer_request
-    jurisdiction_action: block
 expected:
   allowed: false
   qualified: false

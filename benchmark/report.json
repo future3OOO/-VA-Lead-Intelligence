@@ -46,7 +46,7 @@
       },
       "actual": {
         "allowed": true,
-        "qualified": false,
+        "qualified": true,
         "duplicates": 1
       },
       "passed": true

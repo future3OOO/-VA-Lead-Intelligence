@@ -23,6 +23,7 @@ class SourcePolicy:
     max_raw_retention_days: int
     max_normalized_retention_days: int
     jurisdiction_requirements: list[str]
+    contact_route_after_qualification_only: bool
 
     @classmethod
     def load(cls, path: Path = DEFAULT_SOURCE_POLICY) -> SourcePolicy:
@@ -34,6 +35,9 @@ class SourcePolicy:
             max_raw_retention_days=int(retention.get("raw_snapshot_days", 90)),
             max_normalized_retention_days=int(retention.get("normalized_record_days", 730)),
             jurisdiction_requirements=list(data.get("jurisdiction_requirements", [])),
+            contact_route_after_qualification_only=bool(
+                retention.get("contact_route_after_qualification_only", True)
+            ),
         )
 
     def validate(self, config: SourceConfig) -> tuple[bool, str]:

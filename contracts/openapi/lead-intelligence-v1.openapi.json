@@ -2449,10 +2449,18 @@
             "type": "string"
           },
           "allowed_fields": {
-            "title": "Allowed Fields"
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Fields",
+            "type": "array"
           },
           "allowed_outputs": {
-            "title": "Allowed Outputs"
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Outputs",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -2542,10 +2550,18 @@
             "type": "string"
           },
           "allowed_fields": {
-            "title": "Allowed Fields"
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Fields",
+            "type": "array"
           },
           "allowed_outputs": {
-            "title": "Allowed Outputs"
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Outputs",
+            "type": "array"
           },
           "kill_switch": {
             "title": "Kill Switch",
@@ -2634,7 +2650,12 @@
           },
           "allowed_fields": {
             "anyOf": [
-              {},
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               {
                 "type": "null"
               }
@@ -2643,7 +2664,12 @@
           },
           "allowed_outputs": {
             "anyOf": [
-              {},
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               {
                 "type": "null"
               }

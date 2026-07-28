@@ -8,10 +8,18 @@
       "type": "string"
     },
     "allowed_fields": {
-      "title": "Allowed Fields"
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Fields",
+      "type": "array"
     },
     "allowed_outputs": {
-      "title": "Allowed Outputs"
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Outputs",
+      "type": "array"
     },
     "created_at": {
       "format": "date-time",

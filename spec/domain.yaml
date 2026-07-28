@@ -1053,10 +1053,10 @@ entities:
       - name: terms_reviewed_at
         type: datetime
       - name: allowed_outputs
-        type: json_list
+        type: list_str
         default: []
       - name: allowed_fields
-        type: json_list
+        type: list_str
         default: []
       - name: raw_retention_days
         type: int

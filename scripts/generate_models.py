@@ -365,10 +365,15 @@ def generate_sqlalchemy_model(name: str, class_name: str, spec: dict[str, Any]) 
         needed.add("func")
     if has_fk:
         needed.add("ForeignKey")
-    needs_datetime = any(t in ("datetime", "date") for t in used_types) or has_auto
+    needs_date = "date" in used_types
+    needs_datetime = any(t in ("datetime",) for t in used_types) or has_auto
     lines = ["import uuid"]
-    if needs_datetime:
+    if needs_date and needs_datetime:
         lines.append("from datetime import date, datetime")
+    elif needs_date:
+        lines.append("from datetime import date")
+    elif needs_datetime:
+        lines.append("from datetime import datetime")
     if has_json:
         lines.append("from typing import Any")
     sqlalchemy_imports = [c for c in sorted(needed) if c]

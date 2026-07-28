@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
@@ -42,41 +41,17 @@ def run_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _is_blocked_source_hit(hit: dict[str, Any]) -> bool:
-    """Determine whether a source hit is blocked by jurisdiction or fixture directive."""
-    if hit.get("jurisdiction_action") == "block":
-        return True
-    location = hit.get("location_raw", "")
-    if not location:
-        return False
-    from core.policy_engine import evaluate_jurisdiction
-
-    # Accept location formats like "Sydney, AU" or "EU-DE".
-    country_code = location.split("-")[-1].strip().upper()
-    if not country_code:
-        return False
-    return not evaluate_jurisdiction(country_code)["allowed"]
-
-
-def _content_hash(hit: dict[str, Any]) -> str:
-    explicit = hit.get("content_hash", "")
-    if explicit:
-        return str(explicit)
-    payload = {
-        "title": str(hit.get("title", "")).strip().lower(),
-        "body": str(hit.get("body_excerpt", "")).strip().lower(),
-        "company": str(hit.get("company_name_raw", "")).strip().lower(),
-        "domain": str(hit.get("company_domain_raw", "")).strip().lower(),
-    }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-
-
 def run_source_engine_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
-    """Evaluate a source-engine benchmark fixture."""
-    from config.enums import IntentLabel
-    from services.source_engine.resolver import EXCLUDED_INTENTS
-    from services.source_engine.scorer import score_source_hit
+    """Evaluate a source-engine benchmark fixture using production runtime logic.
 
+    Reuses SourceRunner._process_hit for classification/scoring and
+    SourceRunner._is_qualified, and applies the same jurisdiction gate the
+    runner uses in production. Deduplication is driven by the computed
+    content_hash.
+    """
+    from services.source_engine.runner import SourceRunner, _jurisdiction_allowed
+
+    runner = SourceRunner()
     hits = fixture.get("source_hits", [])
     expected = fixture.get("expected", {})
     seen_hashes: set[tuple[str | None, str]] = set()
@@ -84,20 +59,19 @@ def run_source_engine_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
     allowed_hits: list[bool] = []
     qualified_hits: list[bool] = []
 
-    for hit in hits:
-        blocked = _is_blocked_source_hit(hit)
-        allowed_hits.append(not blocked)
-        score = score_source_hit(hit)
-        intent = str(hit.get("intent_label", "")).strip()
-        intent_label = IntentLabel(intent) if intent else IntentLabel.UNRESOLVED
-        qualified = not blocked and intent_label.value not in EXCLUDED_INTENTS and score >= 0.5
-        qualified_hits.append(qualified)
-
-        content_hash = _content_hash(hit)
+    for raw in hits:
+        hit = runner._process_hit(raw)
+        content_hash = hit.get("content_hash", "")
         key = (hit.get("source_key"), content_hash)
         if key in seen_hashes:
             duplicates += 1
+            continue
         seen_hashes.add(key)
+
+        allowed = _jurisdiction_allowed(hit.get("location_raw"))
+        allowed_hits.append(allowed)
+        qualified = allowed and runner._is_qualified(hit, 0.5)
+        qualified_hits.append(qualified)
 
     actual_allowed = all(allowed_hits) if allowed_hits else False
     actual_qualified = any(qualified_hits) if qualified_hits else False
