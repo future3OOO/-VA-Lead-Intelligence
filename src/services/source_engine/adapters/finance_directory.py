@@ -231,10 +231,16 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         return ""
 
     async def _fetch_profile(self, url: str) -> dict[str, Any] | None:
+        if not await self._robots_allowed(url):
+            return None
         try:
             response = await self._http_get(url)
             response.raise_for_status()
+        except httpx.HTTPStatusError:
+            # 4xx/5xx on an individual profile page is a stale URL, not a source failure.
+            return None
         except httpx.HTTPError:
+            self.metrics.record_error("fetch")
             return None
         soup = BeautifulSoup(response.text, "html.parser")
         data = self._extract_jsonld(soup)
@@ -289,11 +295,15 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             query.get("max_profile_pages")
             or self.config.adapter_config.get("max_profile_pages", 1200)
         )
+        if not await self._robots_allowed(self._SITEMAP_URL):
+            self.metrics.record_error("fetch")
+            raise httpx.HTTPError("finance_directory robots.txt disallows the sitemap")
         try:
             sitemap_response = await self._http_get(self._SITEMAP_URL, timeout=30.0)
             sitemap_response.raise_for_status()
-        except httpx.HTTPError:
-            return []
+        except httpx.HTTPError as exc:
+            self.metrics.record_error("fetch")
+            raise httpx.HTTPError(f"finance_directory could not fetch sitemap: {exc}") from exc
         root = ET.fromstring(sitemap_response.content)
         ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
         urls: list[str] = []

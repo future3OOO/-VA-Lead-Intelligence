@@ -44,37 +44,21 @@ def run_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
 def run_source_engine_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
     """Evaluate a source-engine benchmark fixture using production runtime logic.
 
-    Reuses SourceRunner._process_hit for classification/scoring and
-    SourceRunner._is_qualified, and applies the same jurisdiction gate the
-    runner uses in production. Deduplication is driven by the computed
-    content_hash.
+    Delegates to SourceRunner.evaluate_fixture so classification, scoring,
+    jurisdiction gating, source-policy allowlists, contact-route retention and
+    content_hash deduplication all use the same code path as a real run.
     """
-    from services.source_engine.runner import SourceRunner, _jurisdiction_allowed
+    from services.source_engine.runner import SourceRunner
 
     runner = SourceRunner()
-    hits = fixture.get("source_hits", [])
     expected = fixture.get("expected", {})
-    seen_hashes: set[tuple[str | None, str]] = set()
-    duplicates = 0
-    allowed_hits: list[bool] = []
-    qualified_hits: list[bool] = []
+    result = runner.evaluate_fixture(fixture.get("source_hits", []))
 
-    for raw in hits:
-        hit = runner._process_hit(raw)
-        content_hash = hit.get("content_hash", "")
-        key = (hit.get("source_key"), content_hash)
-        if key in seen_hashes:
-            duplicates += 1
-            continue
-        seen_hashes.add(key)
-
-        allowed = _jurisdiction_allowed(hit.get("location_raw"))
-        allowed_hits.append(allowed)
-        qualified = allowed and runner._is_qualified(hit, 0.5)
-        qualified_hits.append(qualified)
-
+    allowed_hits = result["allowed"]
+    qualified_hits = result["qualified"]
     actual_allowed = all(allowed_hits) if allowed_hits else False
     actual_qualified = any(qualified_hits) if qualified_hits else False
+    duplicates = result["duplicates"]
 
     passed = True
     if "allowed" in expected and actual_allowed != expected["allowed"]:

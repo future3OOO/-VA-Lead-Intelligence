@@ -133,11 +133,15 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
 
     async def _discover_profile_urls(self, max_pages: int) -> list[str]:
         urls: list[str] = []
+        last_error: httpx.HTTPError | None = None
         for page in range(1, max_pages + 1):
             list_url = f"{self._BASE_URL}/advisers?page={page}"
+            if not await self._robots_allowed(list_url):
+                continue
             try:
                 html = await self._get(list_url)
-            except httpx.HTTPError:
+            except httpx.HTTPError as exc:
+                last_error = exc
                 continue
             seen_hrefs: set[str] = set()
             item_list = self._extract_jsonld_by_type(html, "ItemList")
@@ -167,14 +171,21 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
                     href = urljoin(self._BASE_URL, href)
                 seen_hrefs.add(href)
                 urls.append(href)
+        if not urls and last_error:
+            raise last_error
         return urls
 
     async def _fetch_provider(self, provider_url: str) -> dict[str, Any]:
         if provider_url in self._provider_cache:
             return self._provider_cache[provider_url]
+        if not await self._robots_allowed(provider_url):
+            return {}
         try:
             html = await self._get(provider_url)
+        except httpx.HTTPStatusError:
+            return {}
         except httpx.HTTPError:
+            self.metrics.record_error("fetch")
             return {}
         data = self._extract_jsonld_by_type(
             html, "FinancialService"
@@ -191,9 +202,14 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         return result
 
     async def _fetch_profile(self, profile_url: str) -> dict[str, Any] | None:
+        if not await self._robots_allowed(profile_url):
+            return None
         try:
             html = await self._get(profile_url)
+        except httpx.HTTPStatusError:
+            return None
         except httpx.HTTPError:
+            self.metrics.record_error("fetch")
             return None
         person = self._extract_jsonld_by_type(html, "Person")
         if not person:

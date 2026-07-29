@@ -12,11 +12,13 @@ sources:
     allowed_outputs:
       - company_lead
       - demand_signal
+      - contact_route
     allowed_fields:
       - company_name
       - company_domain
       - title
       - body
+      - contact_routes
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:

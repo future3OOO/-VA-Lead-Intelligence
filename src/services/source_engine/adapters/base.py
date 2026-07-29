@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
 from uuid import UUID
 
 import httpx
@@ -132,6 +133,7 @@ class BaseSourceAdapter(ABC):
         self.checkpoint = CheckpointStore(source_config.source_key)
         self.metrics = SourceMetrics(source_config.source_key)
         self.client: httpx.AsyncClient | None = None
+        self._robots_cache: dict[str, RobotFileParser] = {}
 
     @property
     @abstractmethod
@@ -235,6 +237,27 @@ class BaseSourceAdapter(ABC):
             return None
         return host
 
+    async def _robots_allowed(self, url: str, user_agent: str = "VALeadBot/1.0") -> bool:
+        """Respect robots.txt for any public HTTP URL. Unknown/failed robots.txt is allowed."""
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+        if robots_url in self._robots_cache:
+            return self._robots_cache[robots_url].can_fetch(user_agent, url)
+        rp = RobotFileParser(robots_url)
+        try:
+            response = await self._http_get(
+                robots_url,
+                timeout=5.0,
+                headers={"User-Agent": user_agent},
+            )
+            rp.parse(response.text.splitlines())
+        except Exception:
+            pass
+        self._robots_cache[robots_url] = rp
+        return rp.can_fetch(user_agent, url)
+
     def _new_async_client(
         self,
         timeout: httpx.Timeout | float,
@@ -242,8 +265,18 @@ class BaseSourceAdapter(ABC):
         headers: dict[str, str],
         retries: int = 0,
     ) -> httpx.AsyncClient:
-        """Create an httpx client whose transport pins DNS to a public IP."""
-        transport = _SafeAsyncHTTPTransport(limits=limits, retries=retries)
+        """Create an httpx client whose transport pins DNS to a public IP.
+
+        Keep-alive is disabled so connections are never reused across different
+        original hostnames that happen to resolve to the same IP, closing the
+        SNI/connection-pooling host-isolation gap.
+        """
+        safe_limits = httpx.Limits(
+            max_connections=limits.max_connections,
+            max_keepalive_connections=0,
+            keepalive_expiry=0.0,
+        )
+        transport = _SafeAsyncHTTPTransport(limits=safe_limits, retries=retries)
         httpx_timeout = timeout if isinstance(timeout, httpx.Timeout) else httpx.Timeout(timeout)
         return httpx.AsyncClient(timeout=httpx_timeout, transport=transport, headers=headers)
 
@@ -254,26 +287,23 @@ class BaseSourceAdapter(ABC):
         kwargs.pop("follow_redirects", None)
         if "timeout" not in kwargs:
             kwargs["timeout"] = 30.0
-        if not await self._is_safe_url(url):
-            raise httpx.HTTPError(f"Unsafe URL requested: {url}")
-        parsed = urlparse(url)
-        host = parsed.hostname or parsed.netloc
         client = self.client
-        async with self.rate_limiter.acquire(host):
-            for _ in range(10):
+        for _ in range(10):
+            if not await self._is_safe_url(url):
+                raise httpx.HTTPError(f"Unsafe URL requested: {url}")
+            parsed = urlparse(url)
+            host = parsed.hostname or parsed.netloc
+            async with self.rate_limiter.acquire(host):
                 response = await client.request(method, url, follow_redirects=False, **kwargs)
-                if response.status_code not in {301, 302, 303, 307, 308}:
-                    return response
-                location = response.headers.get("location")
-                if not location:
-                    return response
-                next_url = str(response.url.join(location))
-                if not await self._is_safe_url(next_url):
-                    raise httpx.HTTPError(f"Unsafe redirect to {next_url}")
-                url = next_url
-                if response.status_code in {301, 302, 303}:
-                    method = "GET"
-            raise httpx.TooManyRedirects("Maximum redirect count exceeded")
+            if response.status_code not in {301, 302, 303, 307, 308}:
+                return response
+            location = response.headers.get("location")
+            if not location:
+                return response
+            url = str(response.url.join(location))
+            if response.status_code in {301, 302, 303}:
+                method = "GET"
+        raise httpx.TooManyRedirects("Maximum redirect count exceeded")
 
     async def _http_get(self, url: str, **kwargs: Any) -> httpx.Response:
         return await self._http_request("GET", url, **kwargs)
@@ -301,5 +331,9 @@ class BaseSourceAdapter(ABC):
                 normalized.append(hit)
             except Exception:
                 self.metrics.record_error("normalize")
+        if not normalized and self.metrics.errors:
+            raise httpx.HTTPError(
+                f"{self.source_key} produced no usable records ({dict(self.metrics.errors)} errors)"
+            )
         self.checkpoint.save(workspace_id, {"observed_at": datetime.now(timezone.utc).isoformat()})
         return normalized

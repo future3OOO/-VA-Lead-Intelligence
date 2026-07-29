@@ -19,4 +19,4 @@ The following are never used by this source engine:
 - Bulk stealth collection
 - Robots.txt or paywall evasion
 
-The bounded web crawlers (`team_pages` and `company_web`) fetch and respect `robots.txt`. The directory adapters (`finance_directory` and `nz_finance_advisers`) read only public sitemap/profile pages and do not perform broad web crawling, so `robots.txt` is not applicable. All sources respect rate limits.
+All web-crawling sources (`team_pages`, `company_web`, `finance_directory`, and `nz_finance_advisers`) fetch and respect `robots.txt`. `openstreetmap` uses the public Overpass API and does not touch `robots.txt`. All sources respect rate limits.

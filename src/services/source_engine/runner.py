@@ -62,7 +62,7 @@ _ALLOWED_FIELD_MAP: dict[str, str] = {
     "access_policy_version": "access_policy_version",
 }
 
-# DB columns that must never be stripped by allowed_fields filtering.
+# DB identity/audit columns that must always survive allowed_fields filtering.
 _REQUIRED_DB_FIELDS = {
     "id",
     "workspace_id",
@@ -72,22 +72,22 @@ _REQUIRED_DB_FIELDS = {
     "source_url",
     "observed_at",
     "published_at",
-    "title",
-    "body_excerpt",
-    "company_name_raw",
-    "company_domain_raw",
-    "location_raw",
-    "workplace_type",
-    "intent_label",
-    "contact_routes_raw",
-    "raw_snapshot_uri",
     "content_hash",
     "access_policy_version",
 }
 
-# Sources whose primary purpose is contact extraction may persist contact routes
-# even when the scraped page does not itself qualify as a buyer-intent lead.
-_ENRICHMENT_SOURCES = {"team_pages", "company_web"}
+# Default values for semantic columns that a source may legitimately omit.
+_DEFAULT_SOURCE_HIT_FIELDS: dict[str, Any] = {
+    "title": "",
+    "body_excerpt": "",
+    "company_name_raw": "",
+    "company_domain_raw": "",
+    "location_raw": "",
+    "workplace_type": "",
+    "intent_label": "unresolved",
+    "contact_routes_raw": [],
+    "raw_snapshot_uri": "",
+}
 
 
 def _country_code_from_location(location: str) -> str | None:
@@ -178,7 +178,7 @@ class SourceRunner:
         )
         session.add(source_run)
 
-        seen_hashes: set[str] = set()
+        seen_hashes: set[tuple[str, str]] = set()
         hits_total = 0
         qualified = 0
         duplicates = 0
@@ -211,13 +211,15 @@ class SourceRunner:
                     if not _jurisdiction_allowed(scored.get("location_raw")):
                         continue
 
+                    source_key = scored.get("source_key", cfg.source_key)
                     content_hash = scored.get("content_hash", "")
-                    if content_hash and content_hash in seen_hashes:
+                    hash_key = (source_key, content_hash)
+                    if content_hash and hash_key in seen_hashes:
                         duplicates += 1
                         continue
-                    seen_hashes.add(content_hash)
+                    seen_hashes.add(hash_key)
 
-                    is_qualified = self._is_qualified(scored, score_threshold)
+                    is_qualified = self._is_qualified(scored, score_threshold, cfg)
                     if is_qualified:
                         qualified += 1
 
@@ -236,8 +238,18 @@ class SourceRunner:
         await session.commit()
         return source_run
 
-    def _is_qualified(self, hit: dict[str, Any], threshold: float) -> bool:
-        """A hit is qualified if it scores above threshold and has buyer-side intent."""
+    def _is_qualified(self, hit: dict[str, Any], threshold: float, cfg: SourceConfig) -> bool:
+        """A hit is qualified if it scores above threshold and has buyer-side intent.
+
+        Contact-extraction sources (team_pages, company_web) are treated as
+        qualified when they successfully resolve a company and extract contact
+        routes; the intent signal is implicit in the published contact page.
+        """
+        if cfg.source_class in {"team_pages", "company_web"}:
+            return bool(
+                hit.get("contact_routes_raw")
+                and (hit.get("company_domain_raw") or hit.get("company_name_raw"))
+            )
         if hit.get("source_hit_priority", 0) < threshold:
             return False
         label = _to_intent_label(hit.get("intent_label"))
@@ -291,15 +303,65 @@ class SourceRunner:
 
     @staticmethod
     def _filter_hit_fields(data: dict[str, Any], cfg: SourceConfig) -> dict[str, Any]:
-        """Drop source-hit fields that are not in the source's allowed_fields list."""
+        """Drop source-hit fields that are not in the source's allowed_fields list.
+
+        Non-allowed semantic fields are replaced with safe defaults so the DB model
+        is still satisfied without persisting data the source policy does not
+        authorise.
+        """
         if not cfg.allowed_fields:
             return data
         allowed = SourceRunner._allowed_model_fields(cfg.allowed_fields)
         allowed |= _REQUIRED_DB_FIELDS
         # contact_routes require both the output and the field to be allowed.
-        if "contact_route" not in cfg.allowed_outputs or "contact_routes" not in allowed:
+        if "contact_route" not in cfg.allowed_outputs or "contact_routes_raw" not in allowed:
             allowed.discard("contact_routes_raw")
-        return {k: v for k, v in data.items() if k in allowed}
+        filtered = {k: v for k, v in data.items() if k in allowed}
+        for key, default in _DEFAULT_SOURCE_HIT_FIELDS.items():
+            filtered.setdefault(key, default)
+        return filtered
+
+    def evaluate_fixture(self, source_hits: list[dict[str, Any]]) -> dict[str, Any]:
+        """Run a benchmark fixture through the same pipeline as a real source run.
+
+        Uses production classification, scoring, jurisdiction gating, source-policy
+        allowlists, and contact-route retention. Deduplication is keyed by the
+        same content_hash used in SourceRunner.run.
+        """
+        seen_hashes: set[tuple[str, str]] = set()
+        duplicates = 0
+        allowed_hits: list[bool] = []
+        qualified_hits: list[bool] = []
+
+        for raw in source_hits:
+            source_key = raw.get("source_key", "")
+            cfg = self.registry.get(source_key)
+            if not cfg:
+                continue
+            hit = self._process_hit(raw)
+            allowed = _jurisdiction_allowed(hit.get("location_raw"))
+            allowed_hits.append(allowed)
+            if not allowed:
+                continue
+
+            content_hash = hit.get("content_hash", "")
+            hash_key = (source_key, content_hash)
+            if content_hash and hash_key in seen_hashes:
+                duplicates += 1
+                continue
+            seen_hashes.add(hash_key)
+
+            is_qualified = self._is_qualified(hit, 0.5, cfg)
+            qualified_hits.append(is_qualified)
+            hit = self._filter_hit_fields(hit, cfg)
+            if self.policy.contact_route_after_qualification_only and not is_qualified:
+                hit["contact_routes_raw"] = []
+
+        return {
+            "allowed": allowed_hits,
+            "qualified": qualified_hits,
+            "duplicates": duplicates,
+        }
 
     async def _persist_hit(
         self,
@@ -325,9 +387,7 @@ class SourceRunner:
 
         can_resolve_company = "company_lead" in cfg.allowed_outputs
         can_enrich_contacts = "contact_route" in cfg.allowed_outputs and (
-            is_qualified
-            or not self.policy.contact_route_after_qualification_only
-            or cfg.source_class in _ENRICHMENT_SOURCES
+            is_qualified or not self.policy.contact_route_after_qualification_only
         )
 
         async def _resolve_and_enrich(company_id: UUID) -> None:

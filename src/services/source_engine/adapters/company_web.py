@@ -14,7 +14,6 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
 from uuid import UUID
 
 import httpx
@@ -49,7 +48,6 @@ class CompanyWebAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self._robots_cache: dict[str, RobotFileParser] = {}
         self._counter = 0
         self._counter_lock = asyncio.Lock()
         self.client = self._new_async_client(
@@ -62,24 +60,6 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 )
             },
         )
-
-    async def _allowed(self, url: str) -> bool:
-        parsed = urlparse(url)
-        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-        if robots_url in self._robots_cache:
-            return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
-        rp = RobotFileParser(robots_url)
-        try:
-            response = await self._http_get(
-                robots_url,
-                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
-            rp.parse(response.text.splitlines())
-        except Exception:
-            pass
-        self._robots_cache[robots_url] = rp
-        return rp.can_fetch("VALeadBot/1.0", url)
 
     def _priority_score(self, path: str) -> int:
         lower = path.lower()
@@ -97,7 +77,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
 
     async def _sitemap_urls(self, domain: str) -> list[str]:
         sitemap_url = f"https://{domain}/sitemap.xml"
-        if not await self._allowed(sitemap_url):
+        if not await self._robots_allowed(sitemap_url):
             return []
         try:
             response = await self._http_get(sitemap_url)
@@ -116,7 +96,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
             return []
 
     async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup] | None:
-        if not await self._allowed(url):
+        if not await self._robots_allowed(url):
             return None
         try:
             response = await self._http_get(url)
@@ -125,7 +105,12 @@ class CompanyWebAdapter(BaseSourceAdapter):
             if content_type and "text/html" not in content_type:
                 return None
             return str(response.url), BeautifulSoup(response.text, "html.parser")
-        except httpx.HTTPError:
+        except httpx.HTTPStatusError:
+            # 4xx/5xx on a discovered path is expected; keep crawling.
+            return None
+        except httpx.HTTPError as exc:
+            self.metrics.record_error("fetch")
+            print(f"[company_web] network error {url}: {exc}", flush=True)
             return None
         except Exception:
             return None

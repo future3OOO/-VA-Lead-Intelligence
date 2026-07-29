@@ -33,8 +33,8 @@ Each business type is mapped to the kind of remote admin work that business usua
 
 Every lead gets a **score out of 100** and a rank:
 
-- **High (75+)** — strong VA fit: the business type creates a clear admin burden, the role can be done remotely, and we have a contact route.
-- **Medium (55–74)** — good sector but the available signal is weaker.
+- **High (75+ and has a contact route)** — strong VA fit: the business type creates a clear admin burden, the role can be done remotely, and we have a contact route.
+- **Medium (55–74, or 75+ without a contact route)** — good sector but the available signal is weaker, or the score is high but no contact route is available yet.
 - **Low (<55)** — weaker fit or a senior professional role that the firm is hiring for directly.
 
 Senior professional job posts (for example "Senior Accountant" or "Lead Lawyer") are **excluded** from the top results because those are not VA roles.
@@ -54,7 +54,7 @@ The export is a CSV with one row per lead:
 - `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin` — named contact when available
 - `source_url` — link back to the OpenStreetMap page or the original posting
 
-Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. The bounded web crawlers (`team_pages` and `company_web`) fetch and respect `robots.txt`. The finance-directory adapters (`finance_directory` and `nz_finance_advisers`) read only public sitemap/profile pages and do not perform broad web crawling, so `robots.txt` is not applicable.
+Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web-crawling sources (`team_pages`, `company_web`, `finance_directory`, and `nz_finance_advisers`) fetch and respect `robots.txt`. `openstreetmap` uses the public Overpass API and does not touch `robots.txt`.
 
 ## How we use OpenStreetMap
 

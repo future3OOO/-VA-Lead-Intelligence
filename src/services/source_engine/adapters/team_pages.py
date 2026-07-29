@@ -8,8 +8,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
-from urllib.parse import urljoin, urlparse
-from urllib.robotparser import RobotFileParser
+from urllib.parse import urljoin
 from uuid import UUID
 
 import httpx
@@ -890,7 +889,6 @@ class TeamPagesAdapter(BaseSourceAdapter):
 
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
-        self._robots_cache: dict[str, RobotFileParser] = {}
         self._counter = 0
         self._counter_lock = asyncio.Lock()
         self.client = self._new_async_client(
@@ -907,24 +905,6 @@ class TeamPagesAdapter(BaseSourceAdapter):
     @property
     def source_key(self) -> str:
         return "team_pages"
-
-    async def _allowed(self, url: str) -> bool:
-        parsed = urlparse(url)
-        robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-        if robots_url in self._robots_cache:
-            return self._robots_cache[robots_url].can_fetch("VALeadBot/1.0", url)
-        rp = RobotFileParser(robots_url)
-        try:
-            response = await self._http_get(
-                robots_url,
-                timeout=httpx.Timeout(5.0, connect=5.0, read=5.0, write=5.0, pool=5.0),
-                headers={"User-Agent": "VALeadBot/1.0"},
-            )
-            rp.parse(response.text.splitlines())
-        except Exception:
-            pass
-        self._robots_cache[robots_url] = rp
-        return rp.can_fetch("VALeadBot/1.0", url)
 
     async def _process_domain(
         self,
@@ -948,7 +928,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
         pages_crawled = 0
         for path in paths[:max_pages]:
             url = urljoin(base_url, path)
-            if not await self._allowed(url):
+            if not await self._robots_allowed(url):
                 continue
             try:
                 response = await self._http_get(url)
@@ -970,7 +950,12 @@ class TeamPagesAdapter(BaseSourceAdapter):
                             continue
                         seen_route_keys.add(key)
                         all_routes.append(route)
-            except httpx.HTTPError:
+            except httpx.HTTPStatusError:
+                # 4xx/5xx on a guessed path is expected; keep trying other paths.
+                continue
+            except httpx.HTTPError as exc:
+                self.metrics.record_error("fetch")
+                print(f"[team_pages] network error {url}: {exc}", flush=True)
                 continue
             except Exception as exc:  # noqa: BLE001
                 print(f"[team_pages] error {url}: {exc}", flush=True)
