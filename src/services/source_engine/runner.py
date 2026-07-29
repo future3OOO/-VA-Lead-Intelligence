@@ -85,6 +85,10 @@ _REQUIRED_DB_FIELDS = {
     "access_policy_version",
 }
 
+# Sources whose primary purpose is contact extraction may persist contact routes
+# even when the scraped page does not itself qualify as a buyer-intent lead.
+_ENRICHMENT_SOURCES = {"team_pages", "company_web"}
+
 
 def _country_code_from_location(location: str) -> str | None:
     """Infer an ISO-style country code from a free-text location string."""
@@ -321,7 +325,9 @@ class SourceRunner:
 
         can_resolve_company = "company_lead" in cfg.allowed_outputs
         can_enrich_contacts = "contact_route" in cfg.allowed_outputs and (
-            is_qualified or not self.policy.contact_route_after_qualification_only
+            is_qualified
+            or not self.policy.contact_route_after_qualification_only
+            or cfg.source_class in _ENRICHMENT_SOURCES
         )
 
         async def _resolve_and_enrich(company_id: UUID) -> None:
