@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,10 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPO_ROOT / "config"
+
+# Allow importing the source-engine config module for the canonical token list.
+sys.path.insert(0, str(REPO_ROOT / "src"))
+from services.source_engine.config import ALLOWED_FIELD_MAP  # noqa: E402
 
 
 def validate_yaml(path: Path) -> dict[str, Any]:
@@ -73,6 +78,9 @@ def validate_source_registry(data: dict[str, Any], path: Path) -> list[str]:
         for field in ("source_class", "access_mode", "status", "owner", "terms_review_status"):
             if not cfg.get(field):
                 errors.append(f"{path} source '{key}' missing {field}")
+        for token in cfg.get("allowed_fields", []):
+            if token not in ALLOWED_FIELD_MAP:
+                errors.append(f"{path} source '{key}' has unknown allowed_fields token '{token}'")
     return errors
 
 

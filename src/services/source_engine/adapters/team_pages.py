@@ -173,6 +173,15 @@ _GENERIC_NAME_WORDS = {
     "twitter",
     "tiktok",
     "youtube",
+    "get",
+    "in",
+    "touch",
+    "this",
+    "week",
+    "quick",
+    "links",
+    "roof",
+    "creek",
 }
 
 _NAV_WORDS = {
@@ -518,6 +527,9 @@ def _is_plausible_person_name(name: str) -> bool:
         return False
     words = name.split()
     if not (2 <= len(words) <= 4):
+        return False
+    # Reject phone numbers and other numeric fragments that made it through.
+    if any(w.isdigit() or re.search(r"\d", w) for w in words):
         return False
     stopwords = _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS
     if any(w.lower() in stopwords for w in words):

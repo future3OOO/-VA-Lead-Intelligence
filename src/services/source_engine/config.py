@@ -13,6 +13,23 @@ DEFAULT_REGISTRY = REPO_ROOT / "config" / "sources" / "source-registry.yaml"
 DEFAULT_QUERY_LIBRARY = REPO_ROOT / "config" / "sources" / "query-library.yaml"
 DEFAULT_SOURCE_POLICY = REPO_ROOT / "config" / "sources" / "source-policies" / "default.yaml"
 
+# Map registry allowed_fields tokens to SourceHit model field names.
+ALLOWED_FIELD_MAP: dict[str, str] = {
+    "company_name": "company_name_raw",
+    "company_domain": "company_domain_raw",
+    "title": "title",
+    "body": "body_excerpt",
+    "description": "body_excerpt",
+    "location": "location_raw",
+    "workplace_type": "workplace_type",
+    "contact_routes": "contact_routes_raw",
+    "source_url": "source_url",
+    "source_native_id": "source_native_id",
+    "raw_snapshot_uri": "raw_snapshot_uri",
+    "access_policy_version": "access_policy_version",
+    "intent_label": "intent_label",
+}
+
 
 @dataclass
 class SourcePolicy:

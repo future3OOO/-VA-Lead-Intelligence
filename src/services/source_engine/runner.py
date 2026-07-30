@@ -20,7 +20,12 @@ from db.models.source_run import SourceRun as DBSourceRun
 from services.source_engine.adapters import ADAPTER_MAP
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.classifier import classify_intent
-from services.source_engine.config import SourceConfig, SourcePolicy, SourceRegistryLoader
+from services.source_engine.config import (
+    ALLOWED_FIELD_MAP,
+    SourceConfig,
+    SourcePolicy,
+    SourceRegistryLoader,
+)
 from services.source_engine.enricher import enrich_contact_routes
 from services.source_engine.resolver import resolve_company
 from services.source_engine.scorer import _to_intent_label, score_source_hit
@@ -44,22 +49,6 @@ _COUNTRY_NAME_TO_CODE = {
     "russia": "RU",
     "north korea": "KP",
     "iran": "IR",
-}
-
-# Map registry allowed_fields tokens to SourceHit model field names.
-_ALLOWED_FIELD_MAP: dict[str, str] = {
-    "company_name": "company_name_raw",
-    "company_domain": "company_domain_raw",
-    "title": "title",
-    "body": "body_excerpt",
-    "description": "body_excerpt",
-    "location": "location_raw",
-    "workplace_type": "workplace_type",
-    "contact_routes": "contact_routes_raw",
-    "source_url": "source_url",
-    "source_native_id": "source_native_id",
-    "raw_snapshot_uri": "raw_snapshot_uri",
-    "access_policy_version": "access_policy_version",
 }
 
 # DB identity/audit columns that must always survive allowed_fields filtering.
@@ -297,8 +286,8 @@ class SourceRunner:
         """Translate registry allowed_fields tokens to SourceHit column names."""
         fields: set[str] = set()
         for token in allowed_fields:
-            if token in _ALLOWED_FIELD_MAP:
-                fields.add(_ALLOWED_FIELD_MAP[token])
+            if token in ALLOWED_FIELD_MAP:
+                fields.add(ALLOWED_FIELD_MAP[token])
         return fields
 
     @staticmethod
@@ -313,6 +302,8 @@ class SourceRunner:
             return data
         allowed = SourceRunner._allowed_model_fields(cfg.allowed_fields)
         allowed |= _REQUIRED_DB_FIELDS
+        # intent_label is a pipeline output, not a source permission.
+        allowed.add("intent_label")
         # contact_routes require both the output and the field to be allowed.
         if "contact_route" not in cfg.allowed_outputs or "contact_routes_raw" not in allowed:
             allowed.discard("contact_routes_raw")

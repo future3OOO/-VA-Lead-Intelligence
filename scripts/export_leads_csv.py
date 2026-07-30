@@ -16,6 +16,12 @@ from db.models.company import Company
 from db.models.contact_route import ContactRoute
 from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
+from services.source_engine.enricher import (
+    extract_email,
+    extract_phone,
+    extract_url,
+    is_valid_named_contact,
+)
 
 EXPORT_SOURCES = {
     "openstreetmap",
@@ -656,104 +662,24 @@ def _build_explanation(
 
 
 def _best_contact(routes: list[dict[str, str]]) -> dict[str, str]:
+    """Return the first syntactically usable email, phone, and form URL."""
     result: dict[str, str] = {}
     for r in routes:
         t = r["type"]
         v = r["value"]
         if t in ("named_work_email_approved", "generic_email") and "best_email" not in result:
-            result["best_email"] = v
+            email = extract_email(v)
+            if email:
+                result["best_email"] = email
         elif t == "business_phone" and "best_phone" not in result:
-            result["best_phone"] = v
-        elif t == "sales_form" and "best_form" not in result:
-            result["best_form"] = v
+            phone = extract_phone(v)
+            if phone:
+                result["best_phone"] = phone
+        elif t in ("sales_form", "contact_form", "demo_booking") and "best_form" not in result:
+            url = extract_url(v)
+            if url:
+                result["best_form"] = url
     return result
-
-
-def _is_plausible_person_name(name: str) -> bool:
-    """Return True if the extracted string looks like a real person name."""
-    if not name or len(name) > 50 or len(name) < 3:
-        return False
-    if "@" in name or "http" in name.lower() or "/" in name or "linkedin" in name.lower():
-        return False
-    words = name.split()
-    if not (2 <= len(words) <= 4):
-        return False
-    generic = {
-        "info",
-        "contact",
-        "sales",
-        "support",
-        "hello",
-        "team",
-        "careers",
-        "hiring",
-        "leasing",
-        "rent",
-        "feedback",
-        "admin",
-        "office",
-        "help",
-        "service",
-        "marketing",
-        "press",
-        "billing",
-        "jobs",
-        "recruiting",
-        "hr",
-        "legal",
-        "media",
-        "customer",
-        "general",
-        "inquiries",
-        "inquiry",
-        "questions",
-        "apply",
-        "job",
-        "realestate",
-        "realtor",
-        "agent",
-        "agency",
-        "firm",
-        "company",
-        "email",
-        "us",
-        "click",
-        "here",
-        "call",
-        "text",
-        "message",
-        "send",
-        "more",
-        "learn",
-        "today",
-        "now",
-        "inquire",
-        "fb",
-        "ig",
-        "li",
-        "tt",
-        "facebook",
-        "instagram",
-        "twitter",
-        "tiktok",
-        "youtube",
-        "sitemap",
-        "connect",
-        "use",
-        "visit",
-        "website",
-        "page",
-        "menu",
-        "navigation",
-        "read",
-        "about",
-        "details",
-        "link",
-        "follow",
-    }
-    if any(w.lower() in generic or w.lower() in VA_ROLE_WORDS for w in words):
-        return False
-    return not all(w.isupper() and len(w) <= 3 for w in words)
 
 
 _TITLE_BOILERPLATE = re.compile(
@@ -780,54 +706,59 @@ def _parse_named_route(value: str) -> dict[str, str]:
         # Drop implausibly long/boilerplate titles while keeping the contact.
         if title and (len(title) > 60 or len(title.split()) > 8):
             title = ""
-        if _is_plausible_person_name(name):
+        display = f"{name} ({title})" if title else name
+        if is_valid_named_contact(display):
             parsed = {"name": name, "title": title, "value": payload}
     return parsed
 
 
 def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
-    """Return the best named hiring contact (name, email, LinkedIn) for a company."""
+    """Return the best named hiring contact (name, title, email, LinkedIn) for a company."""
     best: dict[str, str] = {}
+
+    # Collect a usable email from any route first.
     for r in routes:
-        if r["type"] != "named_work_email_approved":
+        if r["type"] in ("named_work_email_approved", "generic_email"):
+            email = extract_email(r["value"])
+            if email and not best.get("email"):
+                best["email"] = email
+
+    # Prefer an explicit named contact record.
+    for r in routes:
+        if r["type"] != "named_contact":
             continue
-        parsed = _parse_named_route(r["value"])
-        if parsed:
-            best.update(parsed)
-            best.setdefault("email", parsed.get("value", ""))
-            break
-    # If no named email, try a LinkedIn profile with a name.
-    if not best.get("value"):
-        for r in routes:
-            if r["type"] != "social_profile_review_only":
-                continue
-            parsed = _parse_named_route(r["value"])
-            if parsed and parsed.get("value", "").startswith("http"):
-                best.update(parsed)
-                best.setdefault("linkedin", parsed.get("value", ""))
-                break
-    # Fallback to a plain named contact (e.g. OpenStreetMap operator or team page name).
+        text = r["value"].strip()
+        if not is_valid_named_contact(text):
+            continue
+        m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", text)
+        if not m:
+            continue
+        name = m.group(1).strip()
+        title = _clean_title_text((m.group(2) or "").strip())
+        if title and (len(title) > 60 or len(title.split()) > 8):
+            title = ""
+        best.update(
+            {"name": name, "title": title, "value": text, "linkedin": best.get("linkedin", "")}
+        )
+        break
+
+    # If no named contact, attempt to parse a display-form email or LinkedIn route.
     if not best.get("name"):
         for r in routes:
-            if r["type"] != "named_contact":
+            if r["type"] not in ("named_work_email_approved", "social_profile_review_only"):
                 continue
-            text = r["value"].strip()
-            m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", text)
-            if not m:
+            parsed = _parse_named_route(r["value"])
+            if not parsed:
                 continue
-            name = m.group(1).strip()
-            title = _clean_title_text((m.group(2) or "").strip())
-            if title and (len(title) > 60 or len(title.split()) > 8):
-                title = ""
-            if _is_plausible_person_name(name):
-                best = {
-                    "name": name,
-                    "title": title,
-                    "value": text,
-                    "email": "",
-                    "linkedin": "",
-                }
-                break
+            best.update(parsed)
+            if r["type"] == "social_profile_review_only" and parsed.get("value", "").startswith(
+                "http"
+            ):
+                best.setdefault("linkedin", parsed["value"])
+            else:
+                best.setdefault("email", parsed.get("value", best.get("email", "")))
+            break
+
     return best
 
 

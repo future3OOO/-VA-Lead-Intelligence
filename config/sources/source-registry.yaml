@@ -18,7 +18,12 @@ sources:
       - company_domain
       - title
       - body
+      - description
+      - location
+      - workplace_type
       - contact_routes
+      - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
@@ -43,8 +48,10 @@ sources:
       - title
       - description
       - location
+      - workplace_type
       - contact_routes
       - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
@@ -134,10 +141,13 @@ sources:
     allowed_fields:
       - company_name
       - company_domain
+      - title
+      - description
+      - location
+      - workplace_type
       - contact_routes
-      - social_profiles
-      - names
-      - titles
+      - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
@@ -158,10 +168,13 @@ sources:
     allowed_fields:
       - company_name
       - company_domain
+      - title
+      - description
+      - location
+      - workplace_type
       - contact_routes
-      - social_profiles
-      - names
-      - titles
+      - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
@@ -185,9 +198,13 @@ sources:
     allowed_fields:
       - company_name
       - company_domain
+      - title
+      - description
+      - location
+      - workplace_type
       - contact_routes
-      - names
-      - titles
+      - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
@@ -210,9 +227,13 @@ sources:
     allowed_fields:
       - company_name
       - company_domain
+      - title
+      - description
+      - location
+      - workplace_type
       - contact_routes
-      - names
-      - titles
+      - source_url
+      - source_native_id
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
