@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.config import SourceConfig
+from services.source_engine.enricher import is_valid_named_contact
 
 _TITLE_KEYWORDS = [
     "CEO",
@@ -571,7 +572,7 @@ def _clean_title(title: str) -> str:
 
 def _is_plausible_person_name(name: str) -> bool:
     """Return True if the extracted string looks like a real person name."""
-    if not name or len(name) > 50 or len(name) < 3:
+    if not name or len(name) > 80 or len(name) < 3:
         return False
     name_lower = name.strip().lower()
     if name_lower in _PAGE_LABELS:
@@ -587,12 +588,10 @@ def _is_plausible_person_name(name: str) -> bool:
     # Reject phone numbers and other numeric fragments that made it through.
     if any(w.isdigit() or re.search(r"\d", w) for w in words):
         return False
-    stopwords = (
-        _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS | _PAGE_LABELS
-    )
-    if any(w.lower() in stopwords for w in words):
+    # Reject all-caps 1-3 letter tokens such as initials/acronyms without a real name.
+    if all(w.isupper() and len(w) <= 3 for w in words):
         return False
-    return not all(w.isupper() and len(w) <= 3 for w in words)
+    return is_valid_named_contact(name)
 
 
 class _PersonResult:
@@ -907,7 +906,11 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
         title = _extract_title_phrase(context, "")
         for name_match in _NAME_RE.finditer(context):
             candidate = name_match.group(1)
-            if "@" not in candidate and 3 <= len(candidate) <= 40:
+            if (
+                "@" not in candidate
+                and 3 <= len(candidate) <= 40
+                and is_valid_named_contact(candidate)
+            ):
                 name = candidate
                 break
         if not name:

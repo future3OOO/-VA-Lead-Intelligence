@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -73,21 +73,12 @@ async def resolve_company(
         await session.flush()
         return company
 
-    if name:
-        # Name-only matches are only safe against other name-only records.
-        result = await session.scalar(
-            select(DBCompany).where(
-                DBCompany.workspace_id == workspace_id,
-                DBCompany.canonical_name.ilike(name),
-                DBCompany.primary_domain == "",
-            )
-        )
-        if result:
-            return cast(DBCompany | None, result)
-
     if not name:
         return None
 
+    # Name-only hits (no domain) cannot be safely merged; the same brand can
+    # cover many independent franchise branches. Create a fresh company for
+    # each name-only hit so branches keep their own leads, locations and contacts.
     company = DBCompany(
         id=uuid4(),
         workspace_id=workspace_id,

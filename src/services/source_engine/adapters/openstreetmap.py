@@ -17,7 +17,6 @@ from uuid import UUID
 import httpx
 
 from services.source_engine.adapters.base import BaseSourceAdapter
-from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
 
 # Hosts that should never be treated as a company's primary domain.
@@ -363,15 +362,8 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         if website:
             routes.append({"type": "sales_form", "value": website, "is_verified": False})
 
-        operator = str(tags.get("operator", "")).strip()
-        if operator and _is_plausible_person_name(operator):
-            routes.append(
-                {
-                    "type": "named_contact",
-                    "value": f"{operator} (Owner/Operator)",
-                    "is_verified": False,
-                }
-            )
+        # OSM operator tags are typically a business or brand name, not an
+        # individual person, so we do not mint named-contact routes here.
 
         address_parts = []
         for key in (

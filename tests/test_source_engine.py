@@ -22,6 +22,7 @@ from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdviser
 from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.classifier import classify_intent, score_intent
 from services.source_engine.config import SourceConfig, SourceRegistryLoader
+from services.source_engine.enricher import enrich_contact_routes
 from services.source_engine.resolver import resolve_company
 from services.source_engine.runner import SourceRunner
 from services.source_engine.scorer import score_source_hit
@@ -303,8 +304,8 @@ async def test_resolve_company_keeps_franchise_branches_distinct() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_company_name_only_matches_empty_domain() -> None:
-    """Name-only hits merge only with other name-only records, not domain records."""
+async def test_resolve_company_name_only_keeps_branches_distinct() -> None:
+    """Name-only hits do not merge, even with the same brand, so franchise branches keep distinct records."""
     async with AsyncSessionLocal() as session:
         workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
         session.add(workspace)
@@ -322,15 +323,70 @@ async def test_resolve_company_name_only_matches_empty_domain() -> None:
         assert domain_record is not None
         assert domain_record.primary_domain == "ljhooker-euroa.com.au"
 
-        name_only = await resolve_company(
+        branch_a = await resolve_company(
             session,
             workspace.id,
             {
                 "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
                 "company_name_raw": "LJ Hooker",
                 "company_domain_raw": "",
+                "location_raw": "Euroa, VIC",
             },
         )
-        assert name_only is not None
-        assert name_only.primary_domain == ""
-        assert name_only.id != domain_record.id
+        assert branch_a is not None
+        assert branch_a.primary_domain == ""
+        assert branch_a.id != domain_record.id
+
+        branch_b = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "LJ Hooker",
+                "company_domain_raw": "",
+                "location_raw": "Seymour, VIC",
+            },
+        )
+        assert branch_b is not None
+        assert branch_b.primary_domain == ""
+        assert branch_b.id != branch_a.id
+
+
+@pytest.mark.asyncio
+async def test_enrich_contact_routes_reclassifies_unmatched_named_emails() -> None:
+    """A named-work-email route whose local part does not match the person becomes generic."""
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
+        session.add(workspace)
+        await session.flush()
+        company = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Acme",
+            primary_domain="acme.example.com",
+            country_code="AU",
+            industry="",
+            employee_count=0,
+            status="active",
+        )
+        session.add(company)
+        await session.flush()
+
+        routes = [
+            {
+                "type": "named_work_email_approved",
+                "value": "Yve Whitehead <kimberley.fairless@acme.example.com>",
+            },
+            {
+                "type": "named_work_email_approved",
+                "value": "Tony Bove <tony.bove@acme.example.com>",
+            },
+        ]
+        created = await enrich_contact_routes(session, workspace.id, company.id, routes)
+        await session.commit()
+
+        values_by_type = {(r.route_type, r.value) for r in created}
+        assert ("generic_email", "kimberley.fairless@acme.example.com") in values_by_type
+        assert any(
+            rt == "named_work_email_approved" and "tony.bove@acme.example.com" in val
+            for rt, val in values_by_type
+        )

@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
+from services.source_engine.enricher import is_valid_named_contact
 
 _NZ_BANK_NAMES = {
     "anz",
@@ -296,13 +297,16 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
             f"{company_name} is a New Zealand financial advice provider in {location or 'New Zealand'}."
         )
         domain = self._coerce_domain(raw["website"])
-        contact_routes: list[dict[str, Any]] = [
-            {
-                "type": "named_contact",
-                "value": f"{raw['name']} ({raw['job_title']})",
-                "is_verified": False,
-            }
-        ]
+        contact_routes: list[dict[str, Any]] = []
+        display_name = f"{raw['name']} ({raw['job_title']})" if raw["job_title"] else raw["name"]
+        if raw["name"] and is_valid_named_contact(display_name):
+            contact_routes.append(
+                {
+                    "type": "named_contact",
+                    "value": display_name,
+                    "is_verified": False,
+                }
+            )
         if domain:
             contact_routes.append(
                 {"type": "sales_form", "value": raw["website"], "is_verified": False}

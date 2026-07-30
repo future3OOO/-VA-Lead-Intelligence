@@ -17,6 +17,7 @@ from db.models.contact_route import ContactRoute
 from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
 from services.source_engine.enricher import (
+    _name_in_email_local,
     extract_email,
     extract_phone,
     extract_url,
@@ -514,13 +515,12 @@ def _is_target(text: str, title: str = "") -> bool:
     if NOT_VA_SENIOR_RE.search(title_lower):
         return False
     category = _detect_category(text)
-    # Target-sector companies are leads even when the open role is senior,
-    # because the firm itself likely needs VA support.  Screen out obviously
-    # unrelated technical/health/trade titles.
+    # Target-sector companies are leads even when the open role is senior or a
+    # trade title, because the firm itself likely needs VA support.
     if category != "Other":
-        return not bool(NON_ADMIN_ROLES_RE.search(title_lower))
+        return True
     # Non-target companies only make the cut if the role is clearly admin.
-    return _is_direct_va_role(title) or _is_operational_support_role(title)
+    return _is_direct_va_role(text) or _is_operational_support_role(text)
 
 
 def _qualification_score(
@@ -555,16 +555,18 @@ def _qualification_score(
         reasons.append("role is a direct admin/VA role")
 
     # 2. Role signal (is the open job admin/VA, operational, professional, or unrelated?)
-    if _is_direct_va_role(title):
+    # Use the full text (title + body/company + location) so directory listings
+    # whose description carries the role are scored correctly.
+    if _is_direct_va_role(text):
         score += 25
         reasons.append("role is a direct VA/admin function")
-    elif _is_operational_support_role(title):
+    elif _is_operational_support_role(text):
         score += 15
         reasons.append("role is operational support that creates admin burden")
-    elif _is_client_facing_role(title):
+    elif _is_client_facing_role(text):
         score += 10
         reasons.append("role is client-facing and likely creates admin follow-up")
-    elif _is_professional_role(title):
+    elif _is_professional_role(text):
         score += 10
         reasons.append(
             "role is a professional service provider role; the firm likely needs admin support"
@@ -716,8 +718,10 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
     """Return the best named contact with an explicitly associated email/phone/LinkedIn.
 
     Generic company emails and phones are not paired with named people.
-    named_contact_email is only populated when a named_work_email_approved,
-    business_phone, or social_profile route explicitly carries that person's name.
+    named_contact_email is only populated when a named_work_email_approved
+    or social_profile route explicitly carries that person's name and the
+    email local part or LinkedIn URL plausibly matches the person's name.
+    business_phone routes are treated as company-level contact data only.
     """
     candidates: dict[str, dict[str, str]] = {}
 
@@ -771,12 +775,8 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
             payload = parsed["value"]
             if t == "named_work_email_approved":
                 email = extract_email(payload)
-                if email:
+                if email and _name_in_email_local(name, email):
                     _upsert(name, title=title, email=email)
-            elif t == "business_phone":
-                phone = extract_phone(payload)
-                if phone:
-                    _upsert(name, title=title, phone=phone)
             elif t == "social_profile_review_only":
                 url = extract_url(payload)
                 if url and url.startswith("http"):

@@ -232,3 +232,30 @@ def test_process_hit_listing_source_is_not_buyer_intent() -> None:
     }
     processed = SourceRunner()._process_hit(hit)
     assert processed["intent_label"] == "company_existence_only"
+
+
+def test_is_valid_named_contact_rejects_location_and_label_text() -> None:
+    """Headings, locations, CTAs and boilerplate labels extracted as names are rejected."""
+    for label in [
+        "Belimba Park",
+        "Cavill Ave",
+        "Recently Leased",
+        "Wellness Officers",
+        "Bookings My Account Sign",
+        "Land Size",
+        "Eligible Entrants",
+        "Aml Compliance",
+        "Foreshore Promenade",
+        "Kimberley. Address",
+        "Asset Registers",
+        "Request Measurement",
+    ]:
+        assert is_valid_named_contact(label) is False
+
+
+def test_normalize_route_value_rejects_false_named_contacts() -> None:
+    """Navigation labels passed as named_contact routes are dropped."""
+    assert normalize_route_value("named_contact", "Belimba Park") is None
+    assert normalize_route_value("named_contact", "Recently Leased") is None
+    assert normalize_route_value("named_contact", "Wellness Officers") is None
+    assert normalize_route_value("named_contact", "Tony Bove") is not None
