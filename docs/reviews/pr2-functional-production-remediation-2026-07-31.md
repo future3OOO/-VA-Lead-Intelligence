@@ -140,9 +140,13 @@ clean dataset.
 - [x] Run production-code quality and two focused final diff challenges; reject the stale matcher
   finding against the live function test, prove zero bounds directly, and prove both concurrency
   loser paths.
-- [ ] Commit and push PR #2.
-- [ ] Record pushed SHA; re-query exact-head CI, merge state, and review threads.
-- [ ] Resolve current generator threads only after the pushed fix is green.
+- [x] Commit and push the production and clean-export slices to PR #2
+  (`cfa9ecb`, `3abcedd`).
+- [x] Record pushed code/export head `3abceddcb898fceb2dfd3b74e04c48ef47547566`;
+  exact-head CI passed 72 tests plus lint, typecheck, config, migrations, benchmark,
+  infrastructure, and handover; merge state was clean and no unresolved non-outdated threads
+  remained.
+- [x] Resolve the two obsolete generator threads after the pushed fix was green.
 
 Regroup rule: the existing `CompanyIdentifier` boundary and one uniqueness migration are authorized.
 Any additional schema/public API or projected remediation above 1,300 changed code lines requires
