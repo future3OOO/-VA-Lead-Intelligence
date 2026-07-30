@@ -393,10 +393,7 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         osm_url = f"{self._OSM_WEB_URL}/{element_type}/{element_id}"
 
         body = (
-            f"OpenStreetMap business listing for {company_name}. "
-            f"{company_name} is a {category}. "
-            f"Typical remote VA support needs include appointment scheduling, inbox and email management, "
-            f"data entry, CRM updates, customer enquiries, and general administrative support. "
+            f"OpenStreetMap business listing for {company_name}. {company_name} is a {category}. "
         )
         if address:
             body += f"Address: {address}. "

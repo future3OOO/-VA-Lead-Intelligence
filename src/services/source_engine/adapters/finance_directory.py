@@ -336,9 +336,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
         location = raw["location"]
         body = (
             f"{description} "
-            f"{company_name} is an Australian financial services provider in {location or 'Australia'}. "
-            f"Remote/hybrid VA support can help with client onboarding, diary management, CRM updates, "
-            f"email triage, claims paperwork, compliance documentation and general administrative support."
+            f"{company_name} is an Australian financial services provider in {location or 'Australia'}."
         )
         return {
             "workspace_id": workspace_id,

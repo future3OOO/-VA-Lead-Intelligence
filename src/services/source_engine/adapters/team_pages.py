@@ -182,6 +182,22 @@ _GENERIC_NAME_WORDS = {
     "links",
     "roof",
     "creek",
+    "opening",
+    "hours",
+    "privacy",
+    "policy",
+    "stamp",
+    "duty",
+    "calculator",
+    "final",
+    "thoughts",
+    "rental",
+    "appraisal",
+    "open",
+    "homes",
+    "buyer",
+    "enquiry",
+    "enquiries",
 }
 
 _NAV_WORDS = {
@@ -210,6 +226,25 @@ _NAV_WORDS = {
     "for",
     "from",
     "home",
+    "opening",
+    "hours",
+    "privacy",
+    "policy",
+    "stamp",
+    "duty",
+    "calculator",
+    "final",
+    "thoughts",
+    "rental",
+    "appraisal",
+    "open",
+    "homes",
+    "buyer",
+    "enquiry",
+    "enquiries",
+    "what",
+    "we",
+    "do",
 }
 
 _BUSINESS_WORDS = {
@@ -503,6 +538,21 @@ def _name_from_email(email: str) -> str:
     return _title_case_name(" ".join(parts))
 
 
+_PAGE_LABELS = {
+    "opening hours",
+    "privacy policy",
+    "stamp duty calculator",
+    "final thoughts",
+    "what we do",
+    "rental appraisal",
+    "open homes",
+    "buyer enquiry",
+    "get in touch",
+    "quick links",
+    "this week",
+}
+
+
 _TITLE_BOILERPLATE = re.compile(
     r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
     re.I,
@@ -523,6 +573,12 @@ def _is_plausible_person_name(name: str) -> bool:
     """Return True if the extracted string looks like a real person name."""
     if not name or len(name) > 50 or len(name) < 3:
         return False
+    name_lower = name.strip().lower()
+    if name_lower in _PAGE_LABELS:
+        return False
+    for label in _PAGE_LABELS:
+        if len(label) > 4 and label in name_lower:
+            return False
     if "@" in name or "http" in name.lower() or "/" in name or "linkedin" in name.lower():
         return False
     words = name.split()
@@ -531,7 +587,9 @@ def _is_plausible_person_name(name: str) -> bool:
     # Reject phone numbers and other numeric fragments that made it through.
     if any(w.isdigit() or re.search(r"\d", w) for w in words):
         return False
-    stopwords = _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS
+    stopwords = (
+        _GENERIC_NAME_WORDS | _NAV_WORDS | _TITLE_KEYWORDS_LOWER | _BUSINESS_WORDS | _PAGE_LABELS
+    )
     if any(w.lower() in stopwords for w in words):
         return False
     return not all(w.isupper() and len(w) <= 3 for w in words)
@@ -1044,7 +1102,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
             "company_name_raw": company_name,
             "company_domain_raw": raw["domain"],
             "location_raw": "",
-            "workplace_type": "",
+            "workplace_type": "hybrid",
             "contact_routes_raw": raw.get("contact_routes", []),
             "raw_snapshot_uri": "",
             "content_hash": "",

@@ -28,10 +28,10 @@ def _load_export_helpers() -> tuple:
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)  # type: ignore[union-attr]
-    return module._best_contact, module._qualification_score
+    return module._best_contact, module._qualification_score, module._best_named_contact
 
 
-_best_contact, _qualification_score = _load_export_helpers()
+_best_contact, _qualification_score, _best_named_contact = _load_export_helpers()
 
 
 def _make_source_config(
@@ -118,15 +118,15 @@ def test_contact_normalization_rejects_malformed_values() -> None:
     assert is_valid_named_contact("Tony Bove (Electrician)") is True
 
 
-def test_normalize_route_value_extracts_plain_contact_values() -> None:
-    """Display-form emails and phones are reduced to plain addresses."""
+def test_normalize_route_value_preserves_named_contact_routes() -> None:
+    """Display-form named routes keep the person/contact association intact."""
     assert (
         normalize_route_value("named_work_email_approved", "Tony Bove <tony@acmeservices.com>")
-        == "tony@acmeservices.com"
+        == "Tony Bove <tony@acmeservices.com>"
     )
     assert (
         normalize_route_value("business_phone", "Tony Bove (Director) <+61 3 9000 0000>")
-        == "+61 3 9000 0000"
+        == "Tony Bove (Director) <+61 3 9000 0000>"
     )
     assert (
         normalize_route_value("sales_form", "https://example.com/contact")
@@ -165,3 +165,70 @@ def test_high_rank_requires_usable_contact_route(
     if expected_rank == "Medium":
         assert any("contact route missing" in r for r in reasons)
     assert score >= 75
+
+
+def test_is_valid_named_contact_rejects_page_labels() -> None:
+    """Headings, CTAs, policies and calculators must not be treated as people."""
+    for label in [
+        "Opening Hours",
+        "Privacy Policy",
+        "Stamp Duty Calculator",
+        "Final Thoughts",
+        "What We Do",
+        "Rental Appraisal",
+        "Open Homes",
+        "Buyer Enquiry",
+        "Get In Touch",
+        "Quick Links",
+        "This Week",
+    ]:
+        assert is_valid_named_contact(label) is False
+
+
+def test_best_named_contact_only_pairs_explicit_email() -> None:
+    """A named person must only receive an email from a route that names them."""
+    routes = [
+        {"type": "generic_email", "value": "info@acmeservices.com"},
+        {"type": "named_contact", "value": "Tony Bove"},
+        {"type": "named_work_email_approved", "value": "Tony Bove <tony@acmeservices.com>"},
+    ]
+    best = _best_named_contact(routes)
+    assert best["name"] == "Tony Bove"
+    assert best["email"] == "tony@acmeservices.com"
+
+
+def test_best_named_contact_does_not_pair_generic_email() -> None:
+    """A generic company email should not be assigned to a separate named contact."""
+    routes = [
+        {"type": "generic_email", "value": "info@acmeservices.com"},
+        {"type": "named_contact", "value": "Tony Bove"},
+    ]
+    best = _best_named_contact(routes)
+    assert best["name"] == "Tony Bove"
+    assert best["email"] == ""
+
+
+def test_normalize_route_value_preserves_named_email_association() -> None:
+    """Named email routes keep their display form so the person/email link survives."""
+    assert (
+        normalize_route_value("named_work_email_approved", "Tony Bove <tony@acmeservices.com>")
+        == "Tony Bove <tony@acmeservices.com>"
+    )
+
+
+def test_process_hit_listing_source_is_not_buyer_intent() -> None:
+    """Directory/listing bodies containing positive task phrases must not become buyer_request."""
+    hit = {
+        "source_key": "finance_directory",
+        "title": "Finance Directory listing for Acme",
+        "body_excerpt": (
+            "Acme is an Australian financial services provider in Sydney. "
+            "Remote VA support can help with client onboarding, diary management and CRM updates."
+        ),
+        "company_name_raw": "Acme Mortgage",
+        "company_domain_raw": "acme.example.com",
+        "contact_routes_raw": [{"type": "generic_email", "value": "info@acme.example.com"}],
+        "published_at": datetime.now(timezone.utc),
+    }
+    processed = SourceRunner()._process_hit(hit)
+    assert processed["intent_label"] == "company_existence_only"

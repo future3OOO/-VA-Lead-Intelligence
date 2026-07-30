@@ -32,7 +32,13 @@ async def resolve_company(
     workspace_id: UUID,
     source_hit: dict[str, Any],
 ) -> DBCompany | None:
-    """Resolve a source hit to an existing or new company record."""
+    """Resolve a source hit to an existing or new company record.
+
+    Franchise branches are kept distinct by domain. A hit with a domain is only
+    ever merged into a company with the exact same domain; canonical-name
+    matches are ignored when domains differ so that separate branches keep
+    their own contacts and locations.
+    """
     intent = source_hit.get("intent_label")
     source_key = source_hit.get("source_key", "")
     can_resolve_unresolved = source_key in ALWAYS_RESOLVE_SOURCES
@@ -51,27 +57,42 @@ async def resolve_company(
         )
         if result:
             return result
+        # A new domain always creates a new company record, even if the brand
+        # name matches an existing branch with a different domain.
+        company = DBCompany(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            canonical_name=name or domain,
+            primary_domain=domain,
+            country_code="",
+            industry="",
+            employee_count=0,
+            status="active",
+        )
+        session.add(company)
+        await session.flush()
+        return company
 
     if name:
+        # Name-only matches are only safe against other name-only records.
         result = await session.scalar(
             select(DBCompany).where(
                 DBCompany.workspace_id == workspace_id,
                 DBCompany.canonical_name.ilike(name),
+                DBCompany.primary_domain == "",
             )
         )
         if result:
-            if domain and not result.primary_domain:
-                result.primary_domain = domain
             return cast(DBCompany | None, result)
 
-    if not domain and not name:
+    if not name:
         return None
 
     company = DBCompany(
         id=uuid4(),
         workspace_id=workspace_id,
-        canonical_name=name or domain,
-        primary_domain=domain or "",
+        canonical_name=name,
+        primary_domain="",
         country_code="",
         industry="",
         employee_count=0,

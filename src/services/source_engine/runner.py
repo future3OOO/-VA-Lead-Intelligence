@@ -228,17 +228,13 @@ class SourceRunner:
         return source_run
 
     def _is_qualified(self, hit: dict[str, Any], threshold: float, cfg: SourceConfig) -> bool:
-        """A hit is qualified if it scores above threshold and has buyer-side intent.
+        """A hit is qualified if it scores above threshold and has a useful intent.
 
-        Contact-extraction sources (team_pages, company_web) are treated as
-        qualified when they successfully resolve a company and extract contact
-        routes; the intent signal is implicit in the published contact page.
+        Listing, directory, and contact-extraction sources are labelled
+        COMPANY_EXISTENCE_ONLY because their data shows the business exists in a
+        target sector, not an observed buyer/intent signal. They still qualify
+        when they resolve to a company and carry contact evidence.
         """
-        if cfg.source_class in {"team_pages", "company_web"}:
-            return bool(
-                hit.get("contact_routes_raw")
-                and (hit.get("company_domain_raw") or hit.get("company_name_raw"))
-            )
         if hit.get("source_hit_priority", 0) < threshold:
             return False
         label = _to_intent_label(hit.get("intent_label"))
@@ -247,11 +243,17 @@ class SourceRunner:
             IntentLabel.COMPANY_HIRING,
             IntentLabel.OPERATIONAL_PAIN,
             IntentLabel.GROWTH_TRIGGER,
+            IntentLabel.COMPANY_EXISTENCE_ONLY,
         }
 
     def _process_hit(self, hit: dict[str, Any]) -> dict[str, Any]:
         """Classify, score, and resolve a source hit."""
         label = classify_intent(hit.get("title", ""), hit.get("body_excerpt", ""))
+        # Directory, listing, and crawl sources do not contain observed buyer
+        # demand. Their intent is "this company exists in a target sector";
+        # prospect-fit scoring still happens at export time.
+        if hit.get("source_key") != "manual_seed":
+            label = IntentLabel.COMPANY_EXISTENCE_ONLY
         hit["intent_label"] = label.value
         published_at = hit.get("published_at")
         if isinstance(published_at, str):

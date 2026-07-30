@@ -142,6 +142,39 @@ _GENERIC_NAME_WORDS = {
     "week",
     "quick",
     "links",
+    "opening",
+    "hours",
+    "privacy",
+    "policy",
+    "stamp",
+    "duty",
+    "calculator",
+    "final",
+    "thoughts",
+    "rental",
+    "appraisal",
+    "open",
+    "homes",
+    "buyer",
+    "enquiry",
+    "enquiries",
+    "what",
+    "we",
+    "do",
+}
+
+_PAGE_LABELS = {
+    "opening hours",
+    "privacy policy",
+    "stamp duty calculator",
+    "final thoughts",
+    "what we do",
+    "rental appraisal",
+    "open homes",
+    "buyer enquiry",
+    "get in touch",
+    "quick links",
+    "this week",
 }
 
 
@@ -222,6 +255,30 @@ def extract_url(value: str) -> str | None:
     return candidate
 
 
+def _name_part_is_label(name: str) -> bool:
+    """Return True if the name or title text is a page label, not a person."""
+    lower = name.strip().lower()
+    if not lower:
+        return False
+    if lower in _NAV_LABELS or lower in _PAGE_LABELS:
+        return True
+    return any(len(label) > 4 and label in lower for label in (*_NAV_LABELS, *_PAGE_LABELS))
+
+
+def _is_person_name(name: str) -> bool:
+    """Return True if name is a plausible person name."""
+    if not name or len(name) > 80 or len(name) < 3:
+        return False
+    words = name.split()
+    if not (2 <= len(words) <= 4):
+        return False
+    if any(re.search(r"\d", w) for w in words):
+        return False
+    if "@" in name or "://" in name or "<" in name:
+        return False
+    return not any(w.lower() in _GENERIC_NAME_WORDS for w in words)
+
+
 def is_valid_named_contact(value: str) -> bool:
     """Return True if the value represents a real person, not a navigation label."""
     text = value.strip()
@@ -232,33 +289,55 @@ def is_valid_named_contact(value: str) -> bool:
     # Parse "Name (Title)" or "Name".
     m = re.match(r"^(.*?)\s*(?:\((.*)\))?\s*$", text)
     name = m.group(1).strip() if m else text
-    if not name:
+    title = m.group(2).strip() if m and m.group(2) else ""
+    if not name or _name_part_is_label(name):
         return False
-    lower = name.lower()
-    # Reject obvious navigation labels and boilerplate.
-    if lower in _NAV_LABELS:
+    if title and _name_part_is_label(title):
         return False
-    for label in _NAV_LABELS:
-        if len(label) > 4 and label in lower:
-            return False
-    words = name.split()
-    if not (2 <= len(words) <= 4):
-        return False
-    # Reject values that are phone numbers, emails, or contain URLs.
-    if any(re.search(r"\d", w) for w in words):
-        return False
-    if "@" in name or "://" in name or "<" in name:
-        return False
-    # Reject business/role words masquerading as names.
-    return not any(w.lower() in _GENERIC_NAME_WORDS for w in words)
+    return _is_person_name(name)
+
+
+def _parse_named_contact_display(value: str) -> dict[str, str] | None:
+    """Parse a display string such as 'Name (Title) <contact>' or 'Name - URL'."""
+    text = value.strip()
+    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*[<-]\s*(.+?)\s*$", text)
+    if not m:
+        return None
+    name = m.group(1).strip()
+    title = m.group(2).strip() if m.group(2) else ""
+    payload = m.group(3).strip().rstrip(">")
+    display_name = f"{name} ({title})" if title else name
+    if not is_valid_named_contact(display_name):
+        return None
+    return {"name": name, "title": title, "value": payload}
 
 
 def normalize_route_value(route_type: str, value: str) -> str | None:
-    """Validate a contact route and return a canonical plain value, or None to drop it."""
+    """Validate a contact route and return a canonical value, or None to drop it.
+
+    Named contact routes preserve their display form (e.g. "Name <email>") so
+    the association between a person and a contact route survives storage.
+    """
     if route_type in ("generic_email", "named_work_email_approved"):
+        parsed = _parse_named_contact_display(value)
+        if parsed:
+            email = extract_email(parsed["value"])
+            if email:
+                if parsed["title"]:
+                    return f"{parsed['name']} ({parsed['title']}) <{email}>"
+                return f"{parsed['name']} <{email}>"
         email = extract_email(value)
         return email if email else None
     if route_type == "business_phone":
+        parsed = _parse_named_contact_display(value)
+        if parsed:
+            phone = extract_phone(parsed["value"])
+            if phone:
+                return (
+                    f"{parsed['name']} <{phone}>"
+                    if not parsed["title"]
+                    else f"{parsed['name']} ({parsed['title']}) <{phone}>"
+                )
         phone = extract_phone(value)
         return phone if phone else None
     if route_type in ("sales_form", "contact_form", "demo_booking"):
@@ -266,7 +345,17 @@ def normalize_route_value(route_type: str, value: str) -> str | None:
     if route_type == "named_contact":
         return value if is_valid_named_contact(value) else None
     if route_type == "social_profile_review_only":
-        return value if extract_url(value) else None
+        parsed = _parse_named_contact_display(value)
+        if parsed:
+            url = extract_url(parsed["value"])
+            if url:
+                return (
+                    f"{parsed['name']} - {url}"
+                    if not parsed["title"]
+                    else f"{parsed['name']} ({parsed['title']}) - {url}"
+                )
+        url = extract_url(value)
+        return url if url else None
     # Unknown route types fall through unchanged.
     return value
 

@@ -251,3 +251,86 @@ async def test_runner_manual_seed(manual_seed_config: SourceConfig) -> None:
         assert record.hits_total == 1
         assert record.hits_qualified_total == 1
         assert record.errors_total == 0
+
+
+@pytest.mark.asyncio
+async def test_resolve_company_keeps_franchise_branches_distinct() -> None:
+    """Different domains for the same brand must create separate company records."""
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
+        session.add(workspace)
+        await session.flush()
+
+        # First branch is resolved from a domain-less listing.
+        first = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "Ray White",
+                "company_domain_raw": "",
+            },
+        )
+        assert first is not None
+        assert first.primary_domain == ""
+
+        # A second branch with a different domain must not merge into the first.
+        second = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "Ray White",
+                "company_domain_raw": "raywhite-coorparoo.com.au",
+            },
+        )
+        assert second is not None
+        assert second.id != first.id
+        assert second.primary_domain == "raywhite-coorparoo.com.au"
+
+        # A third hit with the same domain as the second should reuse it.
+        third = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "Ray White Coorparoo",
+                "company_domain_raw": "raywhite-coorparoo.com.au",
+            },
+        )
+        assert third is not None
+        assert third.id == second.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_company_name_only_matches_empty_domain() -> None:
+    """Name-only hits merge only with other name-only records, not domain records."""
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
+        session.add(workspace)
+        await session.flush()
+
+        domain_record = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "LJ Hooker",
+                "company_domain_raw": "ljhooker-euroa.com.au",
+            },
+        )
+        assert domain_record is not None
+        assert domain_record.primary_domain == "ljhooker-euroa.com.au"
+
+        name_only = await resolve_company(
+            session,
+            workspace.id,
+            {
+                "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+                "company_name_raw": "LJ Hooker",
+                "company_domain_raw": "",
+            },
+        )
+        assert name_only is not None
+        assert name_only.primary_domain == ""
+        assert name_only.id != domain_record.id

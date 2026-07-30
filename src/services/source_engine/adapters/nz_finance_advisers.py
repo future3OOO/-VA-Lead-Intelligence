@@ -293,9 +293,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         location = raw["location"]
         body = (
             f"{description} "
-            f"{company_name} is a New Zealand financial advice provider in {location or 'New Zealand'}. "
-            f"Remote/hybrid VA support can help with client onboarding, diary management, CRM updates, "
-            f"email triage, compliance documentation and general administrative support."
+            f"{company_name} is a New Zealand financial advice provider in {location or 'New Zealand'}."
         )
         domain = self._coerce_domain(raw["website"])
         contact_routes: list[dict[str, Any]] = [

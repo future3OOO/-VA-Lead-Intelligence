@@ -713,53 +713,91 @@ def _parse_named_route(value: str) -> dict[str, str]:
 
 
 def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
-    """Return the best named hiring contact (name, title, email, LinkedIn) for a company."""
-    best: dict[str, str] = {}
+    """Return the best named contact with an explicitly associated email/phone/LinkedIn.
 
-    # Collect a usable email from any route first.
+    Generic company emails and phones are not paired with named people.
+    named_contact_email is only populated when a named_work_email_approved,
+    business_phone, or social_profile route explicitly carries that person's name.
+    """
+    candidates: dict[str, dict[str, str]] = {}
+
+    def _upsert(
+        name: str,
+        title: str = "",
+        email: str = "",
+        phone: str = "",
+        linkedin: str = "",
+    ) -> None:
+        key = name.lower()
+        existing = candidates.get(key)
+        if not existing:
+            candidates[key] = {
+                "name": name,
+                "title": title,
+                "email": email,
+                "phone": phone,
+                "linkedin": linkedin,
+            }
+            return
+        if title and not existing.get("title"):
+            existing["title"] = title
+        if email and not existing.get("email"):
+            existing["email"] = email
+        if phone and not existing.get("phone"):
+            existing["phone"] = phone
+        if linkedin and not existing.get("linkedin"):
+            existing["linkedin"] = linkedin
+
     for r in routes:
-        if r["type"] in ("named_work_email_approved", "generic_email"):
-            email = extract_email(r["value"])
-            if email and not best.get("email"):
-                best["email"] = email
-
-    # Prefer an explicit named contact record.
-    for r in routes:
-        if r["type"] != "named_contact":
-            continue
-        text = r["value"].strip()
-        if not is_valid_named_contact(text):
-            continue
-        m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", text)
-        if not m:
-            continue
-        name = m.group(1).strip()
-        title = _clean_title_text((m.group(2) or "").strip())
-        if title and (len(title) > 60 or len(title.split()) > 8):
-            title = ""
-        best.update(
-            {"name": name, "title": title, "value": text, "linkedin": best.get("linkedin", "")}
-        )
-        break
-
-    # If no named contact, attempt to parse a display-form email or LinkedIn route.
-    if not best.get("name"):
-        for r in routes:
-            if r["type"] not in ("named_work_email_approved", "social_profile_review_only"):
+        t = r["type"]
+        v = r["value"]
+        if t == "named_contact":
+            m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", v.strip())
+            if not m:
                 continue
-            parsed = _parse_named_route(r["value"])
+            name = m.group(1).strip()
+            title = _clean_title_text((m.group(2) or "").strip())
+            if title and (len(title) > 60 or len(title.split()) > 8):
+                title = ""
+            display = f"{name} ({title})" if title else name
+            if is_valid_named_contact(display):
+                _upsert(name, title=title)
+        elif t in ("named_work_email_approved", "business_phone", "social_profile_review_only"):
+            parsed = _parse_named_route(v)
             if not parsed:
                 continue
-            best.update(parsed)
-            if r["type"] == "social_profile_review_only" and parsed.get("value", "").startswith(
-                "http"
-            ):
-                best.setdefault("linkedin", parsed["value"])
-            else:
-                best.setdefault("email", parsed.get("value", best.get("email", "")))
-            break
+            name = parsed["name"]
+            title = parsed["title"]
+            payload = parsed["value"]
+            if t == "named_work_email_approved":
+                email = extract_email(payload)
+                if email:
+                    _upsert(name, title=title, email=email)
+            elif t == "business_phone":
+                phone = extract_phone(payload)
+                if phone:
+                    _upsert(name, title=title, phone=phone)
+            elif t == "social_profile_review_only":
+                url = extract_url(payload)
+                if url and url.startswith("http"):
+                    _upsert(name, title=title, linkedin=url)
 
-    return best
+    if not candidates:
+        return {}
+
+    def _score(c: dict[str, str]) -> int:
+        return bool(c.get("email")) * 3 + bool(c.get("phone")) * 2 + bool(c.get("linkedin"))
+
+    best = max(
+        candidates.values(),
+        key=lambda c: (_score(c), c["name"]),
+    )
+    return {
+        "name": best["name"],
+        "title": best.get("title", ""),
+        "email": best.get("email", ""),
+        "linkedin": best.get("linkedin", ""),
+    }
 
 
 RANK_ORDER = {"low": 1, "medium": 2, "high": 3}
@@ -859,7 +897,9 @@ async def main() -> None:
                     ]
                 )
 
-        # Build leads
+        # Build leads. Each (company, title) is deduplicated to the strongest
+        # scoring hit and franchises are capped per company record (domain) so
+        # distinct branches keep their own contacts.
         source_hits = (
             await session.scalars(
                 select(SourceHit).where(
@@ -869,8 +909,7 @@ async def main() -> None:
             )
         ).all()
 
-        lead_rows: list[dict[str, Any]] = []
-        seen: set[tuple[str, str]] = set()
+        lead_candidates: dict[tuple[Any, str], dict[str, Any]] = {}
         for hit in source_hits:
             title = hit.title or ""
             company_name = hit.company_name_raw or ""
@@ -884,11 +923,6 @@ async def main() -> None:
                 continue
             if region_filter == "anz" and not ANZ_REGION_RE.search(text):
                 continue
-            category = _detect_category(text)
-            key = (company_name.lower().strip(), title.lower().strip())
-            if key in seen:
-                continue
-            seen.add(key)
 
             company = companies_by_id.get(hit.company_id) if hit.company_id else None
             domain = (
@@ -906,6 +940,11 @@ async def main() -> None:
                 best_routes,
                 hit.workplace_type,
             )
+
+            if RANK_ORDER.get(rank.lower(), 0) < RANK_ORDER.get(min_rank, 1):
+                continue
+
+            category = _detect_category(text)
             explanation = _build_explanation(
                 company_name,
                 title,
@@ -917,46 +956,52 @@ async def main() -> None:
                 reasons,
                 hit.source_key,
             )
+            named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
 
-            if RANK_ORDER.get(rank.lower(), 0) < RANK_ORDER.get(min_rank, 1):
+            company_key = company.id if company else (domain or company_name)
+            title_key = title.lower().strip()
+            existing = lead_candidates.get((company_key, title_key))
+            if existing and existing["qualification_score"] >= score:
                 continue
 
-            named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
-            lead_rows.append(
-                {
-                    "company_name": company_name,
-                    "primary_domain": domain,
-                    "job_title": title,
-                    "location": location,
-                    "workplace_type": workplace_type,
-                    "category": category,
-                    "source": hit.source_key,
-                    "source_url": hit.source_url,
-                    "intent_label": hit.intent_label,
-                    "published_at": hit.published_at.isoformat() if hit.published_at else "",
-                    "qualification_score": score,
-                    "rank": rank,
-                    "explanation": explanation,
-                    "best_email": best_routes.get("best_email", ""),
-                    "best_phone": best_routes.get("best_phone", ""),
-                    "best_form": best_routes.get("best_form", ""),
-                    "named_contact_name": named.get("name", ""),
-                    "named_contact_title": named.get("title", ""),
-                    "named_contact_email": named.get("email", ""),
-                    "named_contact_linkedin": named.get("linkedin", ""),
-                }
-            )
+            lead_candidates[(company_key, title_key)] = {
+                "company_name": company_name,
+                "primary_domain": domain,
+                "job_title": title,
+                "location": location,
+                "workplace_type": workplace_type,
+                "category": category,
+                "source": hit.source_key,
+                "source_url": hit.source_url,
+                "intent_label": hit.intent_label,
+                "published_at": hit.published_at.isoformat() if hit.published_at else "",
+                "qualification_score": score,
+                "rank": rank,
+                "explanation": explanation,
+                "best_email": best_routes.get("best_email", ""),
+                "best_phone": best_routes.get("best_phone", ""),
+                "best_form": best_routes.get("best_form", ""),
+                "named_contact_name": named.get("name", ""),
+                "named_contact_title": named.get("title", ""),
+                "named_contact_email": named.get("email", ""),
+                "named_contact_linkedin": named.get("linkedin", ""),
+                "__company_key": company_key,
+            }
 
-        lead_rows.sort(key=lambda x: (-x["qualification_score"], x["company_name"].lower()))
+        lead_rows = sorted(
+            lead_candidates.values(),
+            key=lambda x: (-x["qualification_score"], x["company_name"].lower()),
+        )
 
-        # Cap each company at the strongest 18 leads so the export stays diverse.
-        per_company_count: dict[str, int] = defaultdict(int)
+        # Cap each company record at the strongest 18 leads so distinct franchise
+        # branches are preserved instead of folding by canonical name.
+        per_company_count: dict[Any, int] = defaultdict(int)
         capped_rows: list[dict[str, Any]] = []
         for row in lead_rows:
-            name = row["company_name"].lower().strip()
-            if per_company_count[name] >= 18:
+            company_key = row.pop("__company_key")
+            if per_company_count[company_key] >= 18:
                 continue
-            per_company_count[name] += 1
+            per_company_count[company_key] += 1
             capped_rows.append(row)
         lead_rows = capped_rows
 
