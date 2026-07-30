@@ -40,7 +40,7 @@ async def get_missing_domains(workspace_id: UUID, max_domains: int | None = None
                     LIMIT :limit
                     """
                 ),
-                {"ws": workspace_id, "limit": max_domains or 10000},
+                {"ws": workspace_id, "limit": 10000 if max_domains is None else max_domains},
             )
         ).all()
         return [r[0] for r in rows]
@@ -48,14 +48,12 @@ async def get_missing_domains(workspace_id: UUID, max_domains: int | None = None
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Run team-page extraction on missing contacts")
-    parser.add_argument(
-        "--workspace-id", type=UUID, default=UUID("985cfd3b-a3af-4217-8b10-8c46b0915b92")
-    )
-    parser.add_argument(
-        "--campaign-id", type=UUID, default=UUID("2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc")
-    )
+    parser.add_argument("--workspace-id", type=UUID, required=True)
+    parser.add_argument("--campaign-id", type=UUID, required=True)
     parser.add_argument("--max-domains", type=int, default=None)
     args = parser.parse_args()
+    if args.max_domains is not None and args.max_domains < 0:
+        parser.error("--max-domains must be zero or greater")
 
     domains = await get_missing_domains(args.workspace_id, args.max_domains)
     print(f"Running team_pages against {len(domains)} domains missing named contact")

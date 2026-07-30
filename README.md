@@ -33,26 +33,26 @@ Each business type is mapped to the kind of remote admin work that business usua
 
 Every lead gets a **score out of 100** and a rank:
 
-- **High (75+ and has a contact route)** — strong VA fit: the business type creates a clear admin burden, the role can be done remotely, and we have a contact route.
+- **High (75+ and has a contact route)** — strong prospect fit: the business sector commonly has delegable admin work and we have a usable contact route.
 - **Medium (55–74, or 75+ without a contact route)** — good sector but the available signal is weaker, or the score is high but no contact route is available yet.
-- **Low (<55)** — weaker fit or a senior professional role that the firm is hiring for directly.
+- **Low (<55)** — weaker sector or service fit.
 
-Senior professional job posts (for example "Senior Accountant" or "Lead Lawyer") are **excluded** from the top results because those are not VA roles.
+Directory and OpenStreetMap rows are prospecting signals, not evidence that a company is hiring.
 
 ### What you get
 
 The export is a CSV with one row per lead:
 
 - `company_name` and `primary_domain`
-- `job_title` — the VA-suitable role we matched to that business type
+- `job_title` — a synthetic sector label for directory/listing sources
 - `location` — city/suburb or lat/lon in Australia / New Zealand
-- `workplace_type` — `hybrid` or `remote` (on-site-only posts are filtered out)
+- `workplace_type` — `inferred_remote_friendly` for directory/listing prospects
 - `category` — Property/Facilities, Financial Services, Legal/Professional, Home Services/Construction, etc.
 - `qualification_score` and `rank` — 0–100 score and High/Medium/Low
 - `explanation` — a short, human-readable reason why this lead scored well
 - `best_email`, `best_phone`, `best_form` — best available contact route
 - `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin` — named contact when available
-- `source_url` — link back to the OpenStreetMap page or the original posting
+- `source_url` — link back to the source listing
 
 Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web-crawling sources (`team_pages`, `company_web`, `finance_directory`, and `nz_finance_advisers`) fetch and respect `robots.txt`. `openstreetmap` uses the public Overpass API and does not touch `robots.txt`.
 
@@ -94,7 +94,7 @@ These tags map to target sectors:
 
 - `name` (with `branch` or `addr:suburb` appended when present)
 - `website`, `email`, `phone`
-- `operator` — used as a named contact when it looks like a person name
+- `operator` — retained only as listing context; it is not treated as a person
 - `addr:*` tags — turned into a location string
 - `brand` — added to the excerpt for context
 - Latitude/longitude if no address is present
@@ -104,9 +104,9 @@ These tags map to target sectors:
 For each business, the adapter creates a `SourceHit` with:
 
 - `title` = the synthetic VA role for that sector (e.g. "Maintenance Coordinator / Plumbing Services")
-- `body_excerpt` = a description of the business plus the typical remote admin tasks a VA could handle
-- `workplace_type` = `hybrid` (small-business admin is remote-friendly)
-- `contact_routes_raw` = any email, phone, website, and operator name found in OSM tags
+- `body_excerpt` = the business category, address, brand/operator context, and source link
+- `workplace_type` = `inferred_remote_friendly` (a prospecting inference, not an observed workplace policy)
+- `contact_routes_raw` = any email, phone, or website found in OSM tags
 - `location_raw` = assembled address or lat/lon
 
 The resolver then creates or links a `Company`, and the contact routes are stored in `contact_route`.
@@ -119,7 +119,7 @@ The resolver then creates or links a `Company`, and the contact routes are store
 
 ### Why it works for VA lead generation
 
-Instead of scraping job boards, the OSM source targets the businesses themselves. The synthetic title and body explain why each business type is likely to need remote admin support (scheduling, CRM updates, inbox management, customer enquiries, data entry, etc.).
+Instead of scraping job boards, the OSM source targets the businesses themselves. Ranking uses sector fit and available contact evidence; it does not claim the business is hiring or has advertised a remote role.
 
 ## Quick start
 
@@ -271,7 +271,7 @@ You can also run the older `extract_team_pages.py` against the domains with the 
 Columns in `anz_remote_leads_with_contacts.csv`:
 
 - `company_name` / `primary_domain`
-- `job_title` — synthetic VA-relevant title for OSM listings, or real job title for job-board hits
+- `job_title` — synthetic sector label for public business listings
 - `location`, `workplace_type`
 - `category` — Property/Facilities, Financial Services, Home Services/Construction, Real Estate, etc.
 - `source` / `source_url`

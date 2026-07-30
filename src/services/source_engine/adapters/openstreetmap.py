@@ -412,7 +412,7 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
             "company_name_raw": company_name,
             "company_domain_raw": domain,
             "location_raw": self._location_text(element, area, tags),
-            "workplace_type": "hybrid",
+            "workplace_type": "inferred_remote_friendly",
             "contact_routes_raw": routes,
             "raw_snapshot_uri": "",
             "content_hash": "",

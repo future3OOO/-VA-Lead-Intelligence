@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup
 
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.config import SourceConfig
-from services.source_engine.enricher import is_valid_named_contact
+from services.source_engine.enricher import _name_in_email_local, is_valid_named_contact
 
 _TITLE_KEYWORDS = [
     "CEO",
@@ -618,9 +618,11 @@ class _PersonResult:
     def as_routes(self) -> list[dict[str, Any]]:
         """Return ContactRoute-compatible route dicts."""
         routes: list[dict[str, Any]] = []
+        is_person = not self._is_generic_name()
+        named_email = bool(self.email and is_person and _name_in_email_local(self.name, self.email))
+        has_person_evidence = named_email or bool(self.linkedin)
         if self.email:
-            is_generic = self._is_generic_name()
-            if self.name and not is_generic:
+            if named_email:
                 display = (
                     f"{self.name} ({self.title}) <{self.email}>"
                     if self.title
@@ -631,7 +633,7 @@ class _PersonResult:
             if len(display) <= 255:
                 routes.append(
                     {
-                        "type": "generic_email" if is_generic else "named_work_email_approved",
+                        "type": ("named_work_email_approved" if named_email else "generic_email"),
                         "value": display,
                         "is_verified": False,
                     }
@@ -639,8 +641,8 @@ class _PersonResult:
         if self.phone:
             display = (
                 f"{self.name} ({self.title}) <{self.phone}>"
-                if (self.name and self.title)
-                else (f"{self.name} <{self.phone}>" if self.name else self.phone)
+                if (has_person_evidence and self.title)
+                else (f"{self.name} <{self.phone}>" if has_person_evidence else self.phone)
             )
             if len(display) <= 255:
                 routes.append(
@@ -664,7 +666,7 @@ class _PersonResult:
                         "is_verified": False,
                     }
                 )
-        if self.name and not self._is_generic_name():
+        if self.name and is_person and has_person_evidence:
             display = f"{self.name} ({self.title})" if self.title else self.name
             if len(display) <= 255:
                 routes.append(
@@ -675,15 +677,6 @@ class _PersonResult:
                     }
                 )
         return routes
-
-
-def _has_contact_pattern(text: str) -> bool:
-    """Return True if text contains an email, phone number, or LinkedIn URL."""
-    return (
-        bool(re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text))
-        or bool(re.search(r"\b\+?\d[\d\s().-]{7,}\d\b", text))
-        or bool(_LINKEDIN_RE.search(text))
-    )
 
 
 def _is_plausible_title(text: str) -> bool:
@@ -917,33 +910,6 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             name = _name_from_email(email)
         people[email] = _PersonResult(name=name, title=title, email=email)
 
-    # 4. Generic heading-based team grid extraction
-    for tag in soup.find_all(["h2", "h3", "h4"]):
-        txt = _clean_title(tag.get_text(separator=" ", strip=True))
-        if not _is_plausible_person_name(txt):
-            continue
-        name_words = txt.split()
-        if not (2 <= len(name_words) <= 3):
-            continue
-        person_key = txt.lower()
-        if person_key in people:
-            continue
-        title = ""
-        parent = tag.find_parent(["div", "article", "li", "section"])
-        if parent:
-            for t in parent.find_all(["span", "div", "p", "h5", "h6"]):
-                cand = _clean_title(t.get_text(separator=" ", strip=True))
-                if cand.lower() == txt.lower():
-                    continue
-                if _is_plausible_title(cand):
-                    title = cand
-                    break
-        if not title:
-            parent_text = parent.get_text(separator=" ", strip=True) if parent else ""
-            if not _has_contact_pattern(parent_text):
-                continue
-        people[person_key] = _PersonResult(name=txt, title=title)
-
     routes: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for person in people.values():
@@ -1105,7 +1071,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
             "company_name_raw": company_name,
             "company_domain_raw": raw["domain"],
             "location_raw": "",
-            "workplace_type": "hybrid",
+            "workplace_type": "inferred_remote_friendly",
             "contact_routes_raw": raw.get("contact_routes", []),
             "raw_snapshot_uri": "",
             "content_hash": "",

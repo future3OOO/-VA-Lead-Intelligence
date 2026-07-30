@@ -47,9 +47,9 @@ ONSITE_KEYWORDS_RE = re.compile(
 
 
 def _is_remote_friendly(title: str, body: str, location: str, workplace_type: str = "") -> bool:
-    """Return True if the role is advertised as remote/hybrid or clearly virtual."""
+    """Return whether the opportunity can reasonably be served remotely."""
     wp = (workplace_type or "").lower()
-    if wp in {"remote", "hybrid"}:
+    if wp in {"remote", "hybrid", "inferred_remote_friendly"}:
         return True
     if wp == "on_site":
         return False
@@ -531,12 +531,14 @@ def _qualification_score(
     published_at: datetime,
     routes: dict[str, str],
     workplace_type: str = "",
+    intent_label: str = "",
 ) -> tuple[int, str, list[str]]:
     text = f"{title} {body} {company_name} {location}".lower()
     title_lower = title.lower()
     category = _detect_category(text)
     score = 0
     reasons: list[str] = []
+    is_listing = intent_label == "company_existence_only"
 
     # 0. Technology/software vendor check.  Vendors sell tools to target
     # businesses but are rarely the end-user service business that needs a VA.
@@ -548,64 +550,65 @@ def _qualification_score(
         score -= 25
         reasons.append("company appears to be a technology/software vendor, not a service business")
     elif category != "Other":
-        score += 30
-        reasons.append(f"company/role is in the {category} sector")
-    elif _is_direct_va_role(title):
+        score += 40 if is_listing else 30
+        reasons.append(f"company is in the {category} sector")
+    elif not is_listing and _is_direct_va_role(title):
         score += 5
         reasons.append("role is a direct admin/VA role")
 
-    # 2. Role signal (is the open job admin/VA, operational, professional, or unrelated?)
-    # Use the full text (title + body/company + location) so directory listings
-    # whose description carries the role are scored correctly.
-    if _is_direct_va_role(text):
-        score += 25
-        reasons.append("role is a direct VA/admin function")
-    elif _is_operational_support_role(text):
-        score += 15
-        reasons.append("role is operational support that creates admin burden")
-    elif _is_client_facing_role(text):
-        score += 10
-        reasons.append("role is client-facing and likely creates admin follow-up")
-    elif _is_professional_role(text):
-        score += 10
-        reasons.append(
-            "role is a professional service provider role; the firm likely needs admin support"
-        )
-    elif NON_ADMIN_ROLES_RE.search(title_lower):
-        score -= 10
-        reasons.append("title appears senior/technical/sales-only, less direct VA fit")
+    if is_listing:
+        if category != "Other":
+            score += 25
+            reasons.append("sector commonly carries delegable administrative workload")
+        if workplace_type == "inferred_remote_friendly":
+            score += 5
+            reasons.append("listed business can be approached for remote administrative support")
+    else:
+        # 2. Observed role signal.
+        if _is_direct_va_role(text):
+            score += 25
+            reasons.append("role is a direct VA/admin function")
+        elif _is_operational_support_role(text):
+            score += 15
+            reasons.append("role is operational support that creates admin burden")
+        elif _is_client_facing_role(text):
+            score += 10
+            reasons.append("role is client-facing and likely creates admin follow-up")
+        elif _is_professional_role(text):
+            score += 10
+            reasons.append(
+                "role is a professional service provider role; the firm likely needs admin support"
+            )
+        elif NON_ADMIN_ROLES_RE.search(title_lower):
+            score -= 10
+            reasons.append("title appears senior/technical/sales-only, less direct VA fit")
 
-    # 3. Seniority/leadership penalty (direct VA roles are exempt)
-    if _is_senior_professional(title):
-        score -= 10
-        reasons.append("senior/leadership title; the firm may still need admin support")
+        if _is_senior_professional(title):
+            score -= 10
+            reasons.append("senior/leadership title; the firm may still need admin support")
+        if ADMIN_BURDEN_RE.search(text):
+            score += 10
+            reasons.append("description signals high administrative workload")
 
-    # 4. Admin burden in the description
-    if ADMIN_BURDEN_RE.search(text):
-        score += 10
-        reasons.append("description signals high administrative workload")
+        wp = (workplace_type or "").lower()
+        if wp in {"remote", "hybrid"} or REMOTE_KEYWORDS_RE.search(text):
+            score += 10
+            reasons.append("role is remote/hybrid (ideal for a VA)")
+        if ONSITE_KEYWORDS_RE.search(text):
+            score -= 20
+            reasons.append("on-site language detected — harder to service remotely")
 
-    # 5. Workplace fit
-    wp = (workplace_type or "").lower()
-    if wp in {"remote", "hybrid"} or REMOTE_KEYWORDS_RE.search(text):
-        score += 10
-        reasons.append("role is remote/hybrid (ideal for a VA)")
-    if ONSITE_KEYWORDS_RE.search(text):
-        score -= 20
-        reasons.append("on-site language detected — harder to service remotely")
-
-    # 6. Recency
-    if published_at:
-        try:
-            age_days = (datetime.now(timezone.utc) - published_at).days
-            if age_days <= 30:
-                score += 10
-                reasons.append("posted within the last 30 days")
-            elif age_days <= 90:
-                score += 5
-                reasons.append("posted within the last 90 days")
-        except Exception:
-            pass
+        if published_at:
+            try:
+                age_days = (datetime.now(timezone.utc) - published_at).days
+                if age_days <= 30:
+                    score += 10
+                    reasons.append("posted within the last 30 days")
+                elif age_days <= 90:
+                    score += 5
+                    reasons.append("posted within the last 90 days")
+            except Exception:
+                pass
 
     # 7. Contact route available
     if routes.get("best_email") or routes.get("best_phone") or routes.get("best_form"):
@@ -636,6 +639,7 @@ def _build_explanation(
     routes: dict[str, str],
     reasons: list[str],
     source_key: str = "",
+    intent_label: str = "",
 ) -> str:
     contact_parts = []
     if routes.get("best_email"):
@@ -649,10 +653,10 @@ def _build_explanation(
     top_reasons = (
         "; ".join(reasons[:3]) if reasons else "company and role profile match VA support patterns"
     )
-    if source_key == "openstreetmap":
+    if intent_label == "company_existence_only":
         explanation = (
             f"{rank} fit ({score}/100): {company_name} ({category}) in {location} "
-            f"is an OpenStreetMap business listing tagged as '{title}'. {use_case} "
+            f"is a public business listing from {source_key} tagged as '{title}'. {use_case} "
             f"Key signal: {top_reasons}. Best contact: {contact}."
         )
     else:
@@ -664,24 +668,29 @@ def _build_explanation(
 
 
 def _best_contact(routes: list[dict[str, str]]) -> dict[str, str]:
-    """Return the first syntactically usable email, phone, and form URL."""
-    result: dict[str, str] = {}
+    """Return deterministic, syntactically usable company contact routes."""
+    candidates: dict[str, list[tuple[int, str]]] = defaultdict(list)
     for r in routes:
         t = r["type"]
         v = r["value"]
-        if t in ("named_work_email_approved", "generic_email") and "best_email" not in result:
+        if t in ("named_work_email_approved", "generic_email"):
             email = extract_email(v)
             if email:
-                result["best_email"] = email
-        elif t == "business_phone" and "best_phone" not in result:
+                candidates["best_email"].append(
+                    (0 if t == "named_work_email_approved" else 1, email)
+                )
+        elif t == "business_phone":
             phone = extract_phone(v)
             if phone:
-                result["best_phone"] = phone
-        elif t in ("sales_form", "contact_form", "demo_booking") and "best_form" not in result:
+                candidates["best_phone"].append((0, phone))
+        elif t in ("sales_form", "contact_form", "demo_booking"):
             url = extract_url(v)
             if url:
-                result["best_form"] = url
-    return result
+                candidates["best_form"].append((0, url))
+    return {
+        key: sorted(set(values), key=lambda candidate: (candidate[0], candidate[1].lower()))[0][1]
+        for key, values in candidates.items()
+    }
 
 
 _TITLE_BOILERPLATE = re.compile(
@@ -752,7 +761,7 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
         if linkedin and not existing.get("linkedin"):
             existing["linkedin"] = linkedin
 
-    for r in routes:
+    for r in sorted(routes, key=lambda route: (route["type"], route["value"].lower())):
         t = r["type"]
         v = r["value"]
         if t == "named_contact":
@@ -805,9 +814,7 @@ RANK_ORDER = {"low": 1, "medium": 2, "high": 3}
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Export qualified leads and company contacts")
-    parser.add_argument(
-        "--workspace-id", type=UUID, default=UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
-    )
+    parser.add_argument("--workspace-id", type=UUID, required=True)
     parser.add_argument("--leads-path", default="/tmp/small_business_leads_with_contacts.csv")
     parser.add_argument("--companies-path", default="/tmp/all_companies.csv")
     parser.add_argument(
@@ -834,7 +841,14 @@ async def main() -> None:
         # Load all contact routes keyed by company_id
         contact_rows = (
             await session.scalars(
-                select(ContactRoute).where(ContactRoute.workspace_id == workspace_id)
+                select(ContactRoute)
+                .where(ContactRoute.workspace_id == workspace_id)
+                .order_by(
+                    ContactRoute.company_id,
+                    ContactRoute.route_type,
+                    ContactRoute.value,
+                    ContactRoute.id,
+                )
             )
         ).all()
         contact_by_company: dict[UUID, list[dict[str, str]]] = defaultdict(list)
@@ -843,13 +857,17 @@ async def main() -> None:
 
         # Load companies
         company_rows = (
-            await session.scalars(select(Company).where(Company.workspace_id == workspace_id))
+            await session.scalars(
+                select(Company)
+                .where(Company.workspace_id == workspace_id)
+                .order_by(func.lower(Company.canonical_name), Company.id)
+            )
         ).all()
         companies_by_id = {c.id: c for c in company_rows}
 
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
+            writer = csv.writer(f, lineterminator="\n")
             writer.writerow(
                 [
                     "company_id",
@@ -902,10 +920,12 @@ async def main() -> None:
         # distinct branches keep their own contacts.
         source_hits = (
             await session.scalars(
-                select(SourceHit).where(
+                select(SourceHit)
+                .where(
                     SourceHit.workspace_id == workspace_id,
                     SourceHit.source_key.in_(EXPORT_SOURCES),
                 )
+                .order_by(SourceHit.id)
             )
         ).all()
 
@@ -939,6 +959,7 @@ async def main() -> None:
                 hit.published_at,
                 best_routes,
                 hit.workplace_type,
+                hit.intent_label,
             )
 
             if RANK_ORDER.get(rank.lower(), 0) < RANK_ORDER.get(min_rank, 1):
@@ -955,13 +976,22 @@ async def main() -> None:
                 best_routes,
                 reasons,
                 hit.source_key,
+                hit.intent_label,
             )
             named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
 
             company_key = company.id if company else (domain or company_name)
             title_key = title.lower().strip()
             existing = lead_candidates.get((company_key, title_key))
-            if existing and existing["qualification_score"] >= score:
+            tie_key = (
+                hit.published_at.isoformat() if hit.published_at else "",
+                hit.source_url,
+                str(hit.id),
+            )
+            if existing and (
+                existing["qualification_score"],
+                existing["__tie_key"],
+            ) >= (score, tie_key):
                 continue
 
             lead_candidates[(company_key, title_key)] = {
@@ -986,11 +1016,17 @@ async def main() -> None:
                 "named_contact_email": named.get("email", ""),
                 "named_contact_linkedin": named.get("linkedin", ""),
                 "__company_key": company_key,
+                "__tie_key": tie_key,
             }
 
         lead_rows = sorted(
             lead_candidates.values(),
-            key=lambda x: (-x["qualification_score"], x["company_name"].lower()),
+            key=lambda x: (
+                -x["qualification_score"],
+                x["company_name"].lower(),
+                x["job_title"].lower(),
+                x["source_url"],
+            ),
         )
 
         # Cap each company record at the strongest 18 leads so distinct franchise
@@ -999,6 +1035,7 @@ async def main() -> None:
         capped_rows: list[dict[str, Any]] = []
         for row in lead_rows:
             company_key = row.pop("__company_key")
+            row.pop("__tie_key")
             if per_company_count[company_key] >= 18:
                 continue
             per_company_count[company_key] += 1
@@ -1008,6 +1045,7 @@ async def main() -> None:
         with open(leads_path, "w", newline="", encoding="utf-8") as f:
             leads_writer = csv.DictWriter(
                 f,
+                lineterminator="\n",
                 fieldnames=[
                     "company_name",
                     "primary_domain",

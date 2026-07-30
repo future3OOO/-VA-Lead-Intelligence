@@ -289,13 +289,13 @@ async def test_resolve_company_keeps_franchise_branches_distinct() -> None:
         assert second.id != first.id
         assert second.primary_domain == "raywhite-coorparoo.com.au"
 
-        # A third hit with the same domain as the second should reuse it.
+        # The unkeyed fallback requires the exact same name and domain.
         third = await resolve_company(
             session,
             workspace.id,
             {
                 "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
-                "company_name_raw": "Ray White Coorparoo",
+                "company_name_raw": "Ray White",
                 "company_domain_raw": "raywhite-coorparoo.com.au",
             },
         )
@@ -350,6 +350,80 @@ async def test_resolve_company_name_only_keeps_branches_distinct() -> None:
         assert branch_b is not None
         assert branch_b.primary_domain == ""
         assert branch_b.id != branch_a.id
+
+
+@pytest.mark.asyncio
+async def test_resolve_company_uses_source_identity_for_shared_domains() -> None:
+    """Distinct listings on one corporate domain stay separate and replay stably."""
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
+        session.add(workspace)
+        await session.flush()
+
+        coorparoo = {
+            "source_key": "openstreetmap",
+            "source_native_id": "node/1",
+            "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+            "company_name_raw": "Belle Property Coorparoo",
+            "company_domain_raw": "belleproperty.com",
+            "location_raw": "Coorparoo, QLD",
+        }
+        leura = {
+            **coorparoo,
+            "source_native_id": "node/2",
+            "company_name_raw": "Belle Property Leura",
+            "location_raw": "Leura, NSW",
+        }
+
+        first = await resolve_company(session, workspace.id, coorparoo)
+        second = await resolve_company(session, workspace.id, leura)
+        replay = await resolve_company(session, workspace.id, coorparoo)
+
+        assert first is not None
+        assert second is not None
+        assert replay is not None
+        assert second.id != first.id
+        assert replay.id == first.id
+
+        ambiguous_enrichment = {
+            "source_key": "team_pages",
+            "source_native_id": "https://belleproperty.com/team",
+            "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+            "company_name_raw": "belleproperty.com",
+            "company_domain_raw": "belleproperty.com",
+            "location_raw": "",
+        }
+        assert (await resolve_company(session, workspace.id, ambiguous_enrichment)) is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_company_groups_profiles_for_the_same_legal_company() -> None:
+    """Person-profile IDs may converge on one exact legal company."""
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(name="Test", slug="test", billing_email="test@example.com")
+        session.add(workspace)
+        await session.flush()
+
+        first_profile = {
+            "source_key": "nz_finance_advisers",
+            "source_native_id": "profile/1",
+            "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+            "company_name_raw": "Castle Trust Financial Planning Limited",
+            "company_domain_raw": "",
+            "location_raw": "Richmond, NZ",
+        }
+        second_profile = {
+            **first_profile,
+            "source_native_id": "profile/2",
+            "location_raw": "Nelson, NZ",
+        }
+
+        first = await resolve_company(session, workspace.id, first_profile)
+        second = await resolve_company(session, workspace.id, second_profile)
+
+        assert first is not None
+        assert second is not None
+        assert second.id == first.id
 
 
 @pytest.mark.asyncio

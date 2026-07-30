@@ -1346,19 +1346,16 @@ def is_valid_named_contact(value: str) -> bool:
 
 
 def _name_in_email_local(name: str, email: str) -> bool:
-    """Return True if a name token is plausibly present in the email local part."""
     if "@" not in email:
         return False
-    local = email.split("@", 1)[0].lower()
-    local_parts = re.split(r"[._\-]", local)
-    name_tokens = [w.lower() for w in name.split() if w.isalpha() and len(w) >= 2]
-    for token in name_tokens:
-        for part in local_parts:
-            if len(part) >= 2 and (token in part or part in token):
-                return True
-            if len(part) == 1 and part == token[0]:
-                return True
-    return False
+    tokens = re.findall(r"[a-z]+", name.lower())
+    if not tokens:
+        return False
+    first, last = tokens[0], tokens[-1]
+    parts = [part for part in re.split(r"[._\-]+", email.split("@", 1)[0].lower()) if part]
+    compact = "".join(parts)
+    matches = (first, last, first + last, first[0] + last, first + last[0])
+    return compact in matches or (len(parts) > 1 and last in parts)
 
 
 def _parse_named_contact_display(value: str) -> dict[str, str] | None:

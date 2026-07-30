@@ -350,7 +350,7 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             "company_name_raw": company_name,
             "company_domain_raw": self._coerce_domain(raw["website"]),
             "location_raw": location,
-            "workplace_type": "hybrid",
+            "workplace_type": "inferred_remote_friendly",
             "contact_routes_raw": raw.get("contact_routes", []),
             "raw_snapshot_uri": "",
             "content_hash": "",

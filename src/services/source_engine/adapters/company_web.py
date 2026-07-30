@@ -224,7 +224,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
             "company_name_raw": domain,
             "company_domain_raw": domain,
             "location_raw": "",
-            "workplace_type": "hybrid",
+            "workplace_type": "inferred_remote_friendly",
             "contact_routes_raw": raw.get("contact_routes", []),
             "raw_snapshot_uri": "",
             "content_hash": "",

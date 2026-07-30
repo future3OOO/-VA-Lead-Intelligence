@@ -40,7 +40,11 @@ async def get_target_domains(
                     LIMIT :limit OFFSET :offset
                     """
                 ),
-                {"ws": workspace_id, "limit": max_domains or 10000, "offset": offset},
+                {
+                    "ws": workspace_id,
+                    "limit": 10000 if max_domains is None else max_domains,
+                    "offset": offset,
+                },
             )
         ).all()
         return [r[0] for r in rows]
@@ -48,15 +52,13 @@ async def get_target_domains(
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Run bounded company-website crawl")
-    parser.add_argument(
-        "--workspace-id", type=UUID, default=UUID("f72ae1f9-f45e-45dc-a0d9-1a9e5e0b2a24")
-    )
-    parser.add_argument(
-        "--campaign-id", type=UUID, default=UUID("f2ec5156-d497-442c-a664-111ce7fabfa2")
-    )
+    parser.add_argument("--workspace-id", type=UUID, required=True)
+    parser.add_argument("--campaign-id", type=UUID, required=True)
     parser.add_argument("--max-domains", type=int, default=None)
     parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
+    if args.max_domains is not None and args.max_domains < 0:
+        parser.error("--max-domains must be zero or greater")
 
     workspace_id = args.workspace_id
     campaign_id = args.campaign_id
