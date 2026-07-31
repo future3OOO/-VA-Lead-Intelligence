@@ -158,3 +158,56 @@ Do not create a new plan or re-plan this pass. Follow and update this checklist.
 `repo-large-implementation`, `production-preflight`, diagnose/TDD, and `production-code`; re-walk
 the affected surface before edits and completion. Do not touch reference/private-runtime paths.
 Commit and push before resolving threads, and do not merge until the freeze gate is cleared.
+
+## Full clean scrape verification (reproduced)
+
+A fresh database `va_lead_intelligence_clean`, workspace `051af07b-4c05-4e71-b1a9-d9ce2e70dc6a` and campaign `ffdf532a-7aea-4239-91e1-97af3a319bd2` were used. `manual_seed` had no supplied data and was skipped.
+
+### Source-run results
+
+| Source | Hits | Qualified | Duplicate | Errors | Status |
+|--------|------|-----------|-----------|--------|--------|
+| `openstreetmap` | 3,705 | 1,146 | 0 | 0 | succeeded |
+| `finance_directory` | 806 | 806 | 0 | 0 | succeeded |
+| `nz_finance_advisers` (30 list pages) | 993 | 967 | 26 | 0 | succeeded |
+| `extract_team_pages_missing` | 878 | 833 | 45 | 0 | succeeded |
+| `extract_company_web_missing` | 786 | 735 | 51 | 0 | succeeded |
+
+### Export results
+
+| File | Rows | High | Medium |
+|------|------|------|--------|
+| `exports/anz_remote_leads_with_contacts.csv` | 5,105 | 2,062 | 3,043 |
+| `exports/anz_all_companies.csv` | 5,000 | — | — |
+
+Repeated export to temporary paths produced identical SHA-256 hashes:
+- `anz_remote_leads_with_contacts.csv`: `a0349403c73911e9347282bd442e0a15b2867e40550e23cdcf134ea8111d4162`
+- `anz_all_companies.csv`: `9611f49029921996288f4efe565d70dd9514ba5d63ef0cc49705f31d767a7b4c`
+
+### Data-correctness audit
+
+- 0 prohibited-domain merges (`financedirectory.net.au`, `financeadvisers.co.nz`, `openstreetmap.org`, `facebook.com`, `linkedin.com`).
+- 0 High-ranked leads without a valid email, phone, or form URL.
+- 0 blank `workplace_type`.
+- `intent_label` is `company_existence_only` for every exported lead.
+- `workplace_type` is `inferred_remote_friendly` for every exported lead.
+- 0 false `named_contact_name` values (checked against the expanded deny-list).
+- 0 mismatched person/email pairs; no named email without a named person.
+- 0 malformed `best_email`, `best_phone`, or `best_form` values.
+- 0 explanations containing "is advertising" or "role is remote/hybrid".
+- Franchise branches remain distinct: LJ Hooker (95 leads / 14 domains), Ray White (187 / 35), Elders (86 / 11).
+- McGrath Port Macquarie and Upper Hunter share `mcgrath.com.au` but retain separate phone/location/contact records.
+- Repeated `nz_finance_advisers` profiles converge on single companies (e.g. 96 identifiers for one legal company).
+
+### Exact-head validation
+
+- `make lint` ✅
+- `make typecheck` ✅
+- `make test` ✅ (72 passed)
+- `make config-validate` ✅
+- `make migration-check` ✅
+- `make benchmark` ✅ (7 fixtures, 0 failures)
+- `make contracts` ✅
+- `make handover` ✅
+
+No code changes were made; only the regenerated exports and this verification record were added.
