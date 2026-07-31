@@ -49,8 +49,10 @@ ONSITE_KEYWORDS_RE = re.compile(
 
 def _csv_safe(value: object) -> object:
     """Keep externally sourced text inert when a CSV is opened in a spreadsheet."""
-    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
-        return f"'{value}"
+    if isinstance(value, str):
+        value = " ".join(value.split())
+        if value.startswith(("=", "+", "-", "@")):
+            return f"'{value}"
     return value
 
 

@@ -154,8 +154,10 @@ def test_contact_normalization_rejects_malformed_values() -> None:
 
 
 def test_csv_safe_neutralizes_spreadsheet_formula_prefixes() -> None:
-    for value in ("=1+1", "+cmd", "-2+3", "@SUM(A1:A2)", " \t=1+1"):
+    for value in ("=1+1", "+cmd", "-2+3", "@SUM(A1:A2)"):
         assert _csv_safe(value) == f"'{value}"
+    assert _csv_safe(" \t=1+1") == "'=1+1"
+    assert _csv_safe("Wellington \n  Central") == "Wellington Central"
     assert _csv_safe("Acme Services") == "Acme Services"
     assert _csv_safe(42) == 42
     assert is_valid_named_contact("This Week") is False
