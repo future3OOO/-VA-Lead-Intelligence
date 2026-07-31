@@ -503,6 +503,10 @@ async def test_enrich_contact_routes_reclassifies_unmatched_named_emails() -> No
 
         routes = [
             {
+                "type": "named_contact",
+                "value": "Acme",
+            },
+            {
                 "type": "named_work_email_approved",
                 "value": "Yve Whitehead <kimberley.fairless@acme.example.com>",
             },
@@ -511,10 +515,17 @@ async def test_enrich_contact_routes_reclassifies_unmatched_named_emails() -> No
                 "value": "Tony Bove <tony.bove@acme.example.com>",
             },
         ]
-        created = await enrich_contact_routes(session, workspace.id, company.id, routes)
+        created = await enrich_contact_routes(
+            session,
+            workspace.id,
+            company.id,
+            company.canonical_name,
+            routes,
+        )
         await session.commit()
 
         values_by_type = {(r.route_type, r.value) for r in created}
+        assert not any(route_type == "named_contact" for route_type, _ in values_by_type)
         assert ("generic_email", "kimberley.fairless@acme.example.com") in values_by_type
         assert any(
             rt == "named_work_email_approved" and "tony.bove@acme.example.com" in val

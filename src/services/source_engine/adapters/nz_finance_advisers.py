@@ -299,7 +299,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         domain = self._coerce_domain(raw["website"])
         contact_routes: list[dict[str, Any]] = []
         display_name = f"{raw['name']} ({raw['job_title']})" if raw["job_title"] else raw["name"]
-        if raw["name"] and is_valid_named_contact(display_name):
+        if raw["name"] and is_valid_named_contact(display_name, company_name):
             contact_routes.append(
                 {
                     "type": "named_contact",

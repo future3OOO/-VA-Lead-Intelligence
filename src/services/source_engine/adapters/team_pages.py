@@ -828,8 +828,10 @@ class TeamPagesAdapter(BaseSourceAdapter):
         )
         seen_route_keys: set[tuple[str, str]] = set()
         all_routes: list[dict[str, Any]] = []
-        first_soup: BeautifulSoup | None = None
         first_url = ""
+        first_title = ""
+        first_body_excerpt = ""
+        first_company_name = ""
         pages_crawled = 0
         for path in paths[:max_pages]:
             url = urljoin(base_url, path)
@@ -846,9 +848,22 @@ class TeamPagesAdapter(BaseSourceAdapter):
                 routes = _extract_from_soup(soup, str(response.url), domain)
                 pages_crawled += 1
                 if routes:
-                    if first_soup is None:
-                        first_soup = soup
+                    if not first_url:
                         first_url = str(response.url)
+                        title_tag = soup.find("title")
+                        first_title = (
+                            self._clean_text(title_tag.get_text(strip=True))
+                            if title_tag
+                            else f"Team page for {domain}"
+                        )
+                        first_body_excerpt = self._clean_text(
+                            soup.get_text(separator=" ", strip=True)
+                        )[:2000]
+                        h1 = soup.find("h1")
+                        h1_text = self._clean_text(h1.get_text(strip=True)) if h1 else ""
+                        first_company_name = (
+                            h1_text if 3 <= len(h1_text) <= 80 and "@" not in h1_text else domain
+                        )
                     for route in routes:
                         key = (str(route["type"]), str(route["value"]).lower())
                         if key in seen_route_keys:
@@ -865,12 +880,14 @@ class TeamPagesAdapter(BaseSourceAdapter):
             except Exception as exc:  # noqa: BLE001
                 print(f"[team_pages] error {url}: {exc}", flush=True)
                 continue
-        if not all_routes or first_soup is None:
+        if not all_routes or not first_url:
             return None
         return {
             "domain": domain,
             "url": first_url,
-            "soup": first_soup,
+            "title": first_title,
+            "body_excerpt": first_body_excerpt,
+            "company_name": first_company_name,
             "contact_routes": all_routes,
             "pages_crawled": pages_crawled,
         }
@@ -891,14 +908,13 @@ class TeamPagesAdapter(BaseSourceAdapter):
         results: list[dict[str, Any]] = []
         print(f"[team_pages] starting extraction for {len(domains)} domains", flush=True)
         self._counter = 0
-        tasks = [
-            asyncio.create_task(self._process_domain(domain, paths, len(domains), max_pages))
-            for domain in domains
+
+        async def process(domain: str) -> dict[str, Any] | None:
+            return await self._process_domain(domain, paths, len(domains), max_pages)
+
+        results = [
+            result for result in await self._map_bounded(domains, process) if result is not None
         ]
-        for task in asyncio.as_completed(tasks):
-            result = await task
-            if result:
-                results.append(result)
         print(
             f"[team_pages] extracted routes for {len(results)} domains",
             flush=True,
@@ -911,20 +927,9 @@ class TeamPagesAdapter(BaseSourceAdapter):
         return text.encode("utf-8", "ignore").decode("utf-8")
 
     def normalize(self, workspace_id: UUID, raw: dict[str, Any]) -> dict[str, Any]:
-        soup: BeautifulSoup = raw["soup"]
-        title_tag = soup.find("title")
-        title = (
-            self._clean_text(title_tag.get_text(strip=True))
-            if title_tag
-            else f"Team page for {raw['domain']}"
-        )
-        text = self._clean_text(soup.get_text(separator=" ", strip=True))
-        # Try to determine a clean company name from the page title or first h1
-        h1 = soup.find("h1")
-        h1_text = self._clean_text(h1.get_text(strip=True)) if h1 else ""
-        company_name = (
-            h1_text if (3 <= len(h1_text) <= 80 and "@" not in h1_text) else raw["domain"]
-        )
+        title = raw.get("title") or f"Team page for {raw['domain']}"
+        text = raw.get("body_excerpt") or ""
+        company_name = raw.get("company_name") or raw["domain"]
         return {
             "workspace_id": workspace_id,
             "source_key": self.source_key,

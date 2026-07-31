@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,10 +12,11 @@ import httpx
 import pytest
 from bs4 import BeautifulSoup
 
+from services.source_engine.adapters.company_web import CompanyWebAdapter
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
 from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdvisersAdapter
 from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
-from services.source_engine.adapters.team_pages import _extract_from_soup
+from services.source_engine.adapters.team_pages import TeamPagesAdapter, _extract_from_soup
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
     _name_in_email_local,
@@ -81,6 +83,81 @@ def _make_adapter_config(source_key: str, access_mode: str) -> SourceConfig:
         terms_review_status="approved",
         terms_reviewed_at="2026-07-15T00:00:00+00:00",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("adapter_type", "worker_name"),
+    [
+        (TeamPagesAdapter, "_process_domain"),
+        (CompanyWebAdapter, "_crawl_domain"),
+    ],
+)
+async def test_web_adapters_bound_domain_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+    adapter_type: type[TeamPagesAdapter] | type[CompanyWebAdapter],
+    worker_name: str,
+) -> None:
+    config = _make_adapter_config(adapter_type.__name__.removesuffix("Adapter").lower(), "web")
+    config.rate_limit = {"max_total_concurrency": 2}
+    adapter = adapter_type(config)
+    active = 0
+    peak = 0
+
+    async def fake_worker(*_args: object, **_kwargs: object) -> None:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+
+    monkeypatch.setattr(adapter, worker_name, fake_worker)
+    try:
+        await adapter.fetch(
+            uuid4(),
+            {
+                "domains": [f"example-{index}.com" for index in range(10)],
+                "paths": ["/team"],
+            },
+        )
+    finally:
+        await adapter.aclose()
+
+    assert peak == 2
+
+
+@pytest.mark.asyncio
+async def test_team_pages_compacts_completed_page_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = TeamPagesAdapter(_make_adapter_config("team_pages", "web"))
+
+    async def robots_allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def http_get(url: str, **_kwargs: object) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text=(
+                "<html><title>Acme Team</title><h1>Acme Services</h1>"
+                '<a href="mailto:info@acme.example">Email us</a></html>'
+            ),
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_http_get", http_get)
+    try:
+        raw = await adapter._process_domain("acme.example", ["/team"], 1, 1)
+    finally:
+        await adapter.aclose()
+
+    assert raw is not None
+    assert "soup" not in raw
+    assert raw["title"] == "Acme Team"
+    assert raw["company_name"] == "Acme Services"
+    assert adapter.normalize(uuid4(), raw)["body_excerpt"] == "Acme Team Acme Services Email us"
 
 
 def test_filter_hit_fields_preserves_classification_and_workplace_data() -> None:
@@ -250,6 +327,23 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
 def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> None:
     assert is_valid_named_contact("Grant Hill") is True
     assert is_valid_named_contact("Brooke Taylor") is True
+
+
+def test_named_contacts_reject_legal_entities_and_company_names() -> None:
+    assert is_valid_named_contact("Absolute Solutions Limited") is False
+    assert is_valid_named_contact("Acme Advice Pty Ltd") is False
+    assert is_valid_named_contact("Cirrus Legal", "Cirrus Legal") is False
+    assert is_valid_named_contact("Mortgage Broker") is False
+    assert is_valid_named_contact("Service Email") is False
+    assert is_valid_named_contact("Logix Financial") is False
+    assert is_valid_named_contact("Terry Monastra Finance Broker") is False
+    assert is_valid_named_contact("Scott Joyce Director") is False
+    assert is_valid_named_contact("Tanya Hatton Principal") is False
+    assert is_valid_named_contact("Rylee Ritchie Sales Agent") is False
+    assert is_valid_named_contact("Tony Bove", "Acme Services") is True
+
+    routes = [{"type": "named_contact", "value": "Cirrus Legal"}]
+    assert _best_named_contact(routes, "Cirrus Legal") == {}
 
 
 def test_best_named_contact_only_pairs_explicit_email() -> None:

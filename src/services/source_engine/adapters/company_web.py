@@ -199,14 +199,13 @@ class CompanyWebAdapter(BaseSourceAdapter):
             return []
 
         self._counter = 0
-        tasks = [
-            asyncio.create_task(self._crawl_domain(domain, len(domains))) for domain in domains
+
+        async def crawl(domain: str) -> dict[str, Any] | None:
+            return await self._crawl_domain(domain, len(domains))
+
+        results = [
+            result for result in await self._map_bounded(domains, crawl) if result is not None
         ]
-        results: list[dict[str, Any]] = []
-        for task in asyncio.as_completed(tasks):
-            result = await task
-            if result:
-                results.append(result)
         print(f"[company_web] extracted routes for {len(results)} domains", flush=True)
         return results
 

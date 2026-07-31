@@ -73,21 +73,47 @@ _NAV_LABELS = {
 
 _GENERIC_NAME_WORDS = {
     "account",
+    "agent",
     "appraisal",
+    "broker",
+    "brokers",
     "calculator",
+    "client",
     "compliance",
+    "consultant",
+    "corp",
+    "corporation",
+    "director",
+    "email",
     "enquiry",
     "entrants",
+    "executive",
+    "finance",
+    "financial",
     "homes",
     "hours",
+    "inc",
+    "incorporated",
     "inspections",
+    "limited",
     "links",
+    "llc",
+    "ltd",
+    "manager",
+    "mortgage",
     "officers",
+    "partner",
+    "plc",
     "policy",
+    "principal",
+    "pty",
     "registers",
     "requirements",
+    "service",
+    "services",
     "sign",
     "size",
+    "support",
     "vents",
     "week",
 }
@@ -239,7 +265,7 @@ def _is_person_name(name: str) -> bool:
     return not any(w.lower() in _GENERIC_NAME_WORDS for w in words)
 
 
-def is_valid_named_contact(value: str) -> bool:
+def is_valid_named_contact(value: str, company_name: str = "") -> bool:
     """Return True if the value represents a real person, not a navigation label."""
     text = value.strip()
     if not text or len(text) > 80:
@@ -254,6 +280,11 @@ def is_valid_named_contact(value: str) -> bool:
         return False
     if title and _name_part_is_label(title):
         return False
+    if company_name:
+        name_key = re.sub(r"[^a-z]+", " ", name.lower()).strip()
+        company_key = re.sub(r"[^a-z]+", " ", company_name.lower()).strip()
+        if name_key == company_key:
+            return False
     return _is_person_name(name)
 
 
@@ -344,6 +375,7 @@ async def enrich_contact_routes(
     session: AsyncSession,
     workspace_id: UUID,
     company_id: UUID,
+    company_name: str,
     routes_raw: list[dict[str, Any]],
 ) -> list[DBContactRoute]:
     """Persist verified contact routes for a resolved company.
@@ -374,6 +406,10 @@ async def enrich_contact_routes(
         route_type = _resolve_route_type(route.get("type", "generic_email")).value
         value = normalize_route_value(route_type, raw_value)
         if not value:
+            continue
+        if route_type == ContactRouteType.NAMED_CONTACT.value and not is_valid_named_contact(
+            value, company_name
+        ):
             continue
         # Only keep named-work-email routes when the email local part actually
         # references the person. Otherwise fall back to a generic company email so

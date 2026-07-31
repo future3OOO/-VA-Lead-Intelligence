@@ -387,18 +387,24 @@ class SourceRunner:
             is_qualified or not self.policy.contact_route_after_qualification_only
         )
 
-        async def _resolve_and_enrich(company_id: UUID) -> None:
+        async def _resolve_and_enrich(company_id: UUID, company_name: str) -> None:
             if can_enrich_contacts:
                 routes = data.get("contact_routes_raw", [])
                 if routes:
-                    await enrich_contact_routes(session, workspace_id, company_id, routes)
+                    await enrich_contact_routes(
+                        session,
+                        workspace_id,
+                        company_id,
+                        company_name,
+                        routes,
+                    )
 
         if not content_hash:
             if can_resolve_company:
                 company = await resolve_company(session, workspace_id, data)
                 if company:
                     data["company_id"] = company.id
-                    await _resolve_and_enrich(company.id)
+                    await _resolve_and_enrich(company.id, company.canonical_name)
             record = DBSourceHit(**data)
             session.add(record)
             await session.flush()
@@ -425,5 +431,5 @@ class SourceRunner:
                     .where(DBSourceHit.id == hit_id)
                     .values(company_id=company.id)
                 )
-                await _resolve_and_enrich(company.id)
+                await _resolve_and_enrich(company.id, company.canonical_name)
         return await session.get(DBSourceHit, hit_id)

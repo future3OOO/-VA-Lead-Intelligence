@@ -8,8 +8,9 @@ import os
 import re
 import socket
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 from uuid import UUID
@@ -20,6 +21,9 @@ from services.source_engine.checkpoint import CheckpointStore
 from services.source_engine.config import SourceConfig
 from services.source_engine.metrics import SourceMetrics
 from services.source_engine.rate_limit import RateLimiter
+
+_T = TypeVar("_T")
+_R = TypeVar("_R")
 
 
 def _is_safe_domain(domain: str) -> bool:
@@ -162,6 +166,20 @@ class BaseSourceAdapter(ABC):
         if not value:
             return False
         return value.lower() in ("false", "0", "no", "disabled")
+
+    async def _map_bounded(
+        self,
+        items: Sequence[_T],
+        worker: Callable[[_T], Awaitable[_R]],
+    ) -> list[_R]:
+        """Bound whole-item work to the same operational cap as network requests."""
+        semaphore = asyncio.Semaphore(self.rate_limiter.max_total_concurrency)
+
+        async def run(item: _T) -> _R:
+            async with semaphore:
+                return await worker(item)
+
+        return list(await asyncio.gather(*(run(item) for item in items)))
 
     @abstractmethod
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:

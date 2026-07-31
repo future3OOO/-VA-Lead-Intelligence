@@ -733,7 +733,10 @@ def _parse_named_route(value: str) -> dict[str, str]:
     return parsed
 
 
-def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
+def _best_named_contact(
+    routes: list[dict[str, str]],
+    company_name: str = "",
+) -> dict[str, str]:
     """Return the best named contact with an explicitly associated email/phone/LinkedIn.
 
     Generic company emails and phones are not paired with named people.
@@ -751,6 +754,9 @@ def _best_named_contact(routes: list[dict[str, str]]) -> dict[str, str]:
         phone: str = "",
         linkedin: str = "",
     ) -> None:
+        display = f"{name} ({title})" if title else name
+        if not is_valid_named_contact(display, company_name):
+            return
         key = name.lower()
         existing = candidates.get(key)
         if not existing:
@@ -897,7 +903,7 @@ async def main() -> None:
             for c in company_rows:
                 company_routes = contact_by_company.get(c.id, [])
                 best = _best_contact(company_routes)
-                named = _best_named_contact(company_routes)
+                named = _best_named_contact(company_routes, c.canonical_name)
                 target = _is_target(f"{c.canonical_name} {c.primary_domain or ''}", "")
                 hit_count = (
                     await session.execute(
@@ -990,7 +996,14 @@ async def main() -> None:
                 hit.source_key,
                 hit.intent_label,
             )
-            named = _best_named_contact(contact_by_company.get(company.id, [])) if company else {}
+            named = (
+                _best_named_contact(
+                    contact_by_company.get(company.id, []),
+                    company.canonical_name,
+                )
+                if company
+                else {}
+            )
 
             company_key = company.id if company else (domain or company_name)
             title_key = title.lower().strip()
