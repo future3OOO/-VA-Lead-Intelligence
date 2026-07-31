@@ -13,10 +13,11 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEST_DATABASE_NAME = "va_lead_intelligence_test"
+TEST_DATABASE_PORT = os.environ.get("TEST_DATABASE_PORT", "5432")
 
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DATABASE_URL"] = (
-    f"postgresql+asyncpg://postgres:postgres@localhost:5432/{TEST_DATABASE_NAME}"
+    f"postgresql+asyncpg://postgres:postgres@localhost:{TEST_DATABASE_PORT}/{TEST_DATABASE_NAME}"
 )
 # The manual_seed adapter sandboxes files under MANUAL_SEED_DIR. In tests the
 # existing temp-file fixtures live under the system temp directory.
@@ -24,7 +25,7 @@ os.environ["MANUAL_SEED_DIR"] = tempfile.gettempdir()
 
 
 def _create_test_db() -> None:
-    base_url = "postgresql://postgres:postgres@localhost:5432/postgres"
+    base_url = f"postgresql://postgres:postgres@localhost:{TEST_DATABASE_PORT}/postgres"
     try:
         conn = psycopg2.connect(base_url)
         conn.autocommit = True

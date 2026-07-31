@@ -75,6 +75,9 @@ def validate_source_registry(data: dict[str, Any], path: Path) -> list[str]:
         errors.append(f"{path} 'sources' must be a mapping")
         return errors
     for key, cfg in sources.items():
+        if not isinstance(cfg, dict):
+            errors.append(f"{path} source '{key}' must be a mapping")
+            continue
         for field in ("source_class", "access_mode", "status", "owner", "terms_review_status"):
             if not cfg.get(field):
                 errors.append(f"{path} source '{key}' missing {field}")
@@ -91,6 +94,9 @@ def validate_query_library(data: dict[str, Any], path: Path) -> list[str]:
         errors.append(f"{path} 'families' must be a mapping")
         return errors
     for key, family in families.items():
+        if not isinstance(family, dict):
+            errors.append(f"{path} family '{key}' must be a mapping")
+            continue
         for field in ("positive_titles", "positive_task_phrases", "negative_terms"):
             if not isinstance(family.get(field), list):
                 errors.append(f"{path} family '{key}' missing or invalid {field}")

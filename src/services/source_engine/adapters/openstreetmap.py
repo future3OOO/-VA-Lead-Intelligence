@@ -359,9 +359,6 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
             routes.append({"type": "generic_email", "value": email, "is_verified": False})
         if phone:
             routes.append({"type": "business_phone", "value": phone, "is_verified": False})
-        if website:
-            routes.append({"type": "sales_form", "value": website, "is_verified": False})
-
         # OSM operator tags are typically a business or brand name, not an
         # individual person, so we do not mint named-contact routes here.
 

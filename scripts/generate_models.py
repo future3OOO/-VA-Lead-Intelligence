@@ -402,37 +402,89 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
     if route is None or route == "none":
         return None
     is_workspace = name == "workspace"
+    workspace_references: dict[str, str] = spec.get("workspace_references", {})
     pk_name = "workspace_id" if is_workspace else f"{name}_id"
     create_extra = "" if is_workspace else ", workspace_id=auth_workspace_id"
+    create_values = (
+        "data.model_dump(exclude_unset=True)"
+        if is_workspace
+        else 'data.model_dump(exclude={"workspace_id"})'
+    )
+    update_values = (
+        "data.model_dump(exclude_unset=True)"
+        if is_workspace
+        else 'data.model_dump(exclude_unset=True, exclude={"workspace_id"})'
+    )
     list_filter = "" if is_workspace else f".where(DB{db_class}.workspace_id == auth_workspace_id)"
     get_filter = f"DB{db_class}.id == {pk_name}"
     if is_workspace:
         get_filter += f", DB{db_class}.id == auth_workspace_id"
     else:
         get_filter += f", DB{db_class}.workspace_id == auth_workspace_id"
+    db_imports = [f"from db.models import {db_class} as DB{db_class}"]
+    reference_checks: list[str] = []
+    for field, entity in workspace_references.items():
+        reference_class = to_pascal(entity)
+        db_imports.append(f"from db.models import {reference_class} as DB{reference_class}")
+        reference_checks.append(
+            textwrap.dedent(
+                f"""\
+                value = values.get("{field}")
+                if value is not None:
+                    exists = await session.scalar(
+                        select(DB{reference_class}.id).where(
+                            DB{reference_class}.id == value,
+                            DB{reference_class}.workspace_id == auth_workspace_id,
+                        )
+                    )
+                    if not exists:
+                        raise HTTPException(status_code=404, detail="{reference_class} not found")
+                """
+            ).rstrip()
+        )
+    reference_helper = ""
+    reference_validation = ""
+    if reference_checks:
+        checks = textwrap.indent("\n".join(reference_checks), "    ")
+        reference_helper = textwrap.indent(
+            (
+                "async def _validate_workspace_references(\n"
+                "    values: dict[str, object],\n"
+                "    auth_workspace_id: UUID,\n"
+                "    session: AsyncSession,\n"
+                ") -> None:\n"
+                f"{checks}\n"
+            ),
+            "        ",
+        )
+        reference_validation = (
+            "            await _validate_workspace_references(values, auth_workspace_id, session)\n"
+        )
+    db_import_block = textwrap.indent("\n".join(db_imports), "        ")
     return textwrap.dedent(
         f'''\
         from typing import Annotated
         from uuid import UUID
 
-        from fastapi import APIRouter, Depends, HTTPException
+        from fastapi import APIRouter, Depends, HTTPException, Query
         from sqlalchemy import select
         from sqlalchemy.ext.asyncio import AsyncSession
 
         from api.deps import require_workspace
-        from db.models import {db_class} as DB{db_class}
+{db_import_block}
         from db.session import get_session
         from domain.models import {model_class}, {model_class}Create, {model_class}Update
 
         router = APIRouter(prefix="{route}", tags=["{name}"])
+{reference_helper}
 
 
         @router.get("/", response_model=list[{model_class}])
         async def list_{name}(
             auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
             session: Annotated[AsyncSession, Depends(get_session)],
-            skip: int = 0,
-            limit: int = 100,
+            skip: int = Query(0, ge=0),
+            limit: int = Query(100, ge=1, le=1000),
         ) -> list[{model_class}]:
             result = await session.scalars(select(DB{db_class}){list_filter}.offset(skip).limit(limit))
             return [{model_class}.model_validate(r) for r in result.all()]
@@ -444,7 +496,8 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
             auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
             session: Annotated[AsyncSession, Depends(get_session)],
         ) -> {model_class}:
-            record = DB{db_class}(**data.model_dump(exclude_unset=True){create_extra})
+            values = {create_values}
+{reference_validation}            record = DB{db_class}(**values{create_extra})
             session.add(record)
             await session.commit()
             await session.refresh(record)
@@ -473,7 +526,8 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
             record = await session.scalar(select(DB{db_class}).where({get_filter}))
             if not record:
                 raise HTTPException(status_code=404, detail="Not found")
-            for key, value in data.model_dump(exclude_unset=True).items():
+            values = {update_values}
+{reference_validation}            for key, value in values.items():
                 setattr(record, key, value)
             await session.commit()
             await session.refresh(record)

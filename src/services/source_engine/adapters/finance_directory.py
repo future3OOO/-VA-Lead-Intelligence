@@ -1,9 +1,4 @@
-"""Bounded public-directory adapter for Australian finance professionals.
-
-Parses the Australian Finance Directory sitemap and profile pages to extract
-business names, websites, phone numbers, and named contacts (principals,
-brokers, advisers, accountants, bookkeepers) from the "About" text.
-"""
+"""Bounded public-directory adapter for Australian finance professionals."""
 
 from __future__ import annotations
 
@@ -21,9 +16,6 @@ import httpx
 from bs4 import BeautifulSoup
 
 from services.source_engine.adapters.base import BaseSourceAdapter
-from services.source_engine.adapters.team_pages import (
-    _is_plausible_person_name,
-)
 from services.source_engine.config import SourceConfig
 
 _INSTITUTION_RE = re.compile(
@@ -115,47 +107,6 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
                 if str(item.get("@type", "")).lower() == "localbusiness":
                     return item
         return {}
-
-    # Person names in "About" text are kept only when the surrounding context
-    # shows they are a person (subject of a sentence, object of "led by", etc.)
-    _PERSON_NAME_RE = re.compile(r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){1,2})\b")
-    _PERSON_SIGNAL_RE = re.compile(
-        r"\b(?:is|was|has|had|founded|established|joined|started|created|set\s+(?:up|about)|"
-        r"has\s+been|holds|graduated|completed|brings|leads|oversees|manages|heads|runs|"
-        r"led\s+by|founded\s+by|owned\s+by|run\s+by|headed\s+by|managed\s+by|directed\s+by|"
-        r"created\s+by|started\s+by|brought\s+to\s+you\s+by|broker\s+behind|"
-        r"principal\s+broker|principal|owner|founder|director|partner|adviser|advisor|"
-        r"accountant|bookkeeper|financial\s+planner|mortgage\s+broker|insurance\s+broker)\b",
-        re.I,
-    )
-
-    def _normalise_text(self, text: str) -> str:
-        """Add spaces after missing sentence boundaries to help name extraction."""
-        text = re.sub(r"(?<=[a-zA-Z])\.(?=[A-Z])", ". ", text)
-        text = re.sub(r"(\w)([A-Z])", r"\1 \2", text)
-        return text.replace("\n", " ")
-
-    def _extract_names(self, text: str) -> list[tuple[str, str]]:
-        """Return capitalised phrases whose context indicates a person."""
-        clean = self._normalise_text(text)
-        candidates: list[tuple[str, str]] = []
-        for match in self._PERSON_NAME_RE.finditer(clean):
-            name = match.group(1)
-            if not _is_plausible_person_name(name):
-                continue
-            start = max(0, match.start() - 120)
-            end = min(len(clean), match.end() + 120)
-            context = clean[start:end].strip()
-            if self._PERSON_SIGNAL_RE.search(context):
-                candidates.append((name, context))
-        return candidates
-
-    def _best_named_contact(self, description: str) -> tuple[str, str] | None:
-        """Pick the best person name and supporting context from the description."""
-        candidates = self._extract_names(description)
-        if not candidates:
-            return None
-        return candidates[0]
 
     _DISALLOWED_HOSTS = {
         "facebook.com",
@@ -265,20 +216,9 @@ class FinanceDirectoryAdapter(BaseSourceAdapter):
             ]
             location = ", ".join(p for p in parts if p)
         contact_routes: list[dict[str, Any]] = []
-        if website:
-            domain = self._coerce_domain(website)
-            if domain:
-                contact_routes.append(
-                    {"type": "sales_form", "value": website, "is_verified": False}
-                )
         if telephone:
             contact_routes.append(
                 {"type": "business_phone", "value": telephone, "is_verified": False}
-            )
-        named = self._best_named_contact(description)
-        if named:
-            contact_routes.append(
-                {"type": "named_contact", "value": named[0], "is_verified": False}
             )
         return {
             "url": url,

@@ -1,11 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import require_workspace
+from db.models import Company as DBCompany
 from db.models import SourceHit as DBSourceHit
 from db.session import get_session
 from domain.models import SourceHit, SourceHitCreate, SourceHitUpdate
@@ -13,12 +14,29 @@ from domain.models import SourceHit, SourceHitCreate, SourceHitUpdate
 router = APIRouter(prefix="/source-hits", tags=["source_hit"])
 
 
+async def _validate_workspace_references(
+    values: dict[str, object],
+    auth_workspace_id: UUID,
+    session: AsyncSession,
+) -> None:
+    value = values.get("company_id")
+    if value is not None:
+        exists = await session.scalar(
+            select(DBCompany.id).where(
+                DBCompany.id == value,
+                DBCompany.workspace_id == auth_workspace_id,
+            )
+        )
+        if not exists:
+            raise HTTPException(status_code=404, detail="Company not found")
+
+
 @router.get("/", response_model=list[SourceHit])
 async def list_source_hit(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
 ) -> list[SourceHit]:
     result = await session.scalars(
         select(DBSourceHit)
@@ -35,7 +53,9 @@ async def create_source_hit(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SourceHit:
-    record = DBSourceHit(**data.model_dump(exclude_unset=True), workspace_id=auth_workspace_id)
+    values = data.model_dump(exclude={"workspace_id"})
+    await _validate_workspace_references(values, auth_workspace_id, session)
+    record = DBSourceHit(**values, workspace_id=auth_workspace_id)
     session.add(record)
     await session.commit()
     await session.refresh(record)
@@ -72,7 +92,9 @@ async def update_source_hit(
     )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True, exclude={"workspace_id"})
+    await _validate_workspace_references(values, auth_workspace_id, session)
+    for key, value in values.items():
         setattr(record, key, value)
     await session.commit()
     await session.refresh(record)

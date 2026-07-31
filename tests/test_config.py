@@ -28,7 +28,8 @@ def test_validate_source_registry_rejects_unknown_allowed_fields() -> None:
         "validate_configs", REPO_ROOT / "scripts" / "validate_configs.py"
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
 
     data = {
         "sources": {
@@ -45,3 +46,26 @@ def test_validate_source_registry_rejects_unknown_allowed_fields() -> None:
     errors = module.validate_source_registry(data, Path("test.yaml"))
     for token in ("names", "titles", "social_profiles"):
         assert any(f"unknown allowed_fields token '{token}'" in e for e in errors)
+
+
+def test_validate_configs_rejects_non_mapping_entries() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "validate_configs", REPO_ROOT / "scripts" / "validate_configs.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    source_errors = module.validate_source_registry(
+        {"sources": {"bad_source": None}},
+        Path("sources.yaml"),
+    )
+    query_errors = module.validate_query_library(
+        {"families": {"bad_family": None}},
+        Path("queries.yaml"),
+    )
+
+    assert source_errors == ["sources.yaml source 'bad_source' must be a mapping"]
+    assert query_errors == ["queries.yaml family 'bad_family' must be a mapping"]

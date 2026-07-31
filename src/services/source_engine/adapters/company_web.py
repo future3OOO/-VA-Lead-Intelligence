@@ -80,7 +80,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
         if not await self._robots_allowed(sitemap_url):
             return []
         try:
-            response = await self._http_get(sitemap_url)
+            response = await self._http_get(sitemap_url, expected_host=domain)
             response.raise_for_status()
             content_type = response.headers.get("content-type", "").lower()
             if content_type and "xml" not in content_type:
@@ -95,11 +95,11 @@ class CompanyWebAdapter(BaseSourceAdapter):
         except Exception:
             return []
 
-    async def _fetch_page(self, url: str) -> tuple[str, BeautifulSoup] | None:
+    async def _fetch_page(self, url: str, domain: str) -> tuple[str, BeautifulSoup] | None:
         if not await self._robots_allowed(url):
             return None
         try:
-            response = await self._http_get(url)
+            response = await self._http_get(url, expected_host=domain)
             response.raise_for_status()
             content_type = response.headers.get("content-type", "").lower()
             if content_type and "text/html" not in content_type:
@@ -147,7 +147,7 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 )
             )
             url, depth = queue.popleft()
-            result = await self._fetch_page(url)
+            result = await self._fetch_page(url, domain)
             if not result:
                 continue
             final_url, soup = result

@@ -33,7 +33,7 @@ Each business type is mapped to the kind of remote admin work that business usua
 
 Every lead gets a **score out of 100** and a rank:
 
-- **High (75+ and has a contact route)** — strong prospect fit: the business sector commonly has delegable admin work and we have a usable contact route.
+- **High (75+ and has a usable email, phone, or actionable contact-form URL)** — strong prospect fit with a direct outreach route.
 - **Medium (55–74, or 75+ without a contact route)** — good sector but the available signal is weaker, or the score is high but no contact route is available yet.
 - **Low (<55)** — weaker sector or service fit.
 
@@ -106,7 +106,7 @@ For each business, the adapter creates a `SourceHit` with:
 - `title` = the synthetic VA role for that sector (e.g. "Maintenance Coordinator / Plumbing Services")
 - `body_excerpt` = the business category, address, brand/operator context, and source link
 - `workplace_type` = `inferred_remote_friendly` (a prospecting inference, not an observed workplace policy)
-- `contact_routes_raw` = any email, phone, or website found in OSM tags
+- `contact_routes_raw` = email and phone values found in OSM tags; a website is company metadata, not a contact form
 - `location_raw` = assembled address or lat/lon
 
 The resolver then creates or links a `Company`, and the contact routes are stored in `contact_route`.
@@ -326,7 +326,7 @@ More detail is in `docs/architecture/source-engine-data-flow.md` and `docs/archi
 |--------|-------------|----------------|------------|---------|-------------|
 | `manual_seed` | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual_seed.enabled` |
 | `openstreetmap` | public_api | real ANZ business name, address, phone, email, website, operator, business category | 0.2 req/s | none | `sources.openstreetmap.enabled` |
-| `finance_directory` | scoped_public_web_crawl | Australian finance-professional profile pages: company, website, phone, named principal | 2 req/s | none | `sources.finance_directory.enabled` |
+| `finance_directory` | scoped_public_web_crawl | Australian finance-professional profile pages: company, website, phone | 2 req/s | none | `sources.finance_directory.enabled` |
 | `nz_finance_advisers` | scoped_public_web_crawl | NZ FSPR adviser profiles and provider pages: adviser name, FAP, website, phone | 1 req/s | none | `sources.nz_finance_advisers.enabled` |
 | `team_pages` | scoped_public_web_crawl | named contacts, job titles, emails, phones, LinkedIn profiles from `/team` and `/about` pages | 2 req/s | none | `sources.team_pages.enabled` |
 | `company_web` | scoped_public_web_crawl | website contact routes and named people from priority pages | 2 req/s | none | `sources.company_web.enabled` |

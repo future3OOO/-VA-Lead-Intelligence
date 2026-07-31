@@ -281,18 +281,31 @@ class BaseSourceAdapter(ABC):
         return httpx.AsyncClient(timeout=httpx_timeout, transport=transport, headers=headers)
 
     async def _http_request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        """Make an HTTP request with per-host rate limiting and manual redirect validation."""
+        """Make a rate-limited request, optionally confined to one website."""
         if self.client is None:
             raise RuntimeError(f"{self.source_key} adapter has no HTTP client")
+        expected_host = kwargs.pop("expected_host", None)
+        if expected_host is not None and not isinstance(expected_host, str):
+            raise TypeError("expected_host must be a string")
         kwargs.pop("follow_redirects", None)
         if "timeout" not in kwargs:
             kwargs["timeout"] = 30.0
         client = self.client
+        normalized_expected = (
+            re.sub(r"^www\.", "", expected_host.lower()) if expected_host else None
+        )
         for _ in range(10):
             if not await self._is_safe_url(url):
                 raise httpx.HTTPError(f"Unsafe URL requested: {url}")
             parsed = urlparse(url)
             host = parsed.hostname or parsed.netloc
+            normalized_host = re.sub(r"^www\.", "", host.lower())
+            if (
+                normalized_expected
+                and normalized_host != normalized_expected
+                and not normalized_host.endswith(f".{normalized_expected}")
+            ):
+                raise httpx.HTTPError(f"Redirect outside expected host {expected_host}: {url}")
             async with self.rate_limiter.acquire(host):
                 response = await client.request(method, url, follow_redirects=False, **kwargs)
             if response.status_code not in {301, 302, 303, 307, 308}:

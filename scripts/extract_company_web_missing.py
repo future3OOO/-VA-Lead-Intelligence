@@ -25,7 +25,7 @@ async def get_missing_contact_domains(
             await session.execute(
                 text(
                     """
-                    SELECT c.primary_domain
+                    SELECT DISTINCT c.primary_domain
                     FROM company c
                     LEFT JOIN contact_route cr
                       ON cr.company_id = c.id

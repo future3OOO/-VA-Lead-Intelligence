@@ -977,6 +977,8 @@ entities:
   source_hit:
     route: /source-hits
     description: Normalized record from a source adapter.
+    workspace_references:
+      company_id: company
     fields:
       - name: id
         type: uuid
@@ -1077,6 +1079,8 @@ entities:
   source_run:
     route: /source-runs
     description: Execution record for a source adapter run.
+    workspace_references:
+      campaign_id: campaign
     fields:
       - name: id
         type: uuid

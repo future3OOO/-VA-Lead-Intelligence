@@ -7,13 +7,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
 import pytest
 from bs4 import BeautifulSoup
 
+from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
+from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdvisersAdapter
+from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.adapters.team_pages import _extract_from_soup
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
     _name_in_email_local,
+    extract_contact_form_url,
     extract_email,
     extract_phone,
     extract_url,
@@ -37,12 +42,17 @@ def _load_export_helpers() -> tuple:
         module._qualification_score,
         module._best_named_contact,
         module._build_explanation,
+        module._csv_safe,
     )
 
 
-_best_contact, _qualification_score, _best_named_contact, _build_explanation = (
-    _load_export_helpers()
-)
+(
+    _best_contact,
+    _qualification_score,
+    _best_named_contact,
+    _build_explanation,
+    _csv_safe,
+) = _load_export_helpers()
 
 
 def _make_source_config(
@@ -58,6 +68,18 @@ def _make_source_config(
         terms_reviewed_at="2026-07-15T00:00:00+00:00",
         allowed_outputs=allowed_outputs or ["company_lead", "contact_route"],
         allowed_fields=allowed_fields,
+    )
+
+
+def _make_adapter_config(source_key: str, access_mode: str) -> SourceConfig:
+    return SourceConfig(
+        source_key=source_key,
+        source_class=source_key,
+        access_mode=access_mode,
+        status="enabled",
+        owner="test",
+        terms_review_status="approved",
+        terms_reviewed_at="2026-07-15T00:00:00+00:00",
     )
 
 
@@ -120,9 +142,22 @@ def test_contact_normalization_rejects_malformed_values() -> None:
     assert extract_phone("Camp Hill <07 3264 2311>") == "07 3264 2311"
     assert extract_url("//example.com") is None
     assert extract_url("https://example.com/contact") == "https://example.com/contact"
+    assert extract_contact_form_url("https://example.com") is None
+    assert extract_contact_form_url("https://facebook.com/example") is None
+    assert (
+        extract_contact_form_url("https://example.com/contact-us")
+        == "https://example.com/contact-us"
+    )
 
     assert is_valid_named_contact("Get In Touch") is False
     assert is_valid_named_contact("Quick Links") is False
+
+
+def test_csv_safe_neutralizes_spreadsheet_formula_prefixes() -> None:
+    for value in ("=1+1", "+cmd", "-2+3", "@SUM(A1:A2)", " \t=1+1"):
+        assert _csv_safe(value) == f"'{value}"
+    assert _csv_safe("Acme Services") == "Acme Services"
+    assert _csv_safe(42) == 42
     assert is_valid_named_contact("This Week") is False
     assert is_valid_named_contact("1800 013 937") is False
     assert is_valid_named_contact("Tony Bove") is True
@@ -143,6 +178,7 @@ def test_normalize_route_value_preserves_named_contact_routes() -> None:
         normalize_route_value("sales_form", "https://example.com/contact")
         == "https://example.com/contact"
     )
+    assert normalize_route_value("sales_form", "https://example.com") is None
     assert normalize_route_value("named_contact", "Get In Touch") is None
 
 
@@ -157,6 +193,18 @@ def test_normalize_route_value_preserves_named_contact_routes() -> None:
             [{"type": "generic_email", "value": "hire@acmeservices.com"}],
             "High",
         ),
+        (
+            [{"type": "sales_form", "value": "https://acmeservices.com"}],
+            "Medium",
+        ),
+        (
+            [{"type": "sales_form", "value": "https://facebook.com/acmeservices"}],
+            "Medium",
+        ),
+        (
+            [{"type": "contact_form", "value": "https://acmeservices.com/contact"}],
+            "High",
+        ),
     ],
 )
 def test_high_rank_requires_usable_contact_route(
@@ -164,7 +212,7 @@ def test_high_rank_requires_usable_contact_route(
 ) -> None:
     """A High rank is only awarded when a syntactically usable contact route exists."""
     best = _best_contact(routes)
-    score, rank, reasons = _qualification_score(
+    score, rank, reasons, category = _qualification_score(
         company_name="Acme Property Management",
         title="Property Manager",
         body="We need a remote assistant to manage inbox, tenant enquiries and schedule appointments.",
@@ -176,6 +224,7 @@ def test_high_rank_requires_usable_contact_route(
     if expected_rank == "Medium":
         assert any("contact route missing" in r for r in reasons)
     assert score >= 75
+    assert category == "Property/Facilities"
 
 
 def test_is_valid_named_contact_rejects_page_labels() -> None:
@@ -194,6 +243,11 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
         "This Week",
     ]:
         assert is_valid_named_contact(label) is False
+
+
+def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> None:
+    assert is_valid_named_contact("Grant Hill") is True
+    assert is_valid_named_contact("Brooke Taylor") is True
 
 
 def test_best_named_contact_only_pairs_explicit_email() -> None:
@@ -286,7 +340,7 @@ def test_process_hit_listing_source_is_not_buyer_intent() -> None:
 def test_listing_score_and_explanation_do_not_claim_observed_job_intent() -> None:
     """A public business listing is prospect-fit evidence, not a job advertisement."""
     routes = {"best_email": "hello@example.com"}
-    score, rank, reasons = _qualification_score(
+    score, rank, reasons, category = _qualification_score(
         company_name="Acme Property Management",
         title="Property Manager / Real Estate Office",
         body="OpenStreetMap business listing for Acme Property Management.",
@@ -310,10 +364,29 @@ def test_listing_score_and_explanation_do_not_claim_observed_job_intent() -> Non
     )
 
     assert rank == "High"
+    assert category == "Property/Facilities"
     assert not any("role is" in reason or "posted" in reason for reason in reasons)
     assert "business listing" in explanation
     assert "is advertising" not in explanation
     assert "role is remote/hybrid" not in explanation
+
+
+def test_technology_vendor_score_and_export_category_agree() -> None:
+    score, rank, reasons, category = _qualification_score(
+        company_name="Acme Property Management Software",
+        title="Property Manager",
+        body="Cloud software platform for property management agencies.",
+        location="Sydney, NSW",
+        published_at=datetime.now(timezone.utc),
+        routes={"best_email": "sales@example.org"},
+        workplace_type="inferred_remote_friendly",
+        intent_label="company_existence_only",
+    )
+
+    assert category == "Other"
+    assert score < 55
+    assert rank == "Low"
+    assert any("technology/software vendor" in reason for reason in reasons)
 
 
 def test_is_valid_named_contact_rejects_location_and_label_text() -> None:
@@ -383,6 +456,280 @@ def test_team_page_email_must_identify_the_named_person() -> None:
     assert {(route["type"], route["value"]) for route in routes} == {
         ("generic_email", "belinda@blackfoxrealestate.com.au")
     }
+
+
+def test_team_page_mailbox_without_person_evidence_stays_generic() -> None:
+    """A branch/location mailbox must not invent a named person."""
+    soup = BeautifulSoup(
+        '<div class="contact"><a href="mailto:berwick.vic@raywhite.com">Email us</a></div>',
+        "html.parser",
+    )
+    routes = _extract_from_soup(
+        soup,
+        "https://raywhiteberwick.com.au/contact",
+        "raywhiteberwick.com.au",
+    )
+    assert {(route["type"], route["value"]) for route in routes} == {
+        ("generic_email", "berwick.vic@raywhite.com")
+    }
+
+
+def test_team_page_explicit_person_card_keeps_named_email() -> None:
+    """A same-card person name and matching email remain a named contact."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-card">
+          <h2>Jane Smith</h2>
+          <p>Director</p>
+          <a href="mailto:jane.smith@example.org">Email Jane</a>
+        </div>
+        """,
+        "html.parser",
+    )
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+    assert (
+        "named_work_email_approved",
+        "Jane Smith (Director) <jane.smith@example.org>",
+    ) in values
+    assert ("named_contact", "Jane Smith (Director)") in values
+
+
+def test_team_page_last_name_only_email_match_stays_generic() -> None:
+    """Sharing only a surname is not enough to associate an email with a person."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-card">
+          <h2>Filter Sam Towns</h2>
+          <a href="mailto:jake.towns@petrusma.com.au">Email</a>
+        </div>
+        """,
+        "html.parser",
+    )
+    routes = _extract_from_soup(
+        soup,
+        "https://www.petrusma.com.au/team",
+        "petrusma.com.au",
+    )
+    assert {(route["type"], route["value"]) for route in routes} == {
+        ("generic_email", "jake.towns@petrusma.com.au")
+    }
+
+
+def test_team_page_emits_only_actionable_contact_forms() -> None:
+    """An actual form on a contact page is usable; a homepage form is not."""
+    html = """
+    <form method="post">
+      <input name="email" type="email">
+      <textarea name="message"></textarea>
+    </form>
+    """
+    contact_routes = _extract_from_soup(
+        BeautifulSoup(html, "html.parser"),
+        "https://example.org/contact-us",
+        "example.org",
+    )
+    homepage_routes = _extract_from_soup(
+        BeautifulSoup(html, "html.parser"),
+        "https://example.org",
+        "example.org",
+    )
+
+    assert {
+        "type": "contact_form",
+        "value": "https://example.org/contact-us",
+        "is_verified": False,
+    } in contact_routes
+    assert not any(route["type"] == "contact_form" for route in homepage_routes)
+
+
+@pytest.mark.asyncio
+async def test_finance_directory_description_does_not_mint_people(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Synthetic directory prose is not structured person evidence."""
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+    url = "https://www.financedirectory.net.au/victoria/melbourne/finance/capital-arena"
+    html = """
+    <script type="application/ld+json">
+    {
+      "@type": "LocalBusiness",
+      "name": "Capital Arena",
+      "description": "Capital Arena is a mortgage broker led by Investor Relations and Pitch Preparation.",
+      "telephone": "03 9000 0000",
+      "url": "https://capitalarena.example.org",
+      "address": {"addressLocality": "Melbourne", "addressRegion": "VIC"}
+    }
+    </script>
+    """
+
+    async def robots_allowed(_url: str) -> bool:
+        return True
+
+    async def http_get(_url: str) -> httpx.Response:
+        return httpx.Response(200, text=html, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_http_get", http_get)
+    try:
+        result = await adapter._fetch_profile(url)
+    finally:
+        await adapter.aclose()
+
+    assert result is not None
+    assert not any(route["type"] == "named_contact" for route in result["contact_routes"])
+    assert not any(route["type"] == "sales_form" for route in result["contact_routes"])
+
+
+def test_directory_website_metadata_is_not_a_contact_form() -> None:
+    """Listing websites remain company metadata unless a form is actually found."""
+    osm = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    osm_hit = osm._normalize_element(
+        uuid4(),
+        "Sydney, Australia",
+        "office",
+        "financial",
+        "Finance practice",
+        "Finance",
+        {
+            "type": "node",
+            "id": 123,
+            "tags": {
+                "name": "Acme Mortgage Brokers",
+                "website": "https://acme.example.org",
+                "phone": "02 9000 0000",
+            },
+        },
+    )
+    assert osm_hit is not None
+    assert not any(route["type"] == "sales_form" for route in osm_hit["contact_routes_raw"])
+
+    nz = NzFinanceAdvisersAdapter(
+        _make_adapter_config("nz_finance_advisers", "scoped_public_web_crawl")
+    )
+    nz_hit = nz.normalize(
+        uuid4(),
+        {
+            "company_name": "Acme Advice",
+            "description": "Financial advice",
+            "location": "Auckland, New Zealand",
+            "website": "https://acme.example.org",
+            "name": "Jane Smith",
+            "job_title": "Adviser",
+            "phone": "09 9000 0000",
+            "profile_url": "https://financeadvisers.co.nz/jane-smith",
+        },
+    )
+    assert not any(route["type"] == "sales_form" for route in nz_hit["contact_routes_raw"])
+
+
+@pytest.mark.asyncio
+async def test_http_request_rejects_redirect_outside_expected_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Branch crawls must not follow redirects into a shared corporate site."""
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+    requested_hosts: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested_hosts.append(request.url.host)
+        return httpx.Response(
+            302,
+            headers={"location": "https://www.corporate.example.org/team"},
+            request=request,
+        )
+
+    async def safe_url(_url: str) -> bool:
+        return True
+
+    await adapter.client.aclose()
+    adapter.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(adapter, "_is_safe_url", safe_url)
+    try:
+        with pytest.raises(httpx.HTTPError, match="outside expected host"):
+            await adapter._http_get(
+                "https://branch.example.org/team",
+                expected_host="branch.example.org",
+            )
+    finally:
+        await adapter.aclose()
+
+    assert requested_hosts == ["branch.example.org"]
+
+
+@pytest.mark.asyncio
+async def test_http_request_allows_www_redirect_for_expected_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The opt-in host boundary should treat www as the same site."""
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "example.org":
+            return httpx.Response(
+                302,
+                headers={"location": "https://www.example.org/team"},
+                request=request,
+            )
+        return httpx.Response(200, text="ok", request=request)
+
+    async def safe_url(_url: str) -> bool:
+        return True
+
+    await adapter.client.aclose()
+    adapter.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(adapter, "_is_safe_url", safe_url)
+    try:
+        response = await adapter._http_get(
+            "https://example.org/team",
+            expected_host="example.org",
+        )
+    finally:
+        await adapter.aclose()
+
+    assert response.status_code == 200
+    assert response.url.host == "www.example.org"
+
+
+@pytest.mark.asyncio
+async def test_http_request_allows_subdomain_redirect_for_expected_apex(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "example.org":
+            return httpx.Response(
+                302,
+                headers={"location": "https://nz.example.org/team"},
+                request=request,
+            )
+        return httpx.Response(200, text="ok", request=request)
+
+    async def safe_url(_url: str) -> bool:
+        return True
+
+    await adapter.client.aclose()
+    adapter.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(adapter, "_is_safe_url", safe_url)
+    try:
+        response = await adapter._http_get(
+            "https://example.org/team",
+            expected_host="example.org",
+        )
+    finally:
+        await adapter.aclose()
+
+    assert response.status_code == 200
+    assert response.url.host == "nz.example.org"
 
 
 @pytest.mark.asyncio

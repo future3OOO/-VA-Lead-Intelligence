@@ -35,7 +35,7 @@ persist DBSourceHit + DBSourceRun
 4. **Classify**: `classify_intent()` uses the `query-library` positive titles, task phrases and negative terms to produce an `IntentLabel`.
 5. **Score**: `score_source_hit()` weights intent strength (35%), resolvability (20%), freshness (15%), evidence quality (15%), contactability (10%) and source stability (5%). The export script also applies a company-centric VA-fit score that favours target sectors, remote/hybrid work, admin-burden language, and available contact routes.
 6. **Resolve**: `resolve_company()` matches an existing company by domain or canonical name, or creates a new one, but only for buyer-facing intents.
-7. **Enrich**: `enrich_contact_routes()` persists routes found by the source. The `openstreetmap` adapter provides `website`/`email`/`phone` tags; the optional `team_pages` adapter can crawl `/team` and `/about` pages to add named contacts and LinkedIn profiles for resolved companies.
+7. **Enrich**: `enrich_contact_routes()` persists usable routes found by the source. The `openstreetmap` adapter provides email and phone routes while retaining website tags as company-domain metadata; `team_pages` can add evidence-backed named contacts and actionable contact forms.
 8. **Persist**: `DBSourceHit` and `DBSourceRun` are written; `content_hash` provides idempotency.
 
 ## Operational Controls

@@ -18,6 +18,7 @@ from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
 from services.source_engine.enricher import (
     _name_in_email_local,
+    extract_contact_form_url,
     extract_email,
     extract_phone,
     extract_url,
@@ -44,6 +45,13 @@ ONSITE_KEYWORDS_RE = re.compile(
     r"\b(on[-\s]?site|on site|in[-\s]?office|in office|office[-\s]?based|site[-\s]?based)\b",
     re.I,
 )
+
+
+def _csv_safe(value: object) -> object:
+    """Keep externally sourced text inert when a CSV is opened in a spreadsheet."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
 
 
 def _is_remote_friendly(title: str, body: str, location: str, workplace_type: str = "") -> bool:
@@ -532,7 +540,7 @@ def _qualification_score(
     routes: dict[str, str],
     workplace_type: str = "",
     intent_label: str = "",
-) -> tuple[int, str, list[str]]:
+) -> tuple[int, str, list[str], str]:
     text = f"{title} {body} {company_name} {location}".lower()
     title_lower = title.lower()
     category = _detect_category(text)
@@ -626,7 +634,7 @@ def _qualification_score(
         rank = "Medium"
         if score >= 75 and not has_contact:
             reasons.append("contact route missing; rank capped at Medium")
-    return score, rank, reasons
+    return score, rank, reasons, category
 
 
 def _build_explanation(
@@ -684,7 +692,7 @@ def _best_contact(routes: list[dict[str, str]]) -> dict[str, str]:
             if phone:
                 candidates["best_phone"].append((0, phone))
         elif t in ("sales_form", "contact_form", "demo_booking"):
-            url = extract_url(v)
+            url = extract_contact_form_url(v)
             if url:
                 candidates["best_form"].append((0, url))
     return {
@@ -900,18 +908,21 @@ async def main() -> None:
                 ).scalar()
                 writer.writerow(
                     [
-                        c.id,
-                        c.canonical_name,
-                        c.primary_domain or "",
-                        "Yes" if target else "No",
-                        hit_count,
-                        best.get("best_email", ""),
-                        best.get("best_phone", ""),
-                        best.get("best_form", ""),
-                        named.get("name", ""),
-                        named.get("title", ""),
-                        named.get("email", ""),
-                        named.get("linkedin", ""),
+                        _csv_safe(value)
+                        for value in [
+                            c.id,
+                            c.canonical_name,
+                            c.primary_domain or "",
+                            "Yes" if target else "No",
+                            hit_count,
+                            best.get("best_email", ""),
+                            best.get("best_phone", ""),
+                            best.get("best_form", ""),
+                            named.get("name", ""),
+                            named.get("title", ""),
+                            named.get("email", ""),
+                            named.get("linkedin", ""),
+                        ]
                     ]
                 )
 
@@ -951,7 +962,7 @@ async def main() -> None:
                 else (hit.company_domain_raw or "")
             )
             best_routes = _best_contact(contact_by_company.get(company.id, [])) if company else {}
-            score, rank, reasons = _qualification_score(
+            score, rank, reasons, category = _qualification_score(
                 company_name,
                 title,
                 body,
@@ -965,7 +976,6 @@ async def main() -> None:
             if RANK_ORDER.get(rank.lower(), 0) < RANK_ORDER.get(min_rank, 1):
                 continue
 
-            category = _detect_category(text)
             explanation = _build_explanation(
                 company_name,
                 title,
@@ -1070,7 +1080,9 @@ async def main() -> None:
                 ],
             )
             leads_writer.writeheader()
-            leads_writer.writerows(lead_rows)
+            leads_writer.writerows(
+                {key: _csv_safe(value) for key, value in row.items()} for row in lead_rows
+            )
 
         print(f"Exported {len(lead_rows)} leads to {leads_path}")
         print(f"Exported {len(company_rows)} companies to {companies_path}")

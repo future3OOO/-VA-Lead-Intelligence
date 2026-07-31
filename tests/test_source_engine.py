@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import tempfile
 from datetime import datetime, timezone
@@ -55,6 +56,61 @@ def test_source_registry_loads() -> None:
     registry = SourceRegistryLoader().load()
     assert "manual_seed" in registry
     assert "openstreetmap" in registry
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("script_name", "function_name"),
+    [
+        ("extract_team_pages_missing", "get_missing_domains"),
+        ("extract_company_web_missing", "get_missing_contact_domains"),
+    ],
+)
+async def test_missing_contact_backfills_deduplicate_domains(
+    script_name: str,
+    function_name: str,
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        script_name,
+        Path(__file__).resolve().parent.parent / "scripts" / f"{script_name}.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(
+            name=f"Test {script_name}",
+            slug=f"test-{uuid4().hex}",
+            billing_email="test@example.org",
+        )
+        session.add(workspace)
+        await session.flush()
+        session.add_all(
+            [
+                DBCompany(
+                    workspace_id=workspace.id,
+                    canonical_name="Shared Domain Branch A",
+                    primary_domain="shared-domain.test",
+                    country_code="NZ",
+                    industry="Finance",
+                    employee_count=5,
+                ),
+                DBCompany(
+                    workspace_id=workspace.id,
+                    canonical_name="Shared Domain Branch B",
+                    primary_domain="shared-domain.test",
+                    country_code="NZ",
+                    industry="Finance",
+                    employee_count=5,
+                ),
+            ]
+        )
+        await session.commit()
+        workspace_id = workspace.id
+
+    domains = await getattr(module, function_name)(workspace_id)
+    assert domains == ["shared-domain.test"]
 
 
 def test_openstreetmap_rejects_public_email_and_social_domains() -> None:

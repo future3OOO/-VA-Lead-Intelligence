@@ -28,9 +28,11 @@ def fail(message: str) -> int:
 
 
 def check_git_clean() -> tuple[bool, str]:
-    result = run(["git", "status", "--porcelain"])
-    clean = result.stdout.strip() == ""
-    return clean, result.stdout
+    changed = run(["git", "diff", "--name-only"]).stdout
+    staged = run(["git", "diff", "--cached", "--name-only"]).stdout
+    untracked = run(["git", "ls-files", "--others", "--exclude-standard"]).stdout
+    dirty_files = "".join((changed, staged, untracked))
+    return not dirty_files.strip(), dirty_files
 
 
 def check_adrs() -> tuple[bool, list[str]]:
@@ -85,11 +87,11 @@ def main() -> int:
         ),
         (
             "lint generated code",
-            [sys.executable, "-m", "ruff", "check", "--fix", "src"],
+            [sys.executable, "-m", "ruff", "check", "--fix", "--no-cache", "src"],
         ),
         (
             "format generated code",
-            [sys.executable, "-m", "ruff", "format", "src"],
+            [sys.executable, "-m", "ruff", "format", "--no-cache", "src"],
         ),
         (
             "contracts",

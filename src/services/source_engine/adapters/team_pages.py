@@ -16,7 +16,11 @@ from bs4 import BeautifulSoup
 
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.config import SourceConfig
-from services.source_engine.enricher import _name_in_email_local, is_valid_named_contact
+from services.source_engine.enricher import (
+    _name_in_email_local,
+    extract_contact_form_url,
+    is_valid_named_contact,
+)
 
 _TITLE_KEYWORDS = [
     "CEO",
@@ -100,106 +104,6 @@ _TITLE_RE = re.compile(
 )
 
 _NAME_RE = re.compile(r"\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)+)\b")
-
-_GENERIC_NAME_WORDS = {
-    "info",
-    "contact",
-    "sales",
-    "support",
-    "hello",
-    "team",
-    "careers",
-    "hiring",
-    "leasing",
-    "rent",
-    "feedback",
-    "admin",
-    "office",
-    "help",
-    "service",
-    "marketing",
-    "press",
-    "billing",
-    "jobs",
-    "recruiting",
-    "hr",
-    "legal",
-    "media",
-    "customer",
-    "general",
-    "inquiries",
-    "inquiry",
-    "questions",
-    "apply",
-    "job",
-    "realestate",
-    "realtor",
-    "agent",
-    "broker",
-    "agency",
-    "firm",
-    "company",
-    "email",
-    "us",
-    "click",
-    "here",
-    "call",
-    "text",
-    "message",
-    "send",
-    "more",
-    "learn",
-    "today",
-    "now",
-    "inquire",
-    "sitemap",
-    "connect",
-    "use",
-    "visit",
-    "website",
-    "page",
-    "menu",
-    "navigation",
-    "read",
-    "about",
-    "details",
-    "link",
-    "follow",
-    "fb",
-    "ig",
-    "li",
-    "tt",
-    "facebook",
-    "instagram",
-    "twitter",
-    "tiktok",
-    "youtube",
-    "get",
-    "in",
-    "touch",
-    "this",
-    "week",
-    "quick",
-    "links",
-    "roof",
-    "creek",
-    "opening",
-    "hours",
-    "privacy",
-    "policy",
-    "stamp",
-    "duty",
-    "calculator",
-    "final",
-    "thoughts",
-    "rental",
-    "appraisal",
-    "open",
-    "homes",
-    "buyer",
-    "enquiry",
-    "enquiries",
-}
 
 _NAV_WORDS = {
     "company",
@@ -524,36 +428,6 @@ def _title_case_name(name: str) -> str:
     return " ".join(cleaned)
 
 
-def _name_from_email(email: str) -> str:
-    """Derive a display name from an email local part such as 'andy.bell'."""
-    local = email.split("@")[0]
-    local = re.sub(r"\d+$", "", local)
-    if not local:
-        return ""
-    parts = re.split(r"[.\-_]", local)
-    parts = [p for p in parts if p]
-    if not parts:
-        return ""
-    if parts[0].lower() in _GENERIC_NAME_WORDS:
-        return ""
-    return _title_case_name(" ".join(parts))
-
-
-_PAGE_LABELS = {
-    "opening hours",
-    "privacy policy",
-    "stamp duty calculator",
-    "final thoughts",
-    "what we do",
-    "rental appraisal",
-    "open homes",
-    "buyer enquiry",
-    "get in touch",
-    "quick links",
-    "this week",
-}
-
-
 _TITLE_BOILERPLATE = re.compile(
     r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
     re.I,
@@ -574,12 +448,6 @@ def _is_plausible_person_name(name: str) -> bool:
     """Return True if the extracted string looks like a real person name."""
     if not name or len(name) > 80 or len(name) < 3:
         return False
-    name_lower = name.strip().lower()
-    if name_lower in _PAGE_LABELS:
-        return False
-    for label in _PAGE_LABELS:
-        if len(label) > 4 and label in name_lower:
-            return False
     if "@" in name or "http" in name.lower() or "/" in name or "linkedin" in name.lower():
         return False
     words = name.split()
@@ -815,8 +683,6 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 text_name = a.get_text(strip=True)
                 if _is_plausible_person_name(text_name):
                     name = text_name
-            if not name:
-                name = _name_from_email(email)
             p = _PersonResult(name=name, title=title, email=email)
             people[email] = p
         elif href.startswith("tel:"):
@@ -874,8 +740,6 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 text_name = tag.get_text(strip=True)
                 if _is_plausible_person_name(text_name):
                     name = text_name
-            if route_type == "email" and not name:
-                name = _name_from_email(value)
             people[value] = _PersonResult(
                 name=name,
                 title=title,
@@ -906,8 +770,6 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             ):
                 name = candidate
                 break
-        if not name:
-            name = _name_from_email(email)
         people[email] = _PersonResult(name=name, title=title, email=email)
 
     routes: list[dict[str, Any]] = []
@@ -919,6 +781,10 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 continue
             seen.add(key)
             routes.append(route)
+
+    form_url = extract_contact_form_url(base_url) if soup.find("form") else None
+    if form_url:
+        routes.append({"type": "contact_form", "value": form_url, "is_verified": False})
 
     return routes
 
@@ -970,7 +836,7 @@ class TeamPagesAdapter(BaseSourceAdapter):
             if not await self._robots_allowed(url):
                 continue
             try:
-                response = await self._http_get(url)
+                response = await self._http_get(url, expected_host=domain)
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" not in content_type:

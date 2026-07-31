@@ -307,10 +307,6 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
                     "is_verified": False,
                 }
             )
-        if domain:
-            contact_routes.append(
-                {"type": "sales_form", "value": raw["website"], "is_verified": False}
-            )
         if raw["phone"]:
             contact_routes.append(
                 {"type": "business_phone", "value": raw["phone"], "is_verified": False}

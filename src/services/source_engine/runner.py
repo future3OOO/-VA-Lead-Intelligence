@@ -213,7 +213,11 @@ class SourceRunner:
                         qualified += 1
 
                     await self._persist_hit(session, scored, cfg, is_qualified)
-            except Exception:
+            except Exception as exc:
+                print(
+                    f"[SourceRunner] {key} failed: {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
                 errors += 1
             finally:
                 await adapter.aclose()
