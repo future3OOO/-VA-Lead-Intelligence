@@ -15,6 +15,7 @@ from sqlalchemy import select
 from config.enums import IntentLabel
 from db.models.campaign import Campaign
 from db.models.company import Company as DBCompany
+from db.models.contact_route import ContactRoute as DBContactRoute
 from db.models.workspace import Workspace
 from db.session import AsyncSessionLocal
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
@@ -111,6 +112,85 @@ async def test_missing_contact_backfills_deduplicate_domains(
 
     domains = await getattr(module, function_name)(workspace_id)
     assert domains == ["shared-domain.test"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("script_name", "function_name"),
+    [
+        ("extract_team_pages_missing", "get_missing_domains"),
+        ("extract_company_web_missing", "get_missing_contact_domains"),
+    ],
+)
+async def test_contact_backfills_include_named_people_missing_direct_details(
+    script_name: str,
+    function_name: str,
+) -> None:
+    """A name alone must not prevent a later crawl for that person's email/phone."""
+    spec = importlib.util.spec_from_file_location(
+        script_name,
+        Path(__file__).resolve().parent.parent / "scripts" / f"{script_name}.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(
+            name=f"Incomplete contact {script_name}",
+            slug=f"incomplete-{uuid4().hex}",
+            billing_email="test@example.org",
+        )
+        session.add(workspace)
+        await session.flush()
+        company = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Named Adviser Ltd",
+            primary_domain="named-adviser.test",
+            country_code="NZ",
+            industry="Finance",
+            employee_count=5,
+        )
+        session.add(company)
+        await session.flush()
+        session.add(
+            DBContactRoute(
+                workspace_id=workspace.id,
+                company_id=company.id,
+                route_type="named_contact",
+                value="Aimee Trott (Financial Adviser)",
+                is_verified=False,
+            )
+        )
+        company_id = company.id
+        await session.commit()
+        workspace_id = workspace.id
+
+    domains = await getattr(module, function_name)(workspace_id)
+    assert domains == ["named-adviser.test"]
+
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                DBContactRoute(
+                    workspace_id=workspace_id,
+                    company_id=company_id,
+                    route_type="named_work_email_approved",
+                    value="Aimee Trott (Financial Adviser) <aimee.trott@named-adviser.test>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace_id,
+                    company_id=company_id,
+                    route_type="business_phone",
+                    value="Aimee Trott (Financial Adviser) <+64 21 555 0101>",
+                    is_verified=False,
+                ),
+            ]
+        )
+        await session.commit()
+
+    assert await getattr(module, function_name)(workspace_id) == []
 
 
 def test_openstreetmap_rejects_public_email_and_social_domains() -> None:
@@ -308,6 +388,99 @@ async def test_runner_manual_seed(manual_seed_config: SourceConfig) -> None:
         assert record.hits_total == 1
         assert record.hits_qualified_total == 1
         assert record.errors_total == 0
+
+
+@pytest.mark.asyncio
+async def test_duplicate_hit_enriches_newly_discovered_contact_routes() -> None:
+    """A repeated crawl may add contacts even when the source hit already exists."""
+    config = SourceConfig(
+        source_key="manual_seed",
+        source_class="manual_seed",
+        access_mode="manual_import",
+        status="enabled",
+        owner="test",
+        terms_review_status="approved",
+        terms_reviewed_at="2026-07-15T00:00:00+00:00",
+        allowed_outputs=["company_lead", "contact_route"],
+        allowed_fields=[
+            "company_name",
+            "company_domain",
+            "title",
+            "body",
+            "location",
+            "workplace_type",
+            "contact_routes",
+            "source_url",
+            "source_native_id",
+        ],
+    )
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(
+            name="Repeat contact crawl",
+            slug=f"repeat-contact-{uuid4().hex}",
+            billing_email="test@example.org",
+        )
+        session.add(workspace)
+        await session.flush()
+        now = datetime.now(timezone.utc)
+        base = {
+            "workspace_id": workspace.id,
+            "source_key": "manual_seed",
+            "source_native_id": "same-record",
+            "source_url": "https://acme.example.org/adviser/one",
+            "observed_at": now,
+            "published_at": now,
+            "title": "Adviser One — Financial Adviser at Acme Advice",
+            "body_excerpt": "Financial adviser profile",
+            "company_name_raw": "Acme Advice",
+            "company_domain_raw": "acme.example.org",
+            "location_raw": "Auckland, NZ",
+            "workplace_type": "inferred_remote_friendly",
+            "intent_label": IntentLabel.COMPANY_EXISTENCE_ONLY.value,
+            "raw_snapshot_uri": "",
+            "content_hash": "repeat-contact-hash",
+            "access_policy_version": "source-policy-v1",
+            "company_id": None,
+        }
+        runner = SourceRunner(registry={"manual_seed": config})
+        await runner._persist_hit(
+            session,
+            {
+                **base,
+                "contact_routes_raw": [
+                    {"type": "generic_email", "value": "office@acme.example.org"}
+                ],
+            },
+            config,
+            True,
+        )
+        await runner._persist_hit(
+            session,
+            {
+                **base,
+                "contact_routes_raw": [
+                    {
+                        "type": "business_phone",
+                        "value": "Adviser One (Financial Adviser) <+64 21 555 0101>",
+                    }
+                ],
+            },
+            config,
+            True,
+        )
+
+        routes = (
+            await session.scalars(
+                select(DBContactRoute).where(DBContactRoute.workspace_id == workspace.id)
+            )
+        ).all()
+        assert {(route.route_type, route.value) for route in routes} == {
+            ("generic_email", "office@acme.example.org"),
+            (
+                "business_phone",
+                "Adviser One (Financial Adviser) <+64 21 555 0101>",
+            ),
+        }
 
 
 @pytest.mark.asyncio

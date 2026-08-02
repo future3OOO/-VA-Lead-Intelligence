@@ -488,7 +488,10 @@ class _PersonResult:
         routes: list[dict[str, Any]] = []
         is_person = not self._is_generic_name()
         named_email = bool(self.email and is_person and _name_in_email_local(self.name, self.email))
-        has_person_evidence = named_email or bool(self.linkedin)
+        # A telephone link inside the same structured person card is explicit
+        # person evidence, even when the page does not publish an email or
+        # LinkedIn profile.
+        has_person_evidence = named_email or bool(self.phone and is_person) or bool(self.linkedin)
         if self.email:
             if named_email:
                 display = (

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run company_web crawl only on companies that have no named contact route."""
+"""Run company-web crawl for companies missing direct person details."""
 
 from __future__ import annotations
 
@@ -27,15 +27,22 @@ async def get_missing_contact_domains(
                     """
                     SELECT DISTINCT c.primary_domain
                     FROM company c
-                    LEFT JOIN contact_route cr
-                      ON cr.company_id = c.id
-                      AND (
-                          cr.route_type = 'named_contact'
-                          OR (cr.route_type = 'named_work_email_approved' AND cr.value LIKE '%<%')
-                      )
                     WHERE c.workspace_id = :ws
                       AND c.primary_domain != ''
-                      AND cr.id IS NULL
+                      AND (
+                        NOT EXISTS (
+                          SELECT 1 FROM contact_route email
+                          WHERE email.company_id = c.id
+                            AND email.route_type = 'named_work_email_approved'
+                            AND email.value LIKE '%<%'
+                        )
+                        OR NOT EXISTS (
+                          SELECT 1 FROM contact_route phone
+                          WHERE phone.company_id = c.id
+                            AND phone.route_type = 'business_phone'
+                            AND phone.value LIKE '%<%'
+                        )
+                      )
                       AND c.primary_domain NOT LIKE '%example%'
                       AND c.primary_domain NOT LIKE '%facebook.com%'
                       AND c.primary_domain NOT LIKE '%linkedin.com%'
@@ -61,7 +68,7 @@ async def main() -> None:
         parser.error("--max-domains must be zero or greater")
 
     domains = await get_missing_contact_domains(args.workspace_id, args.max_domains)
-    print(f"Running company_web against {len(domains)} domains with no named contact")
+    print(f"Running company_web against {len(domains)} domains missing direct person details")
     async with AsyncSessionLocal() as session:
         runner = SourceRunner()
         record = await runner.run(

@@ -47,10 +47,12 @@ ONSITE_KEYWORDS_RE = re.compile(
 )
 
 
-def _csv_safe(value: object) -> object:
+def _csv_safe(value: object, *, phone_number: bool = False) -> object:
     """Keep externally sourced text inert when a CSV is opened in a spreadsheet."""
     if isinstance(value, str):
         value = " ".join(value.split())
+        if phone_number and value.startswith("+") and extract_phone(value) == value:
+            return value
         if value.startswith(("=", "+", "-", "@")):
             return f"'{value}"
     return value
@@ -703,6 +705,34 @@ def _best_contact(routes: list[dict[str, str]]) -> dict[str, str]:
     }
 
 
+def _best_company_contact(
+    routes: list[dict[str, str]],
+    *,
+    exclude_email: str = "",
+    exclude_phone: str = "",
+    exclude_name: str = "",
+) -> dict[str, str]:
+    """Return generic company routes without borrowing person-associated details."""
+    company_routes: list[dict[str, str]] = []
+    for route in routes:
+        route_type = route["type"]
+        if route_type == "generic_email":
+            email = extract_email(route["value"])
+            if (
+                email
+                and email != exclude_email
+                and not (exclude_name and _name_in_email_local(exclude_name, email))
+            ):
+                company_routes.append(route)
+        elif route_type == "business_phone" and not _parse_named_route(route["value"]):
+            phone = extract_phone(route["value"])
+            if phone and phone != exclude_phone:
+                company_routes.append(route)
+        elif route_type in ("sales_form", "contact_form", "demo_booking"):
+            company_routes.append(route)
+    return _best_contact(company_routes)
+
+
 _TITLE_BOILERPLATE = re.compile(
     r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
     re.I,
@@ -736,16 +766,51 @@ def _parse_named_route(value: str) -> dict[str, str]:
 def _best_named_contact(
     routes: list[dict[str, str]],
     company_name: str = "",
+    target_name: str = "",
 ) -> dict[str, str]:
     """Return the best named contact with an explicitly associated email/phone/LinkedIn.
 
-    Generic company emails and phones are not paired with named people.
+    Generic company emails and phones are not paired with named people. When
+    target_name is supplied, only routes explicitly naming that person are
+    considered; middle names may differ but first and last names must match.
     named_contact_email is only populated when a named_work_email_approved
     or social_profile route explicitly carries that person's name and the
     email local part or LinkedIn URL plausibly matches the person's name.
-    business_phone routes are treated as company-level contact data only.
+    A business_phone display route is person-specific only when it explicitly
+    carries the person's name.
     """
     candidates: dict[str, dict[str, str]] = {}
+
+    def _name_key(name: str) -> tuple[str, ...]:
+        return tuple(re.findall(r"[a-z]+", name.lower()))
+
+    def _matches_target(name: str) -> bool:
+        if not target_name:
+            return True
+        candidate = _name_key(name)
+        target = _name_key(target_name)
+        if not candidate or not target:
+            return False
+        return candidate == target or (
+            len(candidate) >= 2
+            and len(target) >= 2
+            and (len(candidate) == 2 or len(target) == 2)
+            and candidate[0] == target[0]
+            and candidate[-1] == target[-1]
+        )
+
+    def _generic_email_matches_target(email: str) -> bool:
+        target = _name_key(target_name)
+        if len(target) < 2 or "@" not in email:
+            return False
+        local = tuple(re.findall(r"[a-z]+", email.split("@", 1)[0].lower()))
+        if not local:
+            return False
+        compact = "".join(local)
+        return local in (target, (target[0], target[-1])) or compact in {
+            "".join(target),
+            target[0] + target[-1],
+        }
 
     def _upsert(
         name: str,
@@ -755,9 +820,9 @@ def _best_named_contact(
         linkedin: str = "",
     ) -> None:
         display = f"{name} ({title})" if title else name
-        if not is_valid_named_contact(display, company_name):
+        if not is_valid_named_contact(display, company_name) or not _matches_target(name):
             return
-        key = name.lower()
+        key = " ".join(_name_key(name))
         existing = candidates.get(key)
         if not existing:
             candidates[key] = {
@@ -777,6 +842,7 @@ def _best_named_contact(
         if linkedin and not existing.get("linkedin"):
             existing["linkedin"] = linkedin
 
+    generic_emails: list[str] = []
     for r in sorted(routes, key=lambda route: (route["type"], route["value"].lower())):
         t = r["type"]
         v = r["value"]
@@ -791,6 +857,10 @@ def _best_named_contact(
             display = f"{name} ({title})" if title else name
             if is_valid_named_contact(display):
                 _upsert(name, title=title)
+        elif t == "generic_email" and target_name:
+            email = extract_email(v)
+            if email and _generic_email_matches_target(email):
+                generic_emails.append(email)
         elif t in ("named_work_email_approved", "business_phone", "social_profile_review_only"):
             parsed = _parse_named_route(v)
             if not parsed:
@@ -802,27 +872,67 @@ def _best_named_contact(
                 email = extract_email(payload)
                 if email and _name_in_email_local(name, email):
                     _upsert(name, title=title, email=email)
+            elif t == "business_phone":
+                phone = extract_phone(payload)
+                if phone:
+                    _upsert(name, title=title, phone=phone)
             elif t == "social_profile_review_only":
                 url = extract_url(payload)
                 if url and url.startswith("http"):
                     _upsert(name, title=title, linkedin=url)
 
-    if not candidates:
+    matching = list(candidates.values())
+    if target_name and matching:
+        target_key = _name_key(target_name)
+        exact = [candidate for candidate in matching if _name_key(candidate["name"]) == target_key]
+        if exact:
+            matching = exact
+        elif len(matching) > 1:
+            return {}
+    if not matching and target_name and generic_emails:
+        _upsert(target_name, email=generic_emails[0])
+        matching = list(candidates.values())
+    elif len(matching) == 1 and generic_emails and not matching[0].get("email"):
+        matching[0]["email"] = generic_emails[0]
+
+    if not matching:
         return {}
 
     def _score(c: dict[str, str]) -> int:
         return bool(c.get("email")) * 3 + bool(c.get("phone")) * 2 + bool(c.get("linkedin"))
 
     best = max(
-        candidates.values(),
+        matching,
         key=lambda c: (_score(c), c["name"]),
     )
     return {
         "name": best["name"],
         "title": best.get("title", ""),
         "email": best.get("email", ""),
+        "phone": best.get("phone", ""),
         "linkedin": best.get("linkedin", ""),
     }
+
+
+def _lead_named_contact(
+    title: str,
+    hit_routes: list[dict[str, str]],
+    company_routes: list[dict[str, str]],
+    company_name: str,
+) -> dict[str, str]:
+    """Select the person intended by one lead without using another employee."""
+    target = _best_named_contact(hit_routes, company_name).get("name", "")
+    has_named_title = " — " in title
+    if not target and has_named_title:
+        candidate = title.split(" — ", 1)[0].strip()
+        if not is_valid_named_contact(candidate, company_name):
+            return {}
+        target = candidate
+    return _best_named_contact(
+        hit_routes + company_routes,
+        company_name,
+        target_name=target,
+    )
 
 
 RANK_ORDER = {"low": 1, "medium": 2, "high": 3}
@@ -884,22 +994,22 @@ async def main() -> None:
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, lineterminator="\n")
-            writer.writerow(
-                [
-                    "company_id",
-                    "company_name",
-                    "primary_domain",
-                    "target_fit",
-                    "source_hit_count",
-                    "best_email",
-                    "best_phone",
-                    "best_form",
-                    "named_contact_name",
-                    "named_contact_title",
-                    "named_contact_email",
-                    "named_contact_linkedin",
-                ]
-            )
+            company_fields = [
+                "company_id",
+                "company_name",
+                "primary_domain",
+                "target_fit",
+                "source_hit_count",
+                "best_email",
+                "best_phone",
+                "best_form",
+                "named_contact_name",
+                "named_contact_title",
+                "named_contact_email",
+                "named_contact_phone",
+                "named_contact_linkedin",
+            ]
+            writer.writerow(company_fields)
             for c in company_rows:
                 company_routes = contact_by_company.get(c.id, [])
                 best = _best_contact(company_routes)
@@ -914,23 +1024,25 @@ async def main() -> None:
                         )
                     )
                 ).scalar()
+                values = [
+                    c.id,
+                    c.canonical_name,
+                    c.primary_domain or "",
+                    "Yes" if target else "No",
+                    hit_count,
+                    best.get("best_email", ""),
+                    best.get("best_phone", ""),
+                    best.get("best_form", ""),
+                    named.get("name", ""),
+                    named.get("title", ""),
+                    named.get("email", ""),
+                    named.get("phone", ""),
+                    named.get("linkedin", ""),
+                ]
                 writer.writerow(
                     [
-                        _csv_safe(value)
-                        for value in [
-                            c.id,
-                            c.canonical_name,
-                            c.primary_domain or "",
-                            "Yes" if target else "No",
-                            hit_count,
-                            best.get("best_email", ""),
-                            best.get("best_phone", ""),
-                            best.get("best_form", ""),
-                            named.get("name", ""),
-                            named.get("title", ""),
-                            named.get("email", ""),
-                            named.get("linkedin", ""),
-                        ]
+                        _csv_safe(value, phone_number=field.endswith("phone"))
+                        for field, value in zip(company_fields, values, strict=True)
                     ]
                 )
 
@@ -969,7 +1081,29 @@ async def main() -> None:
                 if company
                 else (hit.company_domain_raw or "")
             )
-            best_routes = _best_contact(contact_by_company.get(company.id, [])) if company else {}
+            company_routes = contact_by_company.get(company.id, []) if company else []
+            hit_routes = [
+                {"type": str(route.get("type", "")), "value": str(route.get("value", ""))}
+                for route in (hit.contact_routes_raw or [])
+                if isinstance(route, dict) and route.get("type") and route.get("value")
+            ]
+            named = _lead_named_contact(
+                title,
+                hit_routes,
+                company_routes,
+                company.canonical_name if company else company_name,
+            )
+            company_contacts = _best_company_contact(
+                company_routes,
+                exclude_email=named.get("email", ""),
+                exclude_phone=named.get("phone", ""),
+                exclude_name=named.get("name", ""),
+            )
+            best_routes = dict(company_contacts)
+            if named.get("email"):
+                best_routes["best_email"] = named["email"]
+            if named.get("phone"):
+                best_routes["best_phone"] = named["phone"]
             score, rank, reasons, category = _qualification_score(
                 company_name,
                 title,
@@ -996,15 +1130,6 @@ async def main() -> None:
                 hit.source_key,
                 hit.intent_label,
             )
-            named = (
-                _best_named_contact(
-                    contact_by_company.get(company.id, []),
-                    company.canonical_name,
-                )
-                if company
-                else {}
-            )
-
             company_key = company.id if company else (domain or company_name)
             title_key = title.lower().strip()
             existing = lead_candidates.get((company_key, title_key))
@@ -1039,7 +1164,11 @@ async def main() -> None:
                 "named_contact_name": named.get("name", ""),
                 "named_contact_title": named.get("title", ""),
                 "named_contact_email": named.get("email", ""),
+                "named_contact_phone": named.get("phone", ""),
                 "named_contact_linkedin": named.get("linkedin", ""),
+                "company_email": company_contacts.get("best_email", ""),
+                "company_phone": company_contacts.get("best_phone", ""),
+                "company_form": company_contacts.get("best_form", ""),
                 "__company_key": company_key,
                 "__tie_key": tie_key,
             }
@@ -1074,6 +1203,17 @@ async def main() -> None:
                 fieldnames=[
                     "company_name",
                     "primary_domain",
+                    "named_contact_name",
+                    "named_contact_title",
+                    "named_contact_email",
+                    "named_contact_phone",
+                    "named_contact_linkedin",
+                    "company_email",
+                    "company_phone",
+                    "company_form",
+                    "best_email",
+                    "best_phone",
+                    "best_form",
                     "job_title",
                     "location",
                     "workplace_type",
@@ -1085,18 +1225,18 @@ async def main() -> None:
                     "qualification_score",
                     "rank",
                     "explanation",
-                    "best_email",
-                    "best_phone",
-                    "best_form",
-                    "named_contact_name",
-                    "named_contact_title",
-                    "named_contact_email",
-                    "named_contact_linkedin",
                 ],
             )
             leads_writer.writeheader()
             leads_writer.writerows(
-                {key: _csv_safe(value) for key, value in row.items()} for row in lead_rows
+                {
+                    key: _csv_safe(
+                        value,
+                        phone_number=key in {"best_phone", "named_contact_phone", "company_phone"},
+                    )
+                    for key, value in row.items()
+                }
+                for row in lead_rows
             )
 
         print(f"Exported {len(lead_rows)} leads to {leads_path}")

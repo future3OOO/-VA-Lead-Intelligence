@@ -55,7 +55,7 @@ This means anyone can open the CSV and immediately understand why a company was 
 
 ## 5. We export everything into two CSV files
 
-- `anz_remote_leads_with_contacts.csv` — one row per lead, with the company, role, score, rank, explanation, best contact route, and optional named-contact fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_linkedin`).
+- `anz_remote_leads_with_contacts.csv` — one row per lead, with targeted person fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_phone`, `named_contact_linkedin`), separate generic office fields (`company_email`, `company_phone`, `company_form`), and `best_*` fallback fields for compatibility.
 - `anz_all_companies.csv` — one row per company, with the primary domain and all collected contact routes.
 
 ## 6. How to run it yourself

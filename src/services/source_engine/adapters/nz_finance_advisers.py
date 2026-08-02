@@ -20,7 +20,12 @@ from bs4 import BeautifulSoup
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
-from services.source_engine.enricher import is_valid_named_contact
+from services.source_engine.enricher import (
+    _name_in_email_local,
+    extract_email,
+    extract_phone,
+    is_valid_named_contact,
+)
 
 _NZ_BANK_NAMES = {
     "anz",
@@ -234,7 +239,9 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         if not final_company or _is_large_institution(final_company):
             return None
         website = provider.get("website") or ""
-        phone = provider.get("phone") or ""
+        person_email = extract_email(str(person.get("email", ""))) or ""
+        person_phone = extract_phone(str(person.get("telephone", ""))) or ""
+        company_phone = extract_phone(str(provider.get("phone", ""))) or ""
         address = provider.get("address") or works_for.get("address") or person.get("address") or {}
         if isinstance(address, dict):
             location = ", ".join(
@@ -257,7 +264,9 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
             "job_title": str(person.get("jobTitle", "Financial Adviser")).strip(),
             "company_name": final_company,
             "website": website,
-            "phone": phone,
+            "person_email": person_email,
+            "person_phone": person_phone,
+            "company_phone": company_phone,
             "location": location,
             "description": description,
         }
@@ -307,9 +316,33 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
                     "is_verified": False,
                 }
             )
-        if raw["phone"]:
+        person_email = extract_email(str(raw.get("person_email", "")))
+        if person_email:
+            if _name_in_email_local(raw["name"], person_email):
+                contact_routes.append(
+                    {
+                        "type": "named_work_email_approved",
+                        "value": f"{display_name} <{person_email}>",
+                        "is_verified": False,
+                    }
+                )
+            else:
+                contact_routes.append(
+                    {"type": "generic_email", "value": person_email, "is_verified": False}
+                )
+        person_phone = extract_phone(str(raw.get("person_phone", "")))
+        if person_phone:
             contact_routes.append(
-                {"type": "business_phone", "value": raw["phone"], "is_verified": False}
+                {
+                    "type": "business_phone",
+                    "value": f"{display_name} <{person_phone}>",
+                    "is_verified": False,
+                }
+            )
+        company_phone = extract_phone(str(raw.get("company_phone") or raw.get("phone", "")))
+        if company_phone:
+            contact_routes.append(
+                {"type": "business_phone", "value": company_phone, "is_verified": False}
             )
         return {
             "workspace_id": workspace_id,

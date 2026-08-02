@@ -44,15 +44,16 @@ Directory and OpenStreetMap rows are prospecting signals, not evidence that a co
 The export is a CSV with one row per lead:
 
 - `company_name` and `primary_domain`
+- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_phone` / `named_contact_linkedin` — the contact explicitly associated with the person named by that lead, when available
+- `company_email` / `company_phone` / `company_form` — generic company or office routes kept separate from the named person
+- `best_email`, `best_phone`, `best_form` — the named person's route first, then the company route as a fallback; international phones retain their `+` country code
 - `job_title` — a synthetic sector label for directory/listing sources
 - `location` — city/suburb or lat/lon in Australia / New Zealand
 - `workplace_type` — `inferred_remote_friendly` for directory/listing prospects
 - `category` — Property/Facilities, Financial Services, Legal/Professional, Home Services/Construction, etc.
 - `qualification_score` and `rank` — 0–100 score and High/Medium/Low
-- `explanation` — a short, human-readable reason why this lead scored well
-- `best_email`, `best_phone`, `best_form` — best available contact route
-- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin` — named contact when available
 - `source_url` — link back to the source listing
+- `explanation` — a short, human-readable reason why this lead scored well, placed last so it does not obscure the contact columns
 
 Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web-crawling sources (`team_pages`, `company_web`, `finance_directory`, and `nz_finance_advisers`) fetch and respect `robots.txt`. `openstreetmap` uses the public Overpass API and does not touch `robots.txt`.
 
@@ -237,15 +238,24 @@ Source keys available:
 - `company_web`
 - `manual_seed`
 
-### Backfill named contacts from company websites
+### Backfill targeted contacts from company websites
 
-After the main sources have run, enrich any companies that still lack a named contact:
+After the main sources have run, enrich companies that still lack a person-associated email or
+phone. Omit `--max-domains` to process every eligible domain:
 
 ```bash
 .venv/bin/python scripts/extract_team_pages_missing.py \
   --workspace-id "$WORKSPACE_ID" \
   --campaign-id "$CAMPAIGN_ID" \
   --max-domains 1000
+```
+
+Then run the broader company-site fallback for any domains still missing direct person details:
+
+```bash
+.venv/bin/python scripts/extract_company_web_missing.py \
+  --workspace-id "$WORKSPACE_ID" \
+  --campaign-id "$CAMPAIGN_ID"
 ```
 
 You can also run the older `extract_team_pages.py` against the domains with the most source hits:
@@ -271,6 +281,9 @@ You can also run the older `extract_team_pages.py` against the domains with the 
 Columns in `anz_remote_leads_with_contacts.csv`:
 
 - `company_name` / `primary_domain`
+- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_phone` / `named_contact_linkedin` — only details explicitly associated with that person
+- `company_email` / `company_phone` / `company_form` — generic office details, never assigned to the named person
+- `best_email` / `best_phone` / `best_form` — targeted contact first with company fallback
 - `job_title` — synthetic sector label for public business listings
 - `location`, `workplace_type`
 - `category` — Property/Facilities, Financial Services, Home Services/Construction, Real Estate, etc.
@@ -278,9 +291,11 @@ Columns in `anz_remote_leads_with_contacts.csv`:
 - `intent_label`
 - `published_at`
 - `qualification_score` / `rank` — High, Medium, Low
-- `explanation` — human-readable reason this is a VA lead
-- `best_email` / `best_phone` / `best_form`
-- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_linkedin`
+- `explanation` — human-readable reason this is a VA lead, placed last
+
+The checked-in uncapped full-scrape snapshot with these targeted/company lanes is
+`exports/anz_remote_leads_with_targeted_contacts.csv`; its matching company snapshot is
+`exports/anz_all_companies_targeted.csv`.
 
 ### Check named-contact coverage
 

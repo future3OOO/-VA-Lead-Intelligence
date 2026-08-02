@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -420,7 +420,22 @@ class SourceRunner:
         result = await session.execute(stmt)
         hit_id = result.scalar_one_or_none()
         if not hit_id:
-            return None
+            existing = await session.scalar(
+                select(DBSourceHit).where(
+                    DBSourceHit.workspace_id == workspace_id,
+                    DBSourceHit.source_key == data["source_key"],
+                    DBSourceHit.content_hash == content_hash,
+                )
+            )
+            if not existing:
+                return None
+            if can_resolve_company:
+                company = await resolve_company(session, workspace_id, data)
+                if company:
+                    if existing.company_id != company.id:
+                        existing.company_id = company.id
+                    await _resolve_and_enrich(company.id, company.canonical_name)
+            return existing
 
         if can_resolve_company:
             company = await resolve_company(session, workspace_id, data)

@@ -41,8 +41,10 @@ def _load_export_helpers() -> tuple:
     spec.loader.exec_module(module)  # type: ignore[union-attr]
     return (
         module._best_contact,
+        module._best_company_contact,
         module._qualification_score,
         module._best_named_contact,
+        module._lead_named_contact,
         module._build_explanation,
         module._csv_safe,
     )
@@ -50,8 +52,10 @@ def _load_export_helpers() -> tuple:
 
 (
     _best_contact,
+    _best_company_contact,
     _qualification_score,
     _best_named_contact,
+    _lead_named_contact,
     _build_explanation,
     _csv_safe,
 ) = _load_export_helpers()
@@ -213,6 +217,7 @@ def test_contact_normalization_rejects_malformed_values() -> None:
         extract_email("Albany Creek <info@auswireelectrical.com>") == "info@auswireelectrical.com"
     )
     assert extract_email("hire@acmeservices.com") == "hire@acmeservices.com"
+    assert extract_email("mailto:aimee@ouradviser.co.nz") == "aimee@ouradviser.co.nz"
     assert extract_phone("<span>123</span>") is None
     assert extract_phone("Call 1800 013 937 today") == "1800 013 937"
     assert extract_phone("+61 3 5278 2814") == "+61 3 5278 2814"
@@ -233,6 +238,8 @@ def test_contact_normalization_rejects_malformed_values() -> None:
 def test_csv_safe_neutralizes_spreadsheet_formula_prefixes() -> None:
     for value in ("=1+1", "+cmd", "-2+3", "@SUM(A1:A2)"):
         assert _csv_safe(value) == f"'{value}"
+    assert _csv_safe("+61 3 5278 2814", phone_number=True) == "+61 3 5278 2814"
+    assert _csv_safe("+cmd", phone_number=True) == "'+cmd"
     assert _csv_safe(" \t=1+1") == "'=1+1"
     assert _csv_safe("Wellington \n  Central") == "Wellington Central"
     assert _csv_safe("Acme Services") == "Acme Services"
@@ -358,6 +365,76 @@ def test_best_named_contact_only_pairs_explicit_email() -> None:
     assert best["email"] == "tony@acmeservices.com"
 
 
+def test_targeted_contact_does_not_borrow_another_advisers_details() -> None:
+    """A lead naming one adviser must select only that adviser's explicit routes."""
+    routes = [
+        {"type": "generic_email", "value": "office@example.org"},
+        {"type": "business_phone", "value": "+64 9 555 0100"},
+        {"type": "named_contact", "value": "Adviser One (Financial Adviser)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Adviser One (Financial Adviser) <adviser.one@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Adviser One (Financial Adviser) <+64 21 555 0101>",
+        },
+        {"type": "named_contact", "value": "Adviser Two (Financial Adviser)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Adviser Two (Financial Adviser) <adviser.two@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Adviser Two (Financial Adviser) <+64 21 555 0102>",
+        },
+    ]
+
+    targeted = _best_named_contact(routes, target_name="Adviser One")
+    company = _best_company_contact(routes)
+
+    assert targeted == {
+        "name": "Adviser One",
+        "title": "Financial Adviser",
+        "email": "adviser.one@example.org",
+        "phone": "+64 21 555 0101",
+        "linkedin": "",
+    }
+    assert company == {
+        "best_email": "office@example.org",
+        "best_phone": "+64 9 555 0100",
+    }
+
+    lead_contact = _lead_named_contact(
+        "Adviser One — Financial Adviser at Example Advice",
+        [{"type": "named_contact", "value": "Adviser One (Financial Adviser)"}],
+        routes,
+        "Example Advice",
+    )
+    assert lead_contact["name"] == "Adviser One"
+    assert lead_contact["email"] == "adviser.one@example.org"
+    assert lead_contact["phone"] == "+64 21 555 0101"
+
+
+def test_invalid_named_title_does_not_fall_back_to_another_employee() -> None:
+    routes = [
+        {"type": "named_contact", "value": "Real Adviser (Financial Adviser)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Real Adviser (Financial Adviser) <real.adviser@example.org>",
+        },
+    ]
+    assert (
+        _lead_named_contact(
+            "Example Advice Limited — Financial Adviser at Example Advice Limited",
+            [],
+            routes,
+            "Example Advice Limited",
+        )
+        == {}
+    )
+
+
 def test_best_named_contact_does_not_pair_generic_email() -> None:
     """A generic company email should not be assigned to a separate named contact."""
     routes = [
@@ -367,6 +444,52 @@ def test_best_named_contact_does_not_pair_generic_email() -> None:
     best = _best_named_contact(routes)
     assert best["name"] == "Tony Bove"
     assert best["email"] == ""
+
+
+def test_targeted_contact_accepts_company_route_that_exactly_matches_name() -> None:
+    """A name-matching mailbox may be targeted while unrelated mailboxes remain generic."""
+    routes = [
+        {"type": "named_contact", "value": "Aimee Louise Trott (Financial Adviser)"},
+        {"type": "generic_email", "value": "hello@ouradviser.co.nz"},
+        {"type": "generic_email", "value": "atrott@ouradviser.co.nz"},
+        {"type": "generic_email", "value": "aimee.trott@ouradviser.co.nz"},
+    ]
+    best = _best_named_contact(routes, "Our Adviser Limited", target_name="Aimee Trott")
+    assert best["name"] == "Aimee Louise Trott"
+    assert best["email"] == "aimee.trott@ouradviser.co.nz"
+    assert (
+        _best_company_contact(
+            routes,
+            exclude_email=best["email"],
+            exclude_name=best["name"],
+        )["best_email"]
+        == "hello@ouradviser.co.nz"
+    )
+
+
+def test_same_first_last_name_contacts_remain_ambiguous() -> None:
+    routes = [
+        {
+            "type": "named_work_email_approved",
+            "value": "Adam James Thompson <athompson@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Adam James Thompson <+64 21 555 0101>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Adam John Thompson <athompson2@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Adam John Thompson <+64 21 555 0102>",
+        },
+    ]
+    assert _best_named_contact(routes, target_name="Adam Thompson") == {}
+    exact = _best_named_contact(routes, target_name="Adam James Thompson")
+    assert exact["email"] == "athompson@example.org"
+    assert exact["phone"] == "+64 21 555 0101"
 
 
 def test_contact_selection_is_independent_of_database_row_order() -> None:
@@ -405,6 +528,13 @@ def test_best_named_contact_rejects_partial_token_email_match() -> None:
     best = _best_named_contact(routes)
     assert best["name"] == "Peter Sedy Li"
     assert best["email"] == ""
+
+
+def test_name_email_match_accepts_complete_multi_part_name() -> None:
+    assert _name_in_email_local(
+        "Jody Jansen Van Vuuren",
+        "jody.jansenvanvuuren@icib.co.nz",
+    )
 
 
 def test_normalize_route_value_preserves_named_email_association() -> None:
@@ -589,6 +719,88 @@ def test_team_page_explicit_person_card_keeps_named_email() -> None:
         "Jane Smith (Director) <jane.smith@example.org>",
     ) in values
     assert ("named_contact", "Jane Smith (Director)") in values
+
+
+def test_team_page_explicit_person_card_keeps_named_phone() -> None:
+    """A phone link inside a person's own card remains associated with that person."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-card">
+          <h2>Adam Thompson</h2>
+          <p>Financial Adviser</p>
+          <a href="tel:+642041232483">Call Adam</a>
+        </div>
+        """,
+        "html.parser",
+    )
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+    assert (
+        "business_phone",
+        "Adam Thompson (Financial Adviser) <+642041232483>",
+    ) in values
+    assert ("named_contact", "Adam Thompson (Financial Adviser)") in values
+
+
+@pytest.mark.asyncio
+async def test_nz_adviser_profile_keeps_person_contact_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Person JSON-LD email/phone stay distinct from the provider office phone."""
+    adapter = NzFinanceAdvisersAdapter(
+        _make_adapter_config("nz_finance_advisers", "scoped_public_web_crawl")
+    )
+    html = """
+    <script type="application/ld+json">
+    {
+      "@type": "Person",
+      "name": "Aimee Trott",
+      "jobTitle": "Financial Adviser",
+      "email": "aimee.trott@ouradviser.co.nz",
+      "telephone": "+64 22 562 3750",
+      "worksFor": {"name": "Our Adviser", "url": "/provider/our-adviser"}
+    }
+    </script>
+    """
+
+    async def robots_allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def get_html(_url: str) -> str:
+        return html
+
+    async def provider(_url: str) -> dict[str, object]:
+        return {
+            "name": "Our Adviser",
+            "website": "https://ouradviser.co.nz",
+            "phone": "+64 3 555 0100",
+            "address": {"addressCountry": "NZ"},
+        }
+
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_get", get_html)
+    monkeypatch.setattr(adapter, "_fetch_provider", provider)
+    try:
+        raw = await adapter._fetch_profile("https://financeadvisers.co.nz/adviser/aimee-trott")
+        assert raw is not None
+        assert raw["person_email"] == "aimee.trott@ouradviser.co.nz"
+        assert raw["person_phone"] == "+64 22 562 3750"
+        assert raw["company_phone"] == "+64 3 555 0100"
+
+        routes = adapter.normalize(uuid4(), raw)["contact_routes_raw"]
+        assert {
+            (
+                "named_work_email_approved",
+                "Aimee Trott (Financial Adviser) <aimee.trott@ouradviser.co.nz>",
+            ),
+            (
+                "business_phone",
+                "Aimee Trott (Financial Adviser) <+64 22 562 3750>",
+            ),
+            ("business_phone", "+64 3 555 0100"),
+        }.issubset({(route["type"], route["value"]) for route in routes})
+    finally:
+        await adapter.aclose()
 
 
 def test_team_page_last_name_only_email_match_stays_generic() -> None:

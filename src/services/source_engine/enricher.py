@@ -166,6 +166,8 @@ def extract_email(value: str) -> str | None:
         return None
     # Decode common URL-encoded spacing that can appear in mailto/display forms.
     value = value.replace("%20", " ")
+    if value.lower().startswith("mailto:"):
+        value = value[7:].split("?", 1)[0]
     # Try "Name <email>" or "Name (title) <email>".
     m = re.search(r"<([^<>]+@[^<>]+)>", value)
     candidate = m.group(1).strip() if m else value.strip()
@@ -297,7 +299,7 @@ def _name_in_email_local(name: str, email: str) -> bool:
     first, last = tokens[0], tokens[-1]
     parts = [part for part in re.split(r"[._\-]+", email.split("@", 1)[0].lower()) if part]
     compact = "".join(parts)
-    matches = (first, last, first + last, first[0] + last, first + last[0])
+    matches = (first, last, first + last, "".join(tokens), first[0] + last, first + last[0])
     return compact in matches
 
 
