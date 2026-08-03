@@ -16,6 +16,11 @@ from db.models.contact_route import ContactRoute as DBContactRoute
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"[+\d][\d\s().-]{5,}\d")
 _URL_RE = re.compile(r"https?://[^\s<>\"{}|\\^`\[\]]+")
+_LINKEDIN_PROFILE_RE = re.compile(
+    r"(?:(?:https?:)?//)?(?:[\w-]+\.)?linkedin\.com/"
+    r"(?P<kind>in|pub)/(?P<path>[A-Za-z0-9%_.~/-]+)",
+    re.I,
+)
 _CONTACT_FORM_PATH_RE = re.compile(
     r"(?:^|/)(?:contact(?:-us)?|get-in-touch|enquir(?:e|y)|inquir(?:e|y)|"
     r"request-(?:a-)?quote|quote|book(?:ing)?|demo|consultation|appointment)"
@@ -229,6 +234,22 @@ def extract_url(value: str) -> str | None:
     return candidate
 
 
+def extract_linkedin_profile_url(value: str) -> str | None:
+    """Return one canonical LinkedIn person-profile URL."""
+    if looks_like_html(value):
+        return None
+    match = _LINKEDIN_PROFILE_RE.search(value)
+    if not match:
+        return None
+    kind = match.group("kind").lower()
+    path = match.group("path").strip("/")
+    if not path:
+        return None
+    if kind == "in":
+        path = path.split("/", 1)[0]
+    return f"https://www.linkedin.com/{kind}/{path}"
+
+
 def extract_contact_form_url(value: str) -> str | None:
     """Return a URL that identifies an actionable contact or booking page."""
     candidate = extract_url(value)
@@ -353,14 +374,14 @@ def normalize_route_value(route_type: str, value: str) -> str | None:
     if route_type == "social_profile_review_only":
         parsed = _parse_named_contact_display(value)
         if parsed:
-            url = extract_url(parsed["value"])
+            url = extract_linkedin_profile_url(parsed["value"])
             if url:
                 return (
                     f"{parsed['name']} - {url}"
                     if not parsed["title"]
                     else f"{parsed['name']} ({parsed['title']}) - {url}"
                 )
-        url = extract_url(value)
+        url = extract_linkedin_profile_url(value)
         return url if url else None
     # Unknown route types fall through unchanged.
     return value
@@ -449,6 +470,7 @@ __all__ = [
     "enrich_contact_routes",
     "extract_contact_form_url",
     "extract_email",
+    "extract_linkedin_profile_url",
     "extract_phone",
     "extract_url",
     "is_valid_named_contact",

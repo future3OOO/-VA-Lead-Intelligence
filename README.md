@@ -240,23 +240,21 @@ Source keys available:
 
 ### Backfill targeted contacts from company websites
 
-After the main sources have run, enrich companies that still lack a person-associated email or
-phone. Omit `--max-domains` to process every eligible domain:
+After the main sources have run, enrich companies that still lack a named person, direct email,
+direct phone, or LinkedIn profile. The command snapshots eligible domains, runs `team_pages`
+across three disjoint shards in parallel, then repeats the snapshot for the deeper `company_web`
+fallback. Omit `--max-domains` to process every eligible domain:
 
 ```bash
-.venv/bin/python scripts/extract_team_pages_missing.py \
+.venv/bin/python scripts/extract_targeted_contacts.py \
   --workspace-id "$WORKSPACE_ID" \
   --campaign-id "$CAMPAIGN_ID" \
+  --shards 3 \
   --max-domains 1000
 ```
 
-Then run the broader company-site fallback for any domains still missing direct person details:
-
-```bash
-.venv/bin/python scripts/extract_company_web_missing.py \
-  --workspace-id "$WORKSPACE_ID" \
-  --campaign-id "$CAMPAIGN_ID"
-```
+Each shard has its own database session and source-run record. The command exits non-zero if any
+shard fails; rerunning it safely processes the remaining incomplete domains.
 
 You can also run the older `extract_team_pages.py` against the domains with the most source hits:
 

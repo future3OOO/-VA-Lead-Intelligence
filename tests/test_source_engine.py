@@ -63,8 +63,7 @@ def test_source_registry_loads() -> None:
 @pytest.mark.parametrize(
     ("script_name", "function_name"),
     [
-        ("extract_team_pages_missing", "get_missing_domains"),
-        ("extract_company_web_missing", "get_missing_contact_domains"),
+        ("extract_targeted_contacts", "get_missing_contact_domains"),
     ],
 )
 async def test_missing_contact_backfills_deduplicate_domains(
@@ -112,14 +111,14 @@ async def test_missing_contact_backfills_deduplicate_domains(
 
     domains = await getattr(module, function_name)(workspace_id)
     assert domains == ["shared-domain.test"]
+    assert await getattr(module, function_name)(workspace_id, 0) == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("script_name", "function_name"),
     [
-        ("extract_team_pages_missing", "get_missing_domains"),
-        ("extract_company_web_missing", "get_missing_contact_domains"),
+        ("extract_targeted_contacts", "get_missing_contact_domains"),
     ],
 )
 async def test_contact_backfills_include_named_people_missing_direct_details(
@@ -184,6 +183,15 @@ async def test_contact_backfills_include_named_people_missing_direct_details(
                     company_id=company_id,
                     route_type="business_phone",
                     value="Aimee Trott (Financial Adviser) <+64 21 555 0101>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace_id,
+                    company_id=company_id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Aimee Trott (Financial Adviser) - https://www.linkedin.com/in/aimee-trott"
+                    ),
                     is_verified=False,
                 ),
             ]
