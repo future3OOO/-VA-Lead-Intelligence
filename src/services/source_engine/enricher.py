@@ -38,6 +38,7 @@ _SOCIAL_HOSTS = {
 
 _NAV_LABELS = {
     "about",
+    "apply now",
     "call",
     "call now",
     "call today",
@@ -134,6 +135,7 @@ _PAGE_LABELS = {
     "eligible entrants",
     "entry requirements",
     "final thoughts",
+    "faq business loan",
     "foreshore promenade",
     "get in touch",
     "kimberley address",

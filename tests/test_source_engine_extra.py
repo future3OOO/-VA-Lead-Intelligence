@@ -339,6 +339,8 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
         "Get In Touch",
         "Quick Links",
         "This Week",
+        "Apply Now",
+        "Faq Business Loan",
     ]:
         assert is_valid_named_contact(label) is False
 
@@ -346,6 +348,7 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
 def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> None:
     assert is_valid_named_contact("Grant Hill") is True
     assert is_valid_named_contact("Brooke Taylor") is True
+    assert is_valid_named_contact("Timothy David Raymond Loan") is True
 
 
 def test_named_contacts_reject_legal_entities_and_company_names() -> None:
