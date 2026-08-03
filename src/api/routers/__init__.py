@@ -8,7 +8,11 @@ from api.routers.lead_assessment import router as lead_assessment_router
 from api.routers.outcome import router as outcome_router
 from api.routers.review_assignment import router as review_assignment_router
 from api.routers.scorecard import router as scorecard_router
+from api.routers.source_engine import router as source_engine_router
 from api.routers.source_health import router as source_health_router
+from api.routers.source_hit import router as source_hit_router
+from api.routers.source_registry import router as source_registry_router
+from api.routers.source_run import router as source_run_router
 from api.routers.suppression import router as suppression_router
 from api.routers.workspace import router as workspace_router
 
@@ -26,4 +30,8 @@ __all__ = [
     "outcome_router",
     "cost_ledger_router",
     "source_health_router",
+    "source_hit_router",
+    "source_registry_router",
+    "source_run_router",
+    "source_engine_router",
 ]

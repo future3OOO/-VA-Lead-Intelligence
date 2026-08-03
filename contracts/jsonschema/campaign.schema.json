@@ -42,7 +42,7 @@
       "type": "number"
     },
     "status": {
-      "$ref": "#/definitions/CampaignStatus",
+      "$ref": "#/$defs/CampaignStatus",
       "default": "draft"
     },
     "updated_at": {

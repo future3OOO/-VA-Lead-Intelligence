@@ -1,0 +1,90 @@
+version: "1.0.0"
+reviewed_at: "2026-07-15T00:00:00+00:00"
+
+families:
+  va_adjacent_jobs_v1:
+    positive_titles:
+      - virtual assistant
+      - executive assistant
+      - administrative assistant
+      - operations assistant
+      - operations coordinator
+      - customer support coordinator
+      - scheduling coordinator
+      - appointment setter
+      - sales support
+      - crm administrator
+      - ecommerce assistant
+      - order processing
+      - property management assistant
+      - assistant property manager
+      - property manager
+      - property maintenance coordinator
+      - maintenance coordinator
+      - transaction coordinator
+      - recruitment coordinator
+      - project coordinator
+      - bookkeeper
+      - real estate assistant
+      - insurance coordinator
+      - mortgage broker assistant
+      - mortgage assistant
+      - mortgage adviser
+      - mortgage advisor
+      - insurance adviser
+      - insurance advisor
+      - loan processor
+      - paraplanner
+      - office manager
+      - property administrator
+      - contracts administrator
+      - sales administrator
+      - leasing consultant
+    positive_task_phrases:
+      - manage inbox
+      - schedule appointments
+      - respond to customer enquiries
+      - update crm
+      - process orders
+      - coordinate maintenance
+      - prepare reports
+      - data entry
+      - follow up leads
+      - manage returns
+      - diary management
+      - CRM updates
+      - email triage
+      - claims paperwork
+      - compliance documentation
+      - client onboarding
+      - general administrative support
+      - appointment scheduling
+      - inbox and email management
+    negative_terms:
+      - on-site only
+      - on-site
+      - on site
+      - onsite
+      - site-based
+      - office-based
+      - in-office
+      - in office
+      - driving required
+      - must have a driver's licence
+      - must have a drivers licence
+      - childcare
+      - personal care
+      - security clearance
+      - licensed clinical work
+      - licensed legal advice
+      - staffing agency
+      - recruitment agency
+      - virtual assistant course
+      - become a virtual assistant
+      - looking for work as a virtual assistant
+      - our client
+      - for our client
+      - on behalf of
+      - bpo
+      - business process outsourcing
+      - outsourcing provider

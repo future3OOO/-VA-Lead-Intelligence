@@ -31,7 +31,7 @@
     "payload": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {

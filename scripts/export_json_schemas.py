@@ -31,7 +31,11 @@ def deep_sort(obj: dict[str, Any] | list[Any]) -> dict[str, Any] | list[Any]:
 
 def set_additional_properties_false(schema: dict[str, Any]) -> None:
     if isinstance(schema, dict):
-        if schema.get("type") == "object":
+        if (
+            schema.get("type") == "object"
+            and "properties" in schema
+            and "additionalProperties" not in schema
+        ):
             schema["additionalProperties"] = False
         for value in schema.values():
             set_additional_properties_false(value)
@@ -41,7 +45,7 @@ def set_additional_properties_false(schema: dict[str, Any]) -> None:
 
 
 def export_model(cls: type[BaseModel], output_dir: Path) -> Path:
-    schema = cls.model_json_schema(by_alias=False, ref_template="#/definitions/{model}")
+    schema = cls.model_json_schema(by_alias=False, ref_template="#/$defs/{model}")
     set_additional_properties_false(schema)
 
     version = "1.0.0"

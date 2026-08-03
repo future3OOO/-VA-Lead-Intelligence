@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,8 @@ router = APIRouter(prefix="/leads", tags=["lead_assessment"])
 async def list_lead_assessment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
 ) -> list[LeadAssessment]:
     result = await session.scalars(
         select(DBLeadAssessment)
@@ -35,7 +35,8 @@ async def create_lead_assessment(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> LeadAssessment:
-    record = DBLeadAssessment(**data.model_dump(exclude_unset=True), workspace_id=auth_workspace_id)
+    values = data.model_dump(exclude={"workspace_id"})
+    record = DBLeadAssessment(**values, workspace_id=auth_workspace_id)
     session.add(record)
     await session.commit()
     await session.refresh(record)
@@ -74,7 +75,8 @@ async def update_lead_assessment(
     )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True, exclude={"workspace_id"})
+    for key, value in values.items():
         setattr(record, key, value)
     await session.commit()
     await session.refresh(record)

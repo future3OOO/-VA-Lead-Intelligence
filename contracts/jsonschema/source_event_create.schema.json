@@ -1,23 +1,10 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "company_web",
-        "search"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/source_event_create-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Create request.",
   "properties": {
     "raw_payload": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Raw Payload",
       "type": "object"
     },
@@ -26,7 +13,8 @@
       "type": "string"
     },
     "source_type": {
-      "$ref": "#/definitions/SourceType"
+      "title": "Source Type",
+      "type": "string"
     },
     "workspace_id": {
       "anyOf": [

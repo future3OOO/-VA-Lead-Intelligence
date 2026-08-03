@@ -1,17 +1,4 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "company_web",
-        "search"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/ats_board-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Parsed ATS board..",
@@ -48,7 +35,8 @@
       "type": "string"
     },
     "provider": {
-      "$ref": "#/definitions/SourceType"
+      "title": "Provider",
+      "type": "string"
     },
     "workspace_id": {
       "format": "uuid",

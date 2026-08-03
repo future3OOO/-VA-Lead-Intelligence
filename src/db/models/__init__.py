@@ -27,7 +27,10 @@ from db.models.review_decision import ReviewDecision
 from db.models.scorecard import Scorecard
 from db.models.source_event import SourceEvent
 from db.models.source_health import SourceHealth
+from db.models.source_hit import SourceHit
 from db.models.source_policy import SourcePolicy
+from db.models.source_registry import SourceRegistry
+from db.models.source_run import SourceRun
 from db.models.suppression import Suppression
 from db.models.user import User
 from db.models.workspace import Workspace
@@ -66,4 +69,7 @@ __all__ = [
     "CostLedger",
     "SourceHealth",
     "OperationalMetadata",
+    "SourceHit",
+    "SourceRegistry",
+    "SourceRun",
 ]

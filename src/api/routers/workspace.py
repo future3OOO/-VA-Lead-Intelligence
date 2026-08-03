@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +17,8 @@ router = APIRouter(prefix="/workspaces", tags=["workspace"])
 async def list_workspace(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
 ) -> list[Workspace]:
     result = await session.scalars(select(DBWorkspace).offset(skip).limit(limit))
     return [Workspace.model_validate(r) for r in result.all()]
@@ -30,7 +30,8 @@ async def create_workspace(
     auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> Workspace:
-    record = DBWorkspace(**data.model_dump(exclude_unset=True))
+    values = data.model_dump(exclude_unset=True)
+    record = DBWorkspace(**values)
     session.add(record)
     await session.commit()
     await session.refresh(record)
@@ -67,7 +68,8 @@ async def update_workspace(
     )
     if not record:
         raise HTTPException(status_code=404, detail="Not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True)
+    for key, value in values.items():
         setattr(record, key, value)
     await session.commit()
     await session.refresh(record)

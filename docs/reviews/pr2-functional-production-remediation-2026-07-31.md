@@ -1,0 +1,213 @@
+# PR #2 Functional Production Remediation
+
+## Authority and delivery
+
+- Authority order: `AGENTS.md` → this governing artifact → canonical `spec/domain.yaml` and
+  migrations → exact PR-head code/tests/exports → review findings. This artifact governs
+  implementation order; update it before coding if those authorities conflict.
+- Trusted base: `origin/main`.
+- Target: PR #2, branch `devin/source-engine`, checkout
+  `C:\tmp\va-lead-intelligence-pr2-95db74c`, starting head
+  `e31ecc8c825bba719926c0f0df30e88b97c4f7ef`.
+- Startup gate completed: fetched `origin/devin/source-engine`, verified GitHub and local HEAD match,
+  and confirmed the checkout is clean, attached, and non-detached.
+- Implementation owner: Codex in the named checkout only.
+- One existing PR owns the coupled resolver, enrichment, export, CLI, tests, and docs changes.
+- Commit structure:
+  1. identity/contact RED-GREEN tests and runtime fix;
+  2. deterministic/truthful export plus CLI RED-GREEN tests and fix;
+  3. documentation and regenerated exports.
+- Human-authored remediation budget from the starting head: identity/contact ≤450 lines,
+  export/CLI ≤450, tests/docs ≤350; hard stop before 1,300 total changed code lines. The existing
+  token list will not be extended; structural evidence will own acceptance. Its wholesale removal
+  is deferred unless the remaining budget safely permits it.
+- Stack depth: one. Do not open another PR; consolidate if this slice cannot remain coherent.
+- Deploy/merge freeze: do not merge PR #2 until the checklist and reviewer gate are complete.
+
+## Scope
+
+In:
+
+- branch-safe company identity and contact isolation, including shared corporate domains;
+- evidence-based named contacts and strict person/email association;
+- deterministic export selection and truthful inferred-fit scoring/explanations;
+- extraction CLI target/limit validation;
+- focused regression tests, operator documentation, exports, and PR-thread closure.
+
+Out:
+
+- compliance expansion, new sources, wider crawling, unrelated model refactors, or UI work.
+- private/production databases, secrets, runtime configuration, cache/reference worktrees, generated
+  contracts except through the canonical generator, and unrelated branches.
+
+Mutable paths: `src/services/source_engine/{resolver,enricher,runner}.py`,
+`src/services/source_engine/adapters/team_pages.py`, `scripts/export_leads_csv.py`, the four
+`scripts/extract_{team_pages,company_web}{,_missing}.py` CLIs, their tests, one focused migration,
+README/operator docs, this artifact, and generated exports.
+
+## Affected surface and contract
+
+Public surfaces: `resolve_company`, `enrich_contact_routes`, team-page normalization, CSV export,
+and the four bounded extraction CLIs.
+
+Adjacent consumers: `SourceRunner._persist_hit`, `ContactRoute` persistence, company/contact CSV
+joins, manual-seed intent classification, config/contracts generation, and source-run failure
+status.
+
+Contract:
+
+1. A source listing must deterministically resolve to one company without pooling contacts from a
+   different branch.
+2. A named contact requires person evidence; a named email must match the same person.
+3. Company-fit inference must remain useful but must not be described as an observed job, buyer
+   intent, or workplace arrangement.
+4. Operator limits and workspace/campaign targets must be explicit and honored exactly.
+
+No-change proof: prohibited-domain filtering, six-source registry, manual-seed intent, High-rank
+contact requirement, content-hash idempotency, generator drift guard, and failed-run exit status.
+
+Branch identity will deepen the existing resolver through the existing `CompanyIdentifier` model:
+stable `(workspace, source, source_native_id)` identity is authoritative; domain plus normalized
+name may reuse the same company, but a shared domain alone may not. Domain-only enrichment is
+allowed only when exactly one company candidate exists; ambiguity fails closed without attaching
+contacts.
+
+Named-contact acceptance: structured `Person` data, a LinkedIn person profile, or same-card contact
+evidence only; never standalone headings. Generic addresses remain company routes. Named email
+matching requires full normalized first/last-name or initial patterns, never arbitrary substrings.
+
+Deterministic ordering: verified/named routes before generic routes, then normalized value; lead
+ties by score, newest source timestamp, source ID/URL. Database reads must use matching `ORDER BY`,
+and two repeated exports from unchanged state must be byte-identical.
+
+## Persistence system
+
+- Authoritative records: `Company`, `CompanyIdentifier`, `SourceHit`, `ContactRoute`, `SourceRun`.
+- Mutation boundary: `SourceRunner._persist_hit()` through company resolution, hit association,
+  and contact enrichment.
+- Interleavings: concurrent/repeated runs, same domain with different branches, name-only hits,
+  enrichment after branch discovery, and conflict/no-op insertion paths.
+- Invariants: reruns are idempotent; one source listing has one stable company; shared domains do
+  not pool branch contacts; concurrent identity creation resolves to one winner.
+- Proof: sequential, replay, shared-domain, ambiguous-enrichment, and concurrent integration tests.
+
+Historical-data gate: determine whether the committed Elders/Bairnsdale contamination is stale
+workspace state or current extraction. Export acceptance requires a clean local/test workspace
+with migrations applied and the source tables rebuilt. No private or production database may be
+reset. If a clean rebuild cannot be produced, mark export verification blocked and do not call the
+PR merge-ready.
+
+## Verification
+
+- Focused RED/GREEN tests for shared-domain branches, stable source identity, false headings
+  (`Entry Requirements`, `Lj Hooker Coomera`, `Solar Vents`, `Routine Inspections`, `Broome Wa`,
+  `Prd Whitsunday`),
+  short-substring email mismatches, inferred-fit explanations, deterministic selection, and CLI
+  bounds.
+- Branch contamination fixture: Bairnsdale must never receive Hornsby/Queensland contacts.
+- CLI acceptance: `--max-domains 0` performs no crawl, negatives fail argument parsing, and all four
+  scripts require explicit workspace and campaign IDs.
+- `make lint`, `make typecheck`, `make test`, `make config-validate`,
+  `make migration-check`, `make benchmark`, `make contracts`, `make handover`.
+- Regenerate and audit both committed CSVs from the mandatory clean-database run; run the exporter
+  twice and compare bytes.
+- Verify exact-head CI, merge state, checks, and unresolved non-outdated review threads after push.
+
+Clean-run evidence: the bounded live directory run fetched 68 hits, qualified 42, deduplicated 26,
+and completed with zero errors. A later wider 1,200-profile/15-page attempt failed closed with two
+source errors and no partial hits, demonstrating failure reporting without changing the accepted
+clean dataset.
+
+## Execution checklist
+
+- [x] Reproduce and trace each functional defect from committed CSV rows and direct function probes.
+- [x] Realign the implementation checkout to the live PR head.
+- [x] Critique and correct this governing artifact.
+- [x] Add focused failing behavior tests and record RED for identity, contact evidence, scoring,
+  and deterministic selection.
+- [x] Fix company identity and contact isolation; prove replay, ambiguous enrichment, migration,
+  and the concurrent winner path.
+- [x] Fix named-contact evidence and person/email association.
+- [x] Make export selection deterministic and inferred-fit language truthful.
+- [x] Fix extraction CLI bounds and explicit targets.
+- [x] Stop extending the deny list; make structural evidence the acceptance boundary and correct
+  stale documentation.
+- [x] Run focused local verification, migration upgrade, PostgreSQL concurrency interleavings,
+  lint, typecheck, config, benchmark, contracts, and generator-format drift checks; full pytest
+  remains assigned to exact-head CI because the local fixture hard-codes unrelated DB credentials.
+- [x] Regenerate and independently audit exports from the isolated clean database; repeated files
+  are byte-identical.
+- [x] Run production-code quality and two focused final diff challenges; reject the stale matcher
+  finding against the live function test, prove zero bounds directly, and prove both concurrency
+  loser paths.
+- [x] Commit and push the production and clean-export slices to PR #2
+  (`cfa9ecb`, `3abcedd`).
+- [x] Record pushed code/export head `3abceddcb898fceb2dfd3b74e04c48ef47547566`;
+  exact-head CI passed 72 tests plus lint, typecheck, config, migrations, benchmark,
+  infrastructure, and handover; merge state was clean and no unresolved non-outdated threads
+  remained.
+- [x] Resolve the two obsolete generator threads after the pushed fix was green.
+
+Regroup rule: the existing `CompanyIdentifier` boundary and one uniqueness migration are authorized.
+Any additional schema/public API or projected remediation above 1,300 changed code lines requires
+updating this artifact and stopping before that expanded edit.
+
+## Execution handoff
+
+Do not create a new plan or re-plan this pass. Follow and update this checklist. Use
+`repo-large-implementation`, `production-preflight`, diagnose/TDD, and `production-code`; re-walk
+the affected surface before edits and completion. Do not touch reference/private-runtime paths.
+Commit and push before resolving threads, and do not merge until the freeze gate is cleared.
+
+## Full clean scrape verification (reproduced)
+
+A fresh database `va_lead_intelligence_clean`, workspace `051af07b-4c05-4e71-b1a9-d9ce2e70dc6a` and campaign `ffdf532a-7aea-4239-91e1-97af3a319bd2` were used. `manual_seed` had no supplied data and was skipped.
+
+### Source-run results
+
+| Source | Hits | Qualified | Duplicate | Errors | Status |
+|--------|------|-----------|-----------|--------|--------|
+| `openstreetmap` | 3,705 | 1,146 | 0 | 0 | succeeded |
+| `finance_directory` | 806 | 806 | 0 | 0 | succeeded |
+| `nz_finance_advisers` (30 list pages) | 993 | 967 | 26 | 0 | succeeded |
+| `extract_team_pages_missing` | 878 | 833 | 45 | 0 | succeeded |
+| `extract_company_web_missing` | 786 | 735 | 51 | 0 | succeeded |
+
+### Export results
+
+| File | Rows | High | Medium |
+|------|------|------|--------|
+| `exports/anz_remote_leads_with_contacts.csv` | 5,105 | 2,062 | 3,043 |
+| `exports/anz_all_companies.csv` | 5,000 | — | — |
+
+Repeated export to temporary paths produced identical SHA-256 hashes:
+- `anz_remote_leads_with_contacts.csv`: `a0349403c73911e9347282bd442e0a15b2867e40550e23cdcf134ea8111d4162`
+- `anz_all_companies.csv`: `9611f49029921996288f4efe565d70dd9514ba5d63ef0cc49705f31d767a7b4c`
+
+### Data-correctness audit
+
+- 0 prohibited-domain merges (`financedirectory.net.au`, `financeadvisers.co.nz`, `openstreetmap.org`, `facebook.com`, `linkedin.com`).
+- 0 High-ranked leads without a valid email, phone, or form URL.
+- 0 blank `workplace_type`.
+- `intent_label` is `company_existence_only` for every exported lead.
+- `workplace_type` is `inferred_remote_friendly` for every exported lead.
+- 0 false `named_contact_name` values (checked against the expanded deny-list).
+- 0 mismatched person/email pairs; no named email without a named person.
+- 0 malformed `best_email`, `best_phone`, or `best_form` values.
+- 0 explanations containing "is advertising" or "role is remote/hybrid".
+- Franchise branches remain distinct: LJ Hooker (95 leads / 14 domains), Ray White (187 / 35), Elders (86 / 11).
+- McGrath Port Macquarie and Upper Hunter share `mcgrath.com.au` but retain separate phone/location/contact records.
+- Repeated `nz_finance_advisers` profiles converge on single companies (e.g. 96 identifiers for one legal company).
+
+### Exact-head validation
+
+- `make lint` ✅
+- `make typecheck` ✅
+- `make test` ✅ (72 passed)
+- `make config-validate` ✅
+- `make migration-check` ✅
+- `make benchmark` ✅ (7 fixtures, 0 failures)
+- `make contracts` ✅
+- `make handover` ✅
+
+No code changes were made; only the regenerated exports and this verification record were added.

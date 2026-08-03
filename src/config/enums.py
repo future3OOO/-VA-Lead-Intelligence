@@ -62,9 +62,25 @@ class CrawlStatus(str, Enum):
     RATE_LIMITED = "rate_limited"
 
 
-class SourceType(str, Enum):
-    GREENHOUSE = "greenhouse"
-    LEVER = "lever"
-    ASHBY = "ashby"
-    COMPANY_WEB = "company_web"
-    SEARCH = "search"
+class IntentLabel(str, Enum):
+    BUYER_REQUEST = "buyer_request"
+    COMPANY_HIRING = "company_hiring"
+    OPERATIONAL_PAIN = "operational_pain"
+    GROWTH_TRIGGER = "growth_trigger"
+    COMPANY_EXISTENCE_ONLY = "company_existence_only"
+    SELLER_PROMOTION = "seller_promotion"
+    JOB_SEEKER = "job_seeker"
+    GENERAL_DISCUSSION = "general_discussion"
+    UNRESOLVED = "unresolved"
+
+
+class ContactRouteType(str, Enum):
+    GENERIC_EMAIL = "generic_email"
+    CONTACT_FORM = "contact_form"
+    SALES_FORM = "sales_form"
+    DEMO_BOOKING = "demo_booking"
+    BUSINESS_PHONE = "business_phone"
+    SUPPORT_ROUTE = "support_route"
+    NAMED_WORK_EMAIL_APPROVED = "named_work_email_approved"
+    SOCIAL_PROFILE_REVIEW_ONLY = "social_profile_review_only"
+    NAMED_CONTACT = "named_contact"

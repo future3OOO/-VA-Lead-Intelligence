@@ -42,7 +42,7 @@
       "type": "string"
     },
     "outcome_type": {
-      "$ref": "#/definitions/OutcomeType"
+      "$ref": "#/$defs/OutcomeType"
     },
     "workspace_id": {
       "format": "uuid",

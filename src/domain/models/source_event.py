@@ -4,8 +4,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from config.enums import SourceType
-
 
 class SourceEvent(BaseModel):
     """Raw source event.."""
@@ -14,7 +12,7 @@ class SourceEvent(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     workspace_id: UUID
     source_id: str
-    source_type: SourceType
+    source_type: str
     raw_payload: dict[str, Any] = Field(default_factory=dict)
     received_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -25,7 +23,7 @@ class SourceEventCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     source_id: str
-    source_type: SourceType
+    source_type: str
     raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -35,7 +33,7 @@ class SourceEventUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)
     workspace_id: UUID | None = None
     source_id: str | None = None
-    source_type: SourceType | None = None
+    source_type: str | None = None
     raw_payload: dict[str, Any] | None = None
 
 

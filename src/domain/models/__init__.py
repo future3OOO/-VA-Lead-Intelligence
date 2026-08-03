@@ -51,7 +51,10 @@ from domain.models.review_decision import (
 from domain.models.scorecard import Scorecard, ScorecardCreate, ScorecardUpdate
 from domain.models.source_event import SourceEvent, SourceEventCreate, SourceEventUpdate
 from domain.models.source_health import SourceHealth, SourceHealthCreate, SourceHealthUpdate
+from domain.models.source_hit import SourceHit, SourceHitCreate, SourceHitUpdate
 from domain.models.source_policy import SourcePolicy, SourcePolicyCreate, SourcePolicyUpdate
+from domain.models.source_registry import SourceRegistry, SourceRegistryCreate, SourceRegistryUpdate
+from domain.models.source_run import SourceRun, SourceRunCreate, SourceRunUpdate
 from domain.models.suppression import Suppression, SuppressionCreate, SuppressionUpdate
 from domain.models.user import User, UserCreate, UserUpdate
 from domain.models.workspace import Workspace, WorkspaceCreate, WorkspaceUpdate
@@ -156,4 +159,13 @@ __all__ = [
     "OperationalMetadata",
     "OperationalMetadataCreate",
     "OperationalMetadataUpdate",
+    "SourceHit",
+    "SourceHitCreate",
+    "SourceHitUpdate",
+    "SourceRegistry",
+    "SourceRegistryCreate",
+    "SourceRegistryUpdate",
+    "SourceRun",
+    "SourceRunCreate",
+    "SourceRunUpdate",
 ]

@@ -1,17 +1,4 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "company_web",
-        "search"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/source_event_update-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Partial update request.",
@@ -19,7 +6,7 @@
     "raw_payload": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {
@@ -44,13 +31,14 @@
     "source_type": {
       "anyOf": [
         {
-          "$ref": "#/definitions/SourceType"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Source Type"
     },
     "workspace_id": {
       "anyOf": [

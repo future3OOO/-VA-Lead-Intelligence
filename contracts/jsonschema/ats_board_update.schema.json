@@ -1,17 +1,4 @@
 {
-  "$defs": {
-    "SourceType": {
-      "enum": [
-        "greenhouse",
-        "lever",
-        "ashby",
-        "company_web",
-        "search"
-      ],
-      "title": "SourceType",
-      "type": "string"
-    }
-  },
   "$id": "https://schemas.va-lead-intelligence/ats_board_update-v1.0.0.schema.json",
   "additionalProperties": false,
   "description": "Partial update request.",
@@ -72,13 +59,14 @@
     "provider": {
       "anyOf": [
         {
-          "$ref": "#/definitions/SourceType"
+          "type": "string"
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Provider"
     },
     "workspace_id": {
       "anyOf": [

@@ -26,7 +26,7 @@
       "type": "string"
     },
     "crawl_request": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Crawl Request",
       "type": "object"
     },
@@ -57,7 +57,7 @@
       "type": "string"
     },
     "status": {
-      "$ref": "#/definitions/CrawlStatus"
+      "$ref": "#/$defs/CrawlStatus"
     },
     "workspace_id": {
       "format": "uuid",

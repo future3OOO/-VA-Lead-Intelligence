@@ -14,7 +14,11 @@ from api.routers import (
     outcome_router,
     review_assignment_router,
     scorecard_router,
+    source_engine_router,
     source_health_router,
+    source_hit_router,
+    source_registry_router,
+    source_run_router,
     suppression_router,
     workspace_router,
 )
@@ -47,6 +51,10 @@ def create_app() -> FastAPI:
     app.include_router(outcome_router)
     app.include_router(cost_ledger_router)
     app.include_router(source_health_router)
+    app.include_router(source_hit_router)
+    app.include_router(source_registry_router)
+    app.include_router(source_run_router)
+    app.include_router(source_engine_router)
     return app
 
 

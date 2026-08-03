@@ -1,0 +1,90 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.va-lead-intelligence/source_run_create-v1.0.0.schema.json",
+  "additionalProperties": false,
+  "description": "Create request.",
+  "properties": {
+    "campaign_id": {
+      "format": "uuid",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "checkpoint": {
+      "additionalProperties": true,
+      "title": "Checkpoint",
+      "type": "object"
+    },
+    "completed_at": {
+      "format": "date-time",
+      "title": "Completed At",
+      "type": "string"
+    },
+    "errors_total": {
+      "title": "Errors Total",
+      "type": "integer"
+    },
+    "hits_duplicate_total": {
+      "title": "Hits Duplicate Total",
+      "type": "integer"
+    },
+    "hits_qualified_total": {
+      "title": "Hits Qualified Total",
+      "type": "integer"
+    },
+    "hits_total": {
+      "title": "Hits Total",
+      "type": "integer"
+    },
+    "source_key": {
+      "title": "Source Key",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus",
+      "default": "pending"
+    },
+    "workspace_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Workspace Id"
+    }
+  },
+  "required": [
+    "campaign_id",
+    "source_key",
+    "started_at",
+    "completed_at",
+    "hits_total",
+    "hits_qualified_total",
+    "hits_duplicate_total",
+    "errors_total"
+  ],
+  "title": "SourceRunCreate",
+  "type": "object",
+  "version": "1.0.0"
+}

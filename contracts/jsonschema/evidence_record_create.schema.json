@@ -13,7 +13,7 @@
       "type": "string"
     },
     "extracted_facts": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Extracted Facts",
       "type": "object"
     },

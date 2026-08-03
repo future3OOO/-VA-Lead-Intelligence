@@ -44,12 +44,27 @@ enums:
     - succeeded
     - failed
     - rate_limited
-  SourceType:
-    - greenhouse
-    - lever
-    - ashby
-    - company_web
-    - search
+  IntentLabel:
+    - buyer_request
+    - company_hiring
+    - operational_pain
+    - growth_trigger
+    - company_existence_only
+    - seller_promotion
+    - job_seeker
+    - general_discussion
+    - unresolved
+
+  ContactRouteType:
+    - generic_email
+    - contact_form
+    - sales_form
+    - demo_booking
+    - business_phone
+    - support_route
+    - named_work_email_approved
+    - social_profile_review_only
+    - named_contact
 
 base_event_fields:
   - name: schema_version
@@ -100,7 +115,7 @@ events:
       - name: board_url
         type: url
       - name: provider
-        type: enum:SourceType
+        type: str
       - name: board_token
         type: str
   job_signal:
@@ -473,7 +488,7 @@ entities:
         type: fk:company
         index: true
       - name: provider
-        type: enum:SourceType
+        type: str
       - name: board_url
         type: url
       - name: board_token
@@ -545,7 +560,7 @@ entities:
       - name: source_id
         type: str
       - name: source_type
-        type: enum:SourceType
+        type: str
       - name: raw_payload
         type: json
       - name: received_at
@@ -954,6 +969,146 @@ entities:
       - name: key
         type: str
       - name: value
+        type: json
+      - name: created_at
+        type: datetime
+        auto: true
+
+  source_hit:
+    route: /source-hits
+    description: Normalized record from a source adapter.
+    workspace_references:
+      company_id: company
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: company_id
+        type: fk:company
+        index: true
+        nullable: true
+      - name: source_key
+        type: str
+      - name: source_native_id
+        type: str
+      - name: source_url
+        type: url_str
+      - name: observed_at
+        type: datetime
+      - name: published_at
+        type: datetime
+      - name: title
+        type: str
+      - name: body_excerpt
+        type: text
+      - name: company_name_raw
+        type: str
+      - name: company_domain_raw
+        type: str
+      - name: location_raw
+        type: str
+      - name: workplace_type
+        type: str
+      - name: intent_label
+        type: enum:IntentLabel
+        default: "'unresolved'"
+      - name: contact_routes_raw
+        type: json_list
+        default: []
+      - name: raw_snapshot_uri
+        type: str
+        default: "''"
+      - name: content_hash
+        type: str
+      - name: access_policy_version
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+
+  source_registry:
+    route: /source-registry
+    description: Configured source adapter registration.
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: source_key
+        type: str
+      - name: source_class
+        type: str
+      - name: access_mode
+        type: str
+      - name: status
+        type: str
+        default: "'enabled'"
+      - name: owner
+        type: str
+      - name: terms_review_status
+        type: str
+      - name: terms_reviewed_at
+        type: datetime
+      - name: allowed_outputs
+        type: list_str
+        default: []
+      - name: allowed_fields
+        type: list_str
+        default: []
+      - name: raw_retention_days
+        type: int
+      - name: normalized_retention_days
+        type: int
+      - name: rate_limit
+        type: json
+        default: {}
+      - name: kill_switch
+        type: str
+      - name: created_at
+        type: datetime
+        auto: true
+      - name: updated_at
+        type: datetime
+        auto: true
+
+  source_run:
+    route: /source-runs
+    description: Execution record for a source adapter run.
+    workspace_references:
+      campaign_id: campaign
+    fields:
+      - name: id
+        type: uuid
+        primary: true
+      - name: workspace_id
+        type: fk:workspace
+        index: true
+      - name: campaign_id
+        type: fk:campaign
+        index: true
+      - name: source_key
+        type: str
+      - name: status
+        type: enum:RunStatus
+        default: "'pending'"
+      - name: started_at
+        type: datetime
+      - name: completed_at
+        type: datetime
+      - name: hits_total
+        type: int
+      - name: hits_qualified_total
+        type: int
+      - name: hits_duplicate_total
+        type: int
+      - name: errors_total
+        type: int
+      - name: checkpoint
         type: json
       - name: created_at
         type: datetime

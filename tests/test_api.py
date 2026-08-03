@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import httpx
@@ -84,3 +85,90 @@ async def test_workspace_isolation(client: httpx.AsyncClient) -> None:
     list_resp = await client.get("/companies/", headers=_headers(other_workspace))
     assert list_resp.status_code == 200
     assert list_resp.json() == []
+
+
+async def test_source_hit_rejects_company_from_another_workspace(
+    client: httpx.AsyncClient,
+) -> None:
+    workspace_a = UUID(await _create_workspace(client))
+    workspace_b = UUID(await _create_workspace(client))
+    company = await client.post(
+        "/companies/",
+        json={
+            "canonical_name": "Other Workspace Company",
+            "primary_domain": "other.example",
+            "country_code": "NZ",
+            "industry": "Finance",
+            "employee_count": 10,
+        },
+        headers=_headers(workspace_b),
+    )
+    assert company.status_code == 201
+    now = datetime.now(timezone.utc).isoformat()
+    response = await client.post(
+        "/source-hits/",
+        json={
+            "company_id": company.json()["id"],
+            "source_key": "manual_seed",
+            "source_native_id": "cross-workspace",
+            "source_url": "https://example.org/source",
+            "observed_at": now,
+            "published_at": now,
+            "title": "Cross-workspace source hit",
+            "body_excerpt": "",
+            "company_name_raw": "Other Workspace Company",
+            "company_domain_raw": "other.example",
+            "location_raw": "Auckland, New Zealand",
+            "workplace_type": "inferred_remote_friendly",
+            "contact_routes_raw": [],
+            "content_hash": "cross-workspace",
+            "access_policy_version": "source-policy-v1",
+        },
+        headers=_headers(workspace_a),
+    )
+    assert response.status_code == 404
+
+
+async def test_source_run_rejects_campaign_from_another_workspace(
+    client: httpx.AsyncClient,
+) -> None:
+    workspace_a = UUID(await _create_workspace(client))
+    workspace_b = UUID(await _create_workspace(client))
+    campaign = await client.post(
+        "/campaigns/",
+        json={
+            "name": "Other Workspace Campaign",
+            "status": "active",
+            "capability_filter": ["virtual_assistant"],
+            "score_threshold": 0.5,
+        },
+        headers=_headers(workspace_b),
+    )
+    assert campaign.status_code == 201
+    now = datetime.now(timezone.utc).isoformat()
+    response = await client.post(
+        "/source-runs/",
+        json={
+            "campaign_id": campaign.json()["id"],
+            "source_key": "manual_seed",
+            "status": "pending",
+            "started_at": now,
+            "completed_at": now,
+            "hits_total": 0,
+            "hits_qualified_total": 0,
+            "hits_duplicate_total": 0,
+            "errors_total": 0,
+            "checkpoint": {},
+        },
+        headers=_headers(workspace_a),
+    )
+    assert response.status_code == 404
+
+
+async def test_source_pagination_rejects_negative_values(client: httpx.AsyncClient) -> None:
+    workspace_id = UUID(await _create_workspace(client))
+    response = await client.get(
+        "/source-hits/?skip=-1&limit=0",
+        headers=_headers(workspace_id),
+    )
+    assert response.status_code == 422

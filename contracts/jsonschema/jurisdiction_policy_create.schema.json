@@ -4,7 +4,7 @@
   "description": "Create request.",
   "properties": {
     "config": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "title": "Config",
       "type": "object"
     },

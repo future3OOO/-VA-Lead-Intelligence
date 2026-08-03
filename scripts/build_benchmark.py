@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 BENCHMARK_DIR = REPO_ROOT / "benchmark"
+SOURCE_ENGINE_BENCHMARK_DIR = REPO_ROOT / "quality" / "benchmarks" / "source-engine"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -40,12 +41,58 @@ def run_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_source_engine_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate a source-engine benchmark fixture using production runtime logic.
+
+    Delegates to SourceRunner.evaluate_fixture so classification, scoring,
+    jurisdiction gating, source-policy allowlists, contact-route retention and
+    content_hash deduplication all use the same code path as a real run.
+    """
+    from services.source_engine.runner import SourceRunner
+
+    runner = SourceRunner()
+    expected = fixture.get("expected", {})
+    result = runner.evaluate_fixture(fixture.get("source_hits", []))
+
+    allowed_hits = result["allowed"]
+    qualified_hits = result["qualified"]
+    actual_allowed = all(allowed_hits) if allowed_hits else False
+    actual_qualified = any(qualified_hits) if qualified_hits else False
+    duplicates = result["duplicates"]
+
+    passed = True
+    if "allowed" in expected and actual_allowed != expected["allowed"]:
+        passed = False
+    if "qualified" in expected and actual_qualified != expected["qualified"]:
+        passed = False
+    if "duplicates" in expected and duplicates != expected["duplicates"]:
+        passed = False
+
+    return {
+        "fixture_id": fixture.get("description", "unknown"),
+        "expected": expected,
+        "actual": {
+            "allowed": actual_allowed,
+            "qualified": actual_qualified,
+            "duplicates": duplicates,
+        },
+        "passed": passed,
+    }
+
+
 def main() -> int:
     results: list[dict[str, Any]] = []
     failures = 0
     for path in sorted(BENCHMARK_DIR.glob("fixtures/*.yaml")):
         fixture = load_yaml(path)
         result = run_fixture(fixture)
+        results.append(result)
+        if not result["passed"]:
+            failures += 1
+
+    for path in sorted(SOURCE_ENGINE_BENCHMARK_DIR.glob("*.yaml")):
+        fixture = load_yaml(path)
+        result = run_source_engine_fixture(fixture)
         results.append(result)
         if not result["passed"]:
             failures += 1
@@ -62,17 +109,23 @@ def main() -> int:
     guide_path = BENCHMARK_DIR / "label-guide.md"
     guide = """# Benchmark Label Guide
 
-Each fixture under `benchmark/fixtures/` is a labeled scoring scenario.
+Each fixture under `benchmark/fixtures/` is a labeled scoring scenario for the
+legacy `core.scorer`.
 
-- `expected_pass`: the intended qualification outcome.
+Each fixture under `quality/benchmarks/source-engine/` is a labeled source-engine
+scenario using `services.source_engine.scorer`.
+
+- `expected_pass`: the intended qualification outcome (legacy fixtures).
+- `expected`: a map of `allowed`, `qualified`, and/or `duplicates` (source-engine fixtures).
 - `features`: a normalized feature vector consumed by `core.scorer.score`.
+- `source_hits`: raw source-engine hits consumed by `services.source_engine.scorer.score_source_hit`.
 
 Final qualification is `score_passed and jurisdiction_allowed`.
 
 To add a fixture:
-1. Copy an existing file in `benchmark/fixtures/`.
-2. Update `fixture_id` and `expected_pass`.
-3. Provide a realistic feature vector.
+1. Copy an existing file in `benchmark/fixtures/` or `quality/benchmarks/source-engine/`.
+2. Update `fixture_id`/`description` and `expected`/`expected_pass`.
+3. Provide a realistic feature vector or source hit.
 4. Run `python scripts/build_benchmark.py` and commit `benchmark/report.json`.
 """
     guide_path.write_text(guide)
@@ -82,9 +135,7 @@ To add a fixture:
         print("Failing fixtures:")
         for r in results:
             if not r["passed"]:
-                print(
-                    f"  - {r['fixture_id']}: expected {r['expected_pass']}, got {r['actual_pass']} (score {r['score']}, jurisdiction {r['jurisdiction_allowed']})"
-                )
+                print(f"  - {r['fixture_id']}: {r}")
         return 1
     return 0
 

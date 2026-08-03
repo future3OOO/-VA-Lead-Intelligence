@@ -21,12 +21,14 @@ PYDANTIC_TYPE_MAP = {
     "text": "str",
     "email": "EmailStr",
     "url": "HttpUrl",
+    "url_str": "str",
     "int": "int",
     "float": "float",
     "bool": "bool",
     "datetime": "datetime",
     "date": "date",
     "json": "dict[str, Any]",
+    "json_list": "Any",
     "list_str": "list[str]",
 }
 
@@ -36,12 +38,14 @@ SQLALCHEMY_TYPE_MAP = {
     "text": "Text",
     "email": "String(255)",
     "url": "String(2048)",
+    "url_str": "String(2048)",
     "int": "Integer",
     "float": "Float",
     "bool": "Boolean",
     "datetime": "DateTime(timezone=True)",
     "date": "Date",
     "json": "JSON",
+    "json_list": "JSON",
     "list_str": "JSON",
 }
 
@@ -50,12 +54,16 @@ def to_pascal(snake: str) -> str:
     return "".join(part.capitalize() for part in snake.split("_"))
 
 
-def py_type(spec_type: str, enums: dict[str, list[str]]) -> str:
+def py_type(spec_type: str, enums: dict[str, list[str]], nullable: bool = False) -> str:
     if spec_type.startswith("enum:"):
-        return spec_type.split(":", 1)[1]
-    if spec_type.startswith("fk:"):
-        return "UUID"
-    return PYDANTIC_TYPE_MAP[spec_type]
+        base = spec_type.split(":", 1)[1]
+    elif spec_type.startswith("fk:"):
+        base = "UUID"
+    else:
+        base = PYDANTIC_TYPE_MAP[spec_type]
+    if nullable and base not in ("Any",):
+        return f"{base} | None"
+    return base
 
 
 def sa_type(spec_type: str) -> str:
@@ -86,13 +94,19 @@ def pydantic_default(
         return "Field(default_factory=datetime.utcnow)"
     if for_create and field["name"] == "workspace_id":
         return "None"
+    if for_create and field.get("nullable") and field.get("default") is None:
+        return "None"
     default = field.get("default")
-    if default is None:
-        py = py_type(field["type"], {})
-        if py == "list[str]":
-            return "Field(default_factory=list)"
+    py = py_type(field["type"], {})
+    if default is None or default == [] or default == {}:
         if py == "dict[str, Any]":
             return "Field(default_factory=dict)"
+        if py in ("list[str]", "Any"):
+            return (
+                "Field(default_factory=list)"
+                if "list" in field.get("type", "")
+                else "Field(default_factory=dict)"
+            )
         return ""
     if field["type"].startswith("enum:"):
         enum_name = py_type(field["type"], enums)
@@ -106,7 +120,7 @@ def pydantic_default(
 
 
 def response_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
-    py = py_type(field["type"], enums)
+    py = py_type(field["type"], enums, nullable=bool(field.get("nullable")))
     default = pydantic_default(field, enums)
     if default:
         return f"    {field['name']}: {py} = {default}"
@@ -116,7 +130,7 @@ def response_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
 def create_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
     if field.get("primary") or field.get("auto"):
         return ""
-    py = py_type(field["type"], enums)
+    py = py_type(field["type"], enums, nullable=bool(field.get("nullable")))
     if field["name"] == "workspace_id":
         return "    workspace_id: UUID | None = None"
     default = pydantic_default(field, enums, for_create=True)
@@ -128,9 +142,12 @@ def create_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
 def update_field(field: dict[str, Any], enums: dict[str, list[str]]) -> str:
     if field.get("primary") or field.get("auto"):
         return ""
-    py = py_type(field["type"], enums)
+    nullable = bool(field.get("nullable"))
+    py = py_type(field["type"], enums, nullable=nullable)
     if field["name"] == "workspace_id":
         return "    workspace_id: UUID | None = None"
+    if nullable:
+        return f"    {field['name']}: {py} = None"
     return f"    {field['name']}: {py} | None = None"
 
 
@@ -138,6 +155,7 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
     sql = sa_type(field["type"])
     kwargs: list[str] = []
     name = field["name"]
+    nullable = bool(field.get("nullable"))
     if field.get("primary"):
         kwargs.append("primary_key=True")
         kwargs.append("default=uuid.uuid4")
@@ -146,6 +164,8 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
         kwargs.append(f"ForeignKey('{target}.id')")
     if field.get("index"):
         kwargs.append("index=True")
+    if nullable:
+        kwargs.append("nullable=True")
     if field.get("auto"):
         if name == "created_at":
             kwargs.append("server_default=func.now()")
@@ -162,18 +182,21 @@ def sqlalchemy_field(field: dict[str, Any]) -> str:
     ):
         kwargs.append(f"default={py_default(default)}")
     args = sql + ((", " + ", ".join(kwargs)) if kwargs else "")
-    return f"    {name}: Mapped[{mapped_py_type(field['type'])}] = mapped_column({args})"
+    return f"    {name}: Mapped[{mapped_py_type(field['type'], nullable)}] = mapped_column({args})"
 
 
-def mapped_py_type(spec_type: str) -> str:
+def mapped_py_type(spec_type: str, nullable: bool = False) -> str:
     if spec_type.startswith("enum:"):
-        return "str"
-    if spec_type == "uuid" or spec_type.startswith("fk:"):
-        return "uuid.UUID"
-    py = py_type(spec_type, {})
-    if py in ("HttpUrl", "EmailStr"):
-        return "str"
-    return py
+        base = "str"
+    elif spec_type == "uuid" or spec_type.startswith("fk:"):
+        base = "uuid.UUID"
+    else:
+        base = py_type(spec_type, {})
+    if base in ("HttpUrl", "EmailStr"):
+        base = "str"
+    if nullable and base not in ("Any",):
+        return f"{base} | None"
+    return base
 
 
 def generate_enums(enums: dict[str, list[str]]) -> str:
@@ -217,19 +240,29 @@ def generate_event(
     event_fields = [response_field(f, enums) for f in spec.get("fields", [])]
     version = spec.get("schema_version", "1.0.0")
     used_types = {f["type"] for f in all_fields}
-    imports = ["from datetime import datetime, date"]
-    if any(t == "uuid" or t.startswith("fk:") for t in used_types):
+    needs_date = "date" in used_types
+    needs_uuid = any(t == "uuid" or t.startswith("fk:") for t in used_types)
+    needs_any = any(t in ("json", "json_list") for t in used_types)
+    needs_http_url = "url" in used_types
+    needs_email = "email" in used_types
+    needs_field = any("Field(" in f for f in event_fields)
+    imports = ["from datetime import datetime"]
+    if needs_date:
+        imports[0] = "from datetime import date, datetime"
+    if needs_uuid:
         imports.append("from uuid import UUID, uuid4")
-    imports.append("from typing import Any")
-    extra_pydantic = []
-    if any(t == "url" for t in used_types):
+    if needs_any:
+        imports.append("from typing import Any")
+    extra_pydantic: list[str] = []
+    if needs_http_url:
         extra_pydantic.append("HttpUrl")
-    if any(t == "email" for t in used_types):
+    if needs_email:
         extra_pydantic.append("EmailStr")
-    if extra_pydantic:
-        imports.append(f"from pydantic import Field, {', '.join(extra_pydantic)}")
-    else:
-        imports.append("from pydantic import Field")
+    pydantic_imports = extra_pydantic[:]
+    if needs_field:
+        pydantic_imports.insert(0, "Field")
+    if pydantic_imports:
+        imports.append(f"from pydantic import {', '.join(pydantic_imports)}")
     used_enums = {t.split(":", 1)[1] for t in used_types if t.startswith("enum:")}
     if used_enums:
         imports.append(f"from config.enums import {', '.join(sorted(used_enums))}")
@@ -253,23 +286,33 @@ def generate_pydantic_models(
     used_enums = {
         py_type(f["type"], enums) for f in spec["fields"] if f["type"].startswith("enum:")
     }
-    lines = [
-        "from datetime import date, datetime",
-        "from typing import Any",
-        "from uuid import UUID, uuid4",
-        "",
-        "from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl",
-    ]
+    used_types = {f["type"] for f in spec["fields"]}
+    needs_date = "date" in used_types
+    needs_any = any(t in ("json", "json_list") for t in used_types)
+    needs_http_url = "url" in used_types
+    needs_email = "email" in used_types
+    extra_pydantic: list[str] = []
+    if needs_http_url:
+        extra_pydantic.append("HttpUrl")
+    if needs_email:
+        extra_pydantic.append("EmailStr")
+    pydantic_import = "from pydantic import BaseModel, ConfigDict, Field"
+    if extra_pydantic:
+        pydantic_import += f", {', '.join(extra_pydantic)}"
+    imports = ["from datetime import datetime"]
+    if needs_date:
+        imports[0] = "from datetime import date, datetime"
+    if needs_any:
+        imports.append("from typing import Any")
+    imports.extend(["from uuid import UUID, uuid4", "", pydantic_import])
     if used_enums:
-        lines.append(f"from config.enums import {', '.join(sorted(used_enums))}")
-    lines.extend(
-        [
-            "",
-            f"class {class_name}(BaseModel):",
-            f'    """{spec.get("description", class_name)}."""',
-            '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
-        ]
-    )
+        imports.append(f"from config.enums import {', '.join(sorted(used_enums))}")
+    lines = imports + [
+        "",
+        f"class {class_name}(BaseModel):",
+        f'    """{spec.get("description", class_name)}."""',
+        '    model_config = ConfigDict(extra="forbid", populate_by_name=True, from_attributes=True)',
+    ]
     lines.extend(response_fields)
     lines.extend(
         [
@@ -295,17 +338,48 @@ def generate_pydantic_models(
 
 def generate_sqlalchemy_model(name: str, class_name: str, spec: dict[str, Any]) -> str:
     fields = [sqlalchemy_field(f) for f in spec["fields"]]
-    has_json = any(f["type"] == "json" for f in spec["fields"])
+    has_json = any(f["type"] in ("json", "json_list") for f in spec["fields"])
     used_types = {f["type"] for f in spec["fields"]}
-    needs_datetime = any(t in ("datetime", "date") for t in used_types)
+    needed: set[str] = set()
+    for t in used_types:
+        if t in ("str", "email", "url", "url_str") or t.startswith("enum:"):
+            needed.add("String")
+        elif t == "text":
+            needed.add("Text")
+        elif t == "int":
+            needed.add("Integer")
+        elif t == "float":
+            needed.add("Float")
+        elif t == "bool":
+            needed.add("Boolean")
+        elif t == "date":
+            needed.add("Date")
+        elif t == "datetime":
+            needed.add("DateTime")
+        elif t in ("json", "json_list", "list_str"):
+            needed.add("JSON")
+    has_fk = any(t.startswith("fk:") for t in used_types)
+    has_auto = any(f.get("auto") for f in spec["fields"])
+    if has_auto:
+        needed.add("DateTime")
+        needed.add("func")
+    if has_fk:
+        needed.add("ForeignKey")
+    needs_date = "date" in used_types
+    needs_datetime = any(t in ("datetime",) for t in used_types) or has_auto
     lines = ["import uuid"]
-    if needs_datetime:
+    if needs_date and needs_datetime:
         lines.append("from datetime import date, datetime")
+    elif needs_date:
+        lines.append("from datetime import date")
+    elif needs_datetime:
+        lines.append("from datetime import datetime")
     if has_json:
         lines.append("from typing import Any")
+    sqlalchemy_imports = [c for c in sorted(needed) if c]
     lines.extend(
         [
-            "from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func",
+            f"from sqlalchemy import {', '.join(sqlalchemy_imports)}",
             "from sqlalchemy.dialects.postgresql import UUID",
             "from sqlalchemy.orm import Mapped, mapped_column",
             "",
@@ -328,37 +402,89 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
     if route is None or route == "none":
         return None
     is_workspace = name == "workspace"
+    workspace_references: dict[str, str] = spec.get("workspace_references", {})
     pk_name = "workspace_id" if is_workspace else f"{name}_id"
     create_extra = "" if is_workspace else ", workspace_id=auth_workspace_id"
+    create_values = (
+        "data.model_dump(exclude_unset=True)"
+        if is_workspace
+        else 'data.model_dump(exclude={"workspace_id"})'
+    )
+    update_values = (
+        "data.model_dump(exclude_unset=True)"
+        if is_workspace
+        else 'data.model_dump(exclude_unset=True, exclude={"workspace_id"})'
+    )
     list_filter = "" if is_workspace else f".where(DB{db_class}.workspace_id == auth_workspace_id)"
     get_filter = f"DB{db_class}.id == {pk_name}"
     if is_workspace:
         get_filter += f", DB{db_class}.id == auth_workspace_id"
     else:
         get_filter += f", DB{db_class}.workspace_id == auth_workspace_id"
+    db_imports = [f"from db.models import {db_class} as DB{db_class}"]
+    reference_checks: list[str] = []
+    for field, entity in workspace_references.items():
+        reference_class = to_pascal(entity)
+        db_imports.append(f"from db.models import {reference_class} as DB{reference_class}")
+        reference_checks.append(
+            textwrap.dedent(
+                f"""\
+                value = values.get("{field}")
+                if value is not None:
+                    exists = await session.scalar(
+                        select(DB{reference_class}.id).where(
+                            DB{reference_class}.id == value,
+                            DB{reference_class}.workspace_id == auth_workspace_id,
+                        )
+                    )
+                    if not exists:
+                        raise HTTPException(status_code=404, detail="{reference_class} not found")
+                """
+            ).rstrip()
+        )
+    reference_helper = ""
+    reference_validation = ""
+    if reference_checks:
+        checks = textwrap.indent("\n".join(reference_checks), "    ")
+        reference_helper = textwrap.indent(
+            (
+                "async def _validate_workspace_references(\n"
+                "    values: dict[str, object],\n"
+                "    auth_workspace_id: UUID,\n"
+                "    session: AsyncSession,\n"
+                ") -> None:\n"
+                f"{checks}\n"
+            ),
+            "        ",
+        )
+        reference_validation = (
+            "            await _validate_workspace_references(values, auth_workspace_id, session)\n"
+        )
+    db_import_block = textwrap.indent("\n".join(db_imports), "        ")
     return textwrap.dedent(
         f'''\
         from typing import Annotated
         from uuid import UUID
 
-        from fastapi import APIRouter, Depends, HTTPException
+        from fastapi import APIRouter, Depends, HTTPException, Query
         from sqlalchemy import select
         from sqlalchemy.ext.asyncio import AsyncSession
 
         from api.deps import require_workspace
-        from db.models import {db_class} as DB{db_class}
+{db_import_block}
         from db.session import get_session
         from domain.models import {model_class}, {model_class}Create, {model_class}Update
 
         router = APIRouter(prefix="{route}", tags=["{name}"])
+{reference_helper}
 
 
         @router.get("/", response_model=list[{model_class}])
         async def list_{name}(
             auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
             session: Annotated[AsyncSession, Depends(get_session)],
-            skip: int = 0,
-            limit: int = 100,
+            skip: int = Query(0, ge=0),
+            limit: int = Query(100, ge=1, le=1000),
         ) -> list[{model_class}]:
             result = await session.scalars(select(DB{db_class}){list_filter}.offset(skip).limit(limit))
             return [{model_class}.model_validate(r) for r in result.all()]
@@ -370,7 +496,8 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
             auth_workspace_id: Annotated[UUID, Depends(require_workspace)],
             session: Annotated[AsyncSession, Depends(get_session)],
         ) -> {model_class}:
-            record = DB{db_class}(**data.model_dump(exclude_unset=True){create_extra})
+            values = {create_values}
+{reference_validation}            record = DB{db_class}(**values{create_extra})
             session.add(record)
             await session.commit()
             await session.refresh(record)
@@ -399,7 +526,8 @@ def generate_router(name: str, model_class: str, db_class: str, spec: dict[str, 
             record = await session.scalar(select(DB{db_class}).where({get_filter}))
             if not record:
                 raise HTTPException(status_code=404, detail="Not found")
-            for key, value in data.model_dump(exclude_unset=True).items():
+            values = {update_values}
+{reference_validation}            for key, value in values.items():
                 setattr(record, key, value)
             await session.commit()
             await session.refresh(record)
@@ -495,6 +623,7 @@ def main() -> None:
         + ", ".join(f'"{n}"' for n in db_model_names)
         + "]\n"
     )
+    router_imports.append("from api.routers.source_engine import router as source_engine_router")
     router_names = [imp.split()[-1] for imp in router_imports]
     router_init = (
         "\n".join(router_imports)

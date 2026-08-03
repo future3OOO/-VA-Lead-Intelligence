@@ -19,7 +19,7 @@
     "input": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {
@@ -44,7 +44,7 @@
     "output": {
       "anyOf": [
         {
-          "additionalProperties": false,
+          "additionalProperties": true,
           "type": "object"
         },
         {
