@@ -6,12 +6,13 @@ import re
 from collections import defaultdict
 
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_contact_form_url,
     extract_email,
     extract_linkedin_profile_url,
     extract_phone,
     is_valid_named_contact,
+    parse_named_contact,
 )
 
 
@@ -57,7 +58,7 @@ def select_company_routes(
             if (
                 email
                 and email != exclude_email
-                and not (exclude_name and _name_in_email_local(exclude_name, email))
+                and not (exclude_name and email_matches_person(exclude_name, email))
             ):
                 company_routes.append(route)
         elif route_type == "business_phone" and not _parse_named_route(route["value"]):
@@ -94,17 +95,14 @@ def _validated_person(name: str, title: str, company_name: str = "") -> tuple[st
 
 def _parse_named_route(value: str) -> dict[str, str]:
     """Parse a formatted named route such as 'Name (Title) <email>'."""
-    parsed: dict[str, str] = {}
-    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*[<-]\s*(.+?)$", value.strip())
-    if m:
-        name = m.group(1).strip()
-        title = (m.group(2) or "").strip()
-        payload = m.group(3).strip().rstrip(">")
-        person = _validated_person(name, title)
-        if person:
-            name, title = person
-            parsed = {"name": name, "title": title, "value": payload}
-    return parsed
+    parsed = parse_named_contact(value)
+    if not parsed:
+        return {}
+    person = _validated_person(parsed["name"], parsed["title"])
+    if not person:
+        return {}
+    name, title = person
+    return {"name": name, "title": title, "value": parsed["value"]}
 
 
 def select_named_person(
@@ -115,9 +113,10 @@ def select_named_person(
 ) -> dict[str, str]:
     """Return the best named contact with an explicitly associated email/phone/LinkedIn.
 
-    Generic company emails and phones are not paired with named people. When
-    target_name is supplied, only routes explicitly naming that person are
-    considered; middle names may differ but first and last names must match.
+    Generic company emails and phones are not paired with named people, except
+    that a generic email may be used when its local part matches target_name.
+    When target_name is supplied, only routes naming or matching that person
+    are considered; middle names may differ but first and last names must match.
     named_contact_email is only populated when a named_work_email_approved
     or social_profile route explicitly carries that person's name and the
     email local part or LinkedIn URL plausibly matches the person's name.
@@ -214,7 +213,7 @@ def select_named_person(
             payload = parsed["value"]
             if t == "named_work_email_approved":
                 email = extract_email(payload)
-                if email and _name_in_email_local(name, email):
+                if email and email_matches_person(name, email):
                     _upsert(name, title=title, email=email)
             elif t == "business_phone":
                 phone = extract_phone(payload)

@@ -42,23 +42,27 @@ async def get_missing_contact_domains(
                         NOT EXISTS (
                           SELECT 1 FROM contact_route named
                           WHERE named.company_id = c.id
+                            AND named.workspace_id = :workspace_id
                             AND named.route_type = 'named_contact'
                         )
                         OR NOT EXISTS (
                           SELECT 1 FROM contact_route email
                           WHERE email.company_id = c.id
+                            AND email.workspace_id = :workspace_id
                             AND email.route_type = 'named_work_email_approved'
                             AND email.value LIKE '%<%'
                         )
                         OR NOT EXISTS (
                           SELECT 1 FROM contact_route phone
                           WHERE phone.company_id = c.id
+                            AND phone.workspace_id = :workspace_id
                             AND phone.route_type = 'business_phone'
                             AND phone.value LIKE '%<%'
                         )
                         OR NOT EXISTS (
                           SELECT 1 FROM contact_route social
                           WHERE social.company_id = c.id
+                            AND social.workspace_id = :workspace_id
                             AND social.route_type = 'social_profile_review_only'
                             AND social.value LIKE '%linkedin.com/%'
                         )
@@ -109,11 +113,18 @@ async def _run_source_shards(
         }
 
     tasks = [
-        run_shard(index, shard)
+        asyncio.create_task(run_shard(index, shard))
         for index, shard in enumerate(partition_domains(domains, shard_count))
         if shard
     ]
-    return list(await asyncio.gather(*tasks))
+    try:
+        return list(await asyncio.gather(*tasks))
+    except (Exception, asyncio.CancelledError):
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
 
 
 async def run_targeted_contact_backfill(

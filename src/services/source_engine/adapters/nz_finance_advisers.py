@@ -21,7 +21,7 @@ from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_email,
     extract_phone,
     is_valid_named_contact,
@@ -318,7 +318,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
             )
         person_email = extract_email(str(raw.get("person_email", "")))
         if person_email:
-            if _name_in_email_local(raw["name"], person_email):
+            if email_matches_person(raw["name"], person_email):
                 contact_routes.append(
                     {
                         "type": "named_work_email_approved",

@@ -13,11 +13,12 @@ from uuid import UUID
 
 import httpx
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_contact_form_url,
     extract_email,
     extract_linkedin_profile_url,
@@ -286,7 +287,7 @@ class _PersonResult:
         """Return ContactRoute-compatible route dicts."""
         routes: list[dict[str, Any]] = []
         is_person = not self._is_generic_name()
-        named_email = bool(self.email and is_person and _name_in_email_local(self.name, self.email))
+        named_email = bool(self.email and is_person and email_matches_person(self.name, self.email))
         # A telephone link inside the same structured person card is explicit
         # person evidence, even when the page does not publish an email or
         # LinkedIn profile.
@@ -393,6 +394,17 @@ def _schema_text(value: object) -> str:
     return ""
 
 
+def _person_card_name(card: Tag) -> str:
+    """Return the first plausible name published inside a staff card."""
+    name_tags = list(card.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]))
+    name_tags.extend(card.find_all(["div", "span", "p"], class_=re.compile("name", re.I)))
+    for tag in name_tags:
+        candidate = str(tag.get_text(" ", strip=True))
+        if _is_plausible_person_name(candidate):
+            return candidate
+    return ""
+
+
 def _find_person_ancestor(tag: Any) -> Any:
     """Climb the DOM looking for a card/block that likely contains one person."""
     for _ in range(6):
@@ -467,7 +479,12 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             types = item.get("@type", [])
             if isinstance(types, str):
                 types = [types]
-            if "Person" not in types and "employee" not in types:
+            type_names = {
+                entry.rstrip("/").rsplit("/", 1)[-1].lower()
+                for entry in types
+                if isinstance(entry, str)
+            }
+            if not type_names.intersection({"person", "employee"}):
                 continue
             name = _schema_text(item.get("name", ""))
             title = _schema_text(item.get("jobTitle", "")) or _schema_text(item.get("title", ""))
@@ -496,7 +513,16 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
 
         props: dict[str, str] = {}
         for prop_name in ("name", "jobTitle", "email", "telephone", "sameAs"):
-            tag = card.find(attrs={"itemprop": prop_name})
+            tag = None
+            for candidate in card.find_all(attrs={"itemprop": prop_name}):
+                parent = candidate.parent
+                while parent is not None and parent is not card:
+                    if parent.has_attr("itemscope"):
+                        break
+                    parent = parent.parent
+                if parent is card:
+                    tag = candidate
+                    break
             props[prop_name] = (
                 str(tag.get("content") or tag.get("href") or tag.get_text(" ", strip=True))
                 if tag is not None
@@ -519,14 +545,13 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
 
     # 3. Ordinary staff/profile cards with an explicit name and job title.
     for card in soup.find_all(["article", "li", "div"], class_=_PERSON_CARD_RE):
-        name = ""
-        name_tags = list(card.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]))
-        name_tags.extend(card.find_all(["div", "span", "p"], class_=re.compile("name", re.I)))
-        for tag in name_tags:
-            candidate = tag.get_text(" ", strip=True)
-            if _is_plausible_person_name(candidate):
-                name = candidate
-                break
+        nested_person_cards = sum(
+            bool(_person_card_name(candidate))
+            for candidate in card.find_all(["article", "li", "div"], class_=_PERSON_CARD_RE)
+        )
+        if nested_person_cards:
+            continue
+        name = _person_card_name(card)
         if not name:
             continue
 

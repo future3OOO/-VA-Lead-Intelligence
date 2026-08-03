@@ -19,7 +19,7 @@ from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.adapters.team_pages import TeamPagesAdapter, _extract_from_soup
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_contact_form_url,
     extract_email,
     extract_linkedin_profile_url,
@@ -713,6 +713,91 @@ async def test_targeted_contact_backfill_fails_when_a_shard_fails(
         await module.run_targeted_contact_backfill(uuid4(), uuid4(), shard_count=3)
 
 
+@pytest.mark.asyncio
+async def test_targeted_contact_shard_failure_cancels_siblings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed shard must not leave sibling source runs crawling in the background."""
+    module = _load_targeted_contact_script()
+    ready = asyncio.Event()
+    started: set[str] = set()
+    cancelled: set[str] = set()
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Runner:
+        async def run(
+            self,
+            _session: object,
+            _workspace_id: object,
+            _campaign_id: object,
+            *,
+            source_keys: list[str],
+            query_overrides: dict[str, dict[str, list[str]]],
+        ) -> object:
+            source = source_keys[0]
+            domain = query_overrides[source]["domains"][0]
+            started.add(domain)
+            if len(started) == 3:
+                ready.set()
+            await ready.wait()
+            if domain == "a.example":
+                raise RuntimeError("boom")
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                cancelled.add(domain)
+                raise
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+    monkeypatch.setattr(module, "SourceRunner", Runner)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await module._run_source_shards(
+            uuid4(), uuid4(), "team_pages", ["a.example", "b.example", "c.example"], 3
+        )
+
+    assert cancelled == {"b.example", "c.example"}
+
+
+@pytest.mark.asyncio
+async def test_missing_contact_query_scopes_each_route_to_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant scope remains explicit inside every contact-route existence check."""
+    module = _load_targeted_contact_script()
+    statements: list[str] = []
+    workspace_id = uuid4()
+
+    class Rows:
+        def all(self) -> list[object]:
+            return []
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def execute(self, statement: object, params: dict[str, object]) -> Rows:
+            statements.append(str(statement))
+            assert params == {"workspace_id": workspace_id}
+            return Rows()
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+
+    assert await module.get_missing_contact_domains(workspace_id) == []
+    assert len(statements) == 1
+    for alias in ("named", "email", "phone", "social"):
+        assert f"{alias}.workspace_id = :workspace_id" in statements[0]
+
+
 def test_named_email_is_preferred_over_generic_email() -> None:
     """A person-associated route outranks a generic inbox."""
     routes = [
@@ -734,14 +819,14 @@ def test_best_named_contact_rejects_partial_token_email_match() -> None:
             "value": "Peter Sedy Li <belinda@blackfoxrealestate.com.au>",
         },
     ]
-    assert _name_in_email_local("Peter Sedy Li", "belinda@blackfoxrealestate.com.au") is False
+    assert email_matches_person("Peter Sedy Li", "belinda@blackfoxrealestate.com.au") is False
     best = _best_named_contact(routes)
     assert best["name"] == "Peter Sedy Li"
     assert best["email"] == ""
 
 
 def test_name_email_match_accepts_complete_multi_part_name() -> None:
-    assert _name_in_email_local(
+    assert email_matches_person(
         "Jody Jansen Van Vuuren",
         "jody.jansenvanvuuren@icib.co.nz",
     )
@@ -1137,6 +1222,11 @@ def test_linkedin_matching_accepts_people_and_rejects_company_pages() -> None:
         == "https://www.linkedin.com/in/mia-williams"
     )
     assert extract_linkedin_profile_url("https://linkedin.com/company/example") is None
+    assert extract_linkedin_profile_url("https://notlinkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/?r=linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/#linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/,linkedin.com/in/foo") is None
     assert (
         normalize_route_value(
             "social_profile_review_only",
@@ -1144,6 +1234,160 @@ def test_linkedin_matching_accepts_people_and_rejects_company_pages() -> None:
         )
         is None
     )
+
+
+def test_social_route_preserves_hyphenated_person_name() -> None:
+    assert normalize_route_value(
+        "social_profile_review_only",
+        "Anne-Marie Smith - https://www.linkedin.com/in/anne-marie-smith",
+    ) == ("Anne-Marie Smith - https://www.linkedin.com/in/anne-marie-smith")
+
+
+def test_team_page_accepts_fully_qualified_jsonld_person_type() -> None:
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@type": "https://schema.org/Person",
+          "name": "Aroha Wilson",
+          "jobTitle": "Office Manager",
+          "email": "aroha.wilson@example.org"
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Aroha Wilson (Office Manager) <aroha.wilson@example.org>",
+        ),
+        ("named_contact", "Aroha Wilson (Office Manager)"),
+    }
+
+
+def test_team_page_uses_innermost_staff_cards() -> None:
+    """A wrapper cannot assign one employee's phone to another employee."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-section">
+          <article class="employee-card">
+            <h3>Emily Jones</h3>
+            <p class="role">Property Manager</p>
+            <p>emily.jones@example.org</p>
+          </article>
+          <article class="employee-card">
+            <h3>Liam Brown</h3>
+            <p class="role">Office Manager</p>
+            <p>+61 2 5550 0100</p>
+          </article>
+        </div>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in values
+    assert (
+        "business_phone",
+        "Liam Brown (Office Manager) <+61 2 5550 0100>",
+    ) in values
+    assert not any(
+        route_type == "business_phone" and value.startswith("Emily Jones")
+        for route_type, value in values
+    )
+
+
+def test_team_page_does_not_assign_wrapper_phone_to_single_nested_person() -> None:
+    """An office phone outside a staff card must remain a company-level route."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-section">
+          <p>+61 2 5550 0100</p>
+          <article class="employee-card">
+            <h3>Emily Jones</h3>
+            <p class="role">Property Manager</p>
+            <p>emily.jones@example.org</p>
+          </article>
+        </div>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in values
+    assert not any(
+        route_type == "business_phone" and value.startswith("Emily Jones")
+        for route_type, value in values
+    )
+
+
+@pytest.mark.parametrize(
+    "inner_markup",
+    [
+        '<div class="team-member__photo"><img alt="Emily"></div>',
+        '<div class="staff-bio"><p>Experienced property manager.</p></div>',
+    ],
+)
+def test_team_page_keeps_person_card_with_non_person_nested_block(inner_markup: str) -> None:
+    """Decorative BEM and bio blocks must not suppress their enclosing person."""
+    soup = BeautifulSoup(
+        f"""
+        <article class="team-member">
+          {inner_markup}
+          <h3>Emily Jones</h3>
+          <p class="role">Property Manager</p>
+          <p>emily.jones@example.org</p>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in {(route["type"], route["value"]) for route in routes}
+
+
+def test_team_page_microdata_ignores_nested_organisation_properties() -> None:
+    """A nested organisation phone must not become the enclosing person's phone."""
+    soup = BeautifulSoup(
+        """
+        <article itemscope itemtype="https://schema.org/Person">
+          <meta itemprop="name" content="Sophie Chen">
+          <meta itemprop="jobTitle" content="Property Manager">
+          <meta itemprop="email" content="sophie.chen@example.org">
+          <div itemprop="worksFor" itemscope itemtype="https://schema.org/Organization">
+            <meta itemprop="telephone" content="+61 2 5550 9999">
+          </div>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/people", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Sophie Chen (Property Manager) <sophie.chen@example.org>",
+    ) in values
+    assert not any(route_type == "business_phone" for route_type, _value in values)
 
 
 @pytest.mark.asyncio

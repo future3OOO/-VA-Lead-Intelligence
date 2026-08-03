@@ -17,7 +17,7 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"[+\d][\d\s().-]{5,}\d")
 _URL_RE = re.compile(r"https?://[^\s<>\"{}|\\^`\[\]]+")
 _LINKEDIN_PROFILE_RE = re.compile(
-    r"(?:(?:https?:)?//)?(?:[\w-]+\.)?linkedin\.com/"
+    r"(?<![\w./?=&#,:-])(?:(?:https?:)?//)?(?:[\w-]+\.)?linkedin\.com/"
     r"(?P<kind>in|pub)/(?P<path>[A-Za-z0-9%_.~/-]+)",
     re.I,
 )
@@ -332,16 +332,22 @@ def _name_in_email_local(name: str, email: str) -> bool:
 def _parse_named_contact_display(value: str) -> dict[str, str] | None:
     """Parse a display string such as 'Name (Title) <contact>' or 'Name - URL'."""
     text = value.strip()
-    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*[<-]\s*(.+?)\s*$", text)
+    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*(?:<(.+?)>| - (.+?))\s*$", text)
     if not m:
         return None
     name = m.group(1).strip()
     title = m.group(2).strip() if m.group(2) else ""
-    payload = m.group(3).strip().rstrip(">")
+    payload = (m.group(3) or m.group(4)).strip()
     display_name = f"{name} ({title})" if title else name
     if not is_valid_named_contact(display_name):
         return None
     return {"name": name, "title": title, "value": payload}
+
+
+# Stable public names for the shared enrichment boundary. The private aliases
+# remain the implementation names so existing callers are not broken.
+email_matches_person = _name_in_email_local
+parse_named_contact = _parse_named_contact_display
 
 
 def normalize_route_value(route_type: str, value: str) -> str | None:
@@ -472,6 +478,7 @@ async def enrich_contact_routes(
 
 
 __all__ = [
+    "email_matches_person",
     "enrich_contact_routes",
     "extract_contact_form_url",
     "extract_email",
@@ -480,4 +487,5 @@ __all__ = [
     "extract_url",
     "is_valid_named_contact",
     "normalize_route_value",
+    "parse_named_contact",
 ]

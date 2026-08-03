@@ -51,7 +51,7 @@ Out:
 ## Module shape
 
 - Public extraction interface: `_extract_from_soup(soup, base_url, domain)`; deepen the existing module rather than add another parser.
-- Public selection interface: `contact_selection.lead_named_contact(...)`; keep the exporter thin while one deep module hides route parsing, validation, role matching, and deterministic ranking.
+- Public selection interface: `contact_selection.select_lead_person(...)`; keep the exporter thin while one deep module hides route parsing, validation, role matching, and deterministic ranking.
 - Public operator interface: one targeted-contact backfill CLI replacing `extract_team_pages_missing.py` and `extract_company_web_missing.py`.
 - New CLI justification: it replaces two duplicated SQL/runner scripts and hides a real two-phase, three-shard orchestration and failure-aggregation workflow.
 - New selection-module justification: the production gate identified an already oversized exporter; moving the cohesive 337-line selection policy behind four stable functions reduces that file and creates a real testable seam instead of another wrapper.
