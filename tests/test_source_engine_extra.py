@@ -989,6 +989,37 @@ def test_team_page_extracts_person_from_nested_jsonld_graph() -> None:
     }
 
 
+def test_team_page_accepts_list_valued_jsonld_job_title() -> None:
+    """Schema.org permits repeated job titles; the primary published title is used."""
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Person",
+          "name": "Scott Spencer",
+          "jobTitle": ["Mortgage Broker", "Founder and Chief Executive Officer"],
+          "sameAs": [
+            "https://www.linkedin.com/in/scottmichaelspencer/",
+            "https://example.org/scott-spencer/"
+          ]
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "social_profile_review_only",
+            "Scott Spencer (Mortgage Broker) - https://www.linkedin.com/in/scottmichaelspencer",
+        ),
+        ("named_contact", "Scott Spencer (Mortgage Broker)"),
+    }
+
+
 def test_team_page_extracts_person_microdata_attributes() -> None:
     """Schema.org profile attributes bind all direct routes to one employee."""
     soup = BeautifulSoup(

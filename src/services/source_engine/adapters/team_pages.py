@@ -384,6 +384,15 @@ def _extract_title_phrase(text: str, name: str = "") -> str:
     return ""
 
 
+def _schema_text(value: object) -> str:
+    """Return the first textual value from a schema.org scalar or repeated field."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return next((text for item in value if (text := _schema_text(item))), "")
+    return ""
+
+
 def _find_person_ancestor(tag: Any) -> Any:
     """Climb the DOM looking for a card/block that likely contains one person."""
     for _ in range(6):
@@ -460,10 +469,10 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 types = [types]
             if "Person" not in types and "employee" not in types:
                 continue
-            name = item.get("name", "")
-            title = item.get("jobTitle", "") or item.get("title", "")
-            email = item.get("email", "")
-            phone = item.get("telephone", "")
+            name = _schema_text(item.get("name", ""))
+            title = _schema_text(item.get("jobTitle", "")) or _schema_text(item.get("title", ""))
+            email = _schema_text(item.get("email", ""))
+            phone = _schema_text(item.get("telephone", ""))
             linkedin = ""
             same_as = item.get("sameAs", [])
             if isinstance(same_as, str):
