@@ -85,6 +85,7 @@ _GENERIC_NAME_WORDS = {
     "brokers",
     "calculator",
     "client",
+    "company",
     "compliance",
     "consultant",
     "corp",
@@ -104,6 +105,7 @@ _GENERIC_NAME_WORDS = {
     "limited",
     "links",
     "llc",
+    "lp",
     "ltd",
     "manager",
     "mortgage",
@@ -203,6 +205,7 @@ def extract_phone(value: str) -> str | None:
     value = value.replace("%20", " ").replace("%2B", "+").replace("%2b", "+")
     m = re.search(r"<([+\d\s().-]+)>", value)
     candidate = m.group(1) if m else value
+    candidate = re.sub(r"(?<=\d)\+(?=\d)", " ", candidate)
     # Require at least seven digits.
     digits = re.sub(r"\D", "", candidate)
     if len(digits) < 7:

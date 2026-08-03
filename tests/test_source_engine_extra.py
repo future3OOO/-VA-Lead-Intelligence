@@ -234,6 +234,7 @@ def test_contact_normalization_rejects_malformed_values() -> None:
     assert extract_phone("Call 1800 013 937 today") == "1800 013 937"
     assert extract_phone("+61 3 5278 2814") == "+61 3 5278 2814"
     assert extract_phone("Camp Hill <07 3264 2311>") == "07 3264 2311"
+    assert extract_phone("0402+425+304") == "0402 425 304"
     assert extract_url("//example.com") is None
     assert extract_url("https://example.com/contact") == "https://example.com/contact"
     assert extract_contact_form_url("https://example.com") is None
@@ -354,6 +355,10 @@ def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> N
 def test_named_contacts_reject_legal_entities_and_company_names() -> None:
     assert is_valid_named_contact("Absolute Solutions Limited") is False
     assert is_valid_named_contact("Acme Advice Pty Ltd") is False
+    assert is_valid_named_contact("Global People's Trust Lp") is False
+    assert is_valid_named_contact("Tōtara Forestry Lp") is False
+    assert is_valid_named_contact("Our Company") is False
+    assert is_valid_named_contact("Group Company") is False
     assert is_valid_named_contact("Cirrus Legal", "Cirrus Legal") is False
     assert is_valid_named_contact("Mortgage Broker") is False
     assert is_valid_named_contact("Service Email") is False

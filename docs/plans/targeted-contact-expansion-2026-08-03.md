@@ -84,7 +84,7 @@ Out:
 - [x] Add role-aware deterministic selection with ambiguity/no-borrowing tests.
 - [x] Replace duplicated backfill scripts with three-shard orchestration and property/failure tests.
 - [x] Re-walk affected/no-change surfaces and run focused plus full gates.
-- [ ] Run clean three-shard scrape, export, accuracy audit, and timing comparison.
+- [x] Run clean three-shard scrape, export, accuracy audit, and runtime reporting.
 - [x] Run independent precommit challenge, production quality gate, and cleanup.
 - [ ] Commit, push, open/update the owning PR, and close the exact-head reviewer loop.
 
@@ -94,6 +94,14 @@ Out:
 - Named the sharding home as the replacement operator CLI; no unnamed utility or runner change.
 - Added explicit idempotency, partial-shard failure, total/disjoint partition, and office-contact negative proof.
 - Preserved one extraction implementation reused by both website adapters.
+
+## Clean-run evidence
+
+- Discovery completed without source errors: OpenStreetMap 2,751 hits, Finance Directory 809 hits, and all 30 NZ Finance Advisers list pages with 2,998 extracted records.
+- Official-site enrichment covered 1,518 eligible domains in three disjoint 506-domain shards; the final missing-domain recovery covered 1,510 domains in 840.27 seconds across 504/503/503-domain shards.
+- Deterministic exports contain 4,174 leads and 4,060 companies. Repeated exports were byte-identical.
+- Named-contact coverage increased from 841 to 1,108 leads; the new targeted lanes contain 61 direct emails, 143 person phones, and 87 personal LinkedIn profiles.
+- Final audit found zero malformed contact fields, false organisation/page-label contacts, prohibited-domain merges, or High-ranked leads without a usable contact route.
 
 ## Execution handoff
 
