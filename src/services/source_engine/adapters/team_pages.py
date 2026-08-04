@@ -7,18 +7,23 @@ import json
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
 import httpx
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_contact_form_url,
+    extract_email,
+    extract_linkedin_profile_url,
+    extract_phone,
     is_valid_named_contact,
 )
 
@@ -96,7 +101,6 @@ _TITLE_KEYWORDS = [
     "Administrative",
 ]
 
-_TITLE_KEYWORDS_LOWER = {t.lower() for t in _TITLE_KEYWORDS}
 
 _TITLE_RE = re.compile(
     r"\b(?:" + "|".join(re.escape(t).lower() for t in _TITLE_KEYWORDS) + r")\b",
@@ -152,214 +156,9 @@ _NAV_WORDS = {
     "do",
 }
 
-_BUSINESS_WORDS = {
-    "bank",
-    "ltd",
-    "limited",
-    "pty",
-    "inc",
-    "corp",
-    "corporation",
-    "group",
-    "holdings",
-    "trust",
-    "fund",
-    "funds",
-    "services",
-    "solutions",
-    "partners",
-    "co",
-    "association",
-    "union",
-    "credit",
-    "plc",
-    "llp",
-    "lp",
-    "australia",
-    "australian",
-    "insurance",
-    "finance",
-    "financial",
-    "mortgage",
-    "broker",
-    "brokers",
-    "broking",
-    "accounting",
-    "accountant",
-    "bookkeeping",
-    "bookkeeper",
-    "adviser",
-    "advisor",
-    "tax",
-    "legal",
-    "law",
-    "lawyers",
-    "real",
-    "estate",
-    "property",
-    "construction",
-    "plumbing",
-    "electrician",
-    "roofing",
-    "painting",
-    "carpenter",
-    "hvac",
-    "institute",
-    "bachelor",
-    "diploma",
-    "business",
-    "commerce",
-    "university",
-    "college",
-    "school",
-    "st",
-    "street",
-    "road",
-    "avenue",
-    "drive",
-    "lane",
-    "place",
-    "nsw",
-    "vic",
-    "qld",
-    "sa",
-    "wa",
-    "tas",
-    "act",
-    "nt",
-    "queensland",
-    "victoria",
-    "loans",
-    "loan",
-    "lending",
-    "advice",
-    "advisory",
-    "wealth",
-    "capital",
-    "money",
-    "investment",
-    "investing",
-    "investments",
-    "smsf",
-    "accountants",
-    "planning",
-    "management",
-    "consulting",
-    "commercial",
-    "residential",
-    "home",
-    "house",
-    "building",
-    "build",
-    "builders",
-    "maintenance",
-    "repairs",
-    "renovations",
-    "select",
-    "plus",
-    "market",
-    "first",
-    "network",
-    "global",
-    "united",
-    "preferred",
-    "premier",
-    "choice",
-    "expert",
-    "consultant",
-    "ca",
-    "cpa",
-    "anziif",
-    "mfaa",
-    "fbaa",
-    "afca",
-    "asic",
-    "banking",
-    "mortgages",
-    "lender",
-    "lenders",
-    "brokerage",
-    "debt",
-    "consolidation",
-    "cash",
-    "flow",
-    "online",
-    "chartered",
-    "crossing",
-    "hoppers",
-    "north",
-    "south",
-    "east",
-    "west",
-    "new",
-    "york",
-    "great",
-    "wall",
-    "happy",
-    "bean",
-    "sydney",
-    "melbourne",
-    "brisbane",
-    "perth",
-    "adelaide",
-    "canberra",
-    "darwin",
-    "hobart",
-    "auckland",
-    "wellington",
-    "christchurch",
-    "dunedin",
-    "hamilton",
-    "tauranga",
-    "napier",
-    "rotorua",
-    "palmerston",
-    "newcastle",
-    "wollongong",
-    "geelong",
-    "gold coast",
-    "sunshine coast",
-    "cairns",
-    "townsville",
-    "toowoomba",
-    "ballarat",
-    "bendigo",
-    "albury",
-    "mandurah",
-    "launceston",
-    "devonport",
-    "chairman",
-    "chairwoman",
-    "chairperson",
-    "directors",
-    "managing",
-    "executive",
-    "senior",
-    "junior",
-    "officer",
-    "head",
-    "lead",
-    "member",
-    "members",
-    "committee",
-    "council",
-    "trustee",
-    "representative",
-    "professional",
-    "analyst",
-    "administrator",
-    "coordinator",
-    "assistant",
-    "secretary",
-    "receptionist",
-    "operator",
-    "controller",
-    "planner",
-    "strategist",
-    "specialist",
-}
-
-_LINKEDIN_RE = re.compile(r"https?://(?:[\w\-]+\.)?linkedin\.com/in/([^/?\s]+)", re.I)
+_PERSON_CARD_RE = re.compile(
+    r"(?:team|staff|employee|person|profile|agent|member|people|leadership)", re.I
+)
 
 _TEAM_PAGE_PATHS = [
     "/team",
@@ -472,12 +271,16 @@ class _PersonResult:
         email: str = "",
         phone: str = "",
         linkedin: str = "",
+        structured: bool = False,
+        email_is_person_specific: bool = False,
     ) -> None:
         self.name = _title_case_name(name)
         self.title = _clean_title(title)
         self.email = email.strip().lower()
         self.phone = phone.strip()
         self.linkedin = linkedin.strip()
+        self.structured = structured
+        self.email_is_person_specific = email_is_person_specific
 
     def _is_generic_name(self) -> bool:
         """Return True if the extracted 'name' is a department/role, not a person."""
@@ -487,11 +290,17 @@ class _PersonResult:
         """Return ContactRoute-compatible route dicts."""
         routes: list[dict[str, Any]] = []
         is_person = not self._is_generic_name()
-        named_email = bool(self.email and is_person and _name_in_email_local(self.name, self.email))
+        named_email = bool(
+            self.email
+            and is_person
+            and (self.email_is_person_specific or email_matches_person(self.name, self.email))
+        )
         # A telephone link inside the same structured person card is explicit
         # person evidence, even when the page does not publish an email or
         # LinkedIn profile.
-        has_person_evidence = named_email or bool(self.phone and is_person) or bool(self.linkedin)
+        has_person_evidence = (
+            self.structured or named_email or bool(self.phone and is_person) or bool(self.linkedin)
+        )
         if self.email:
             if named_email:
                 display = (
@@ -583,6 +392,26 @@ def _extract_title_phrase(text: str, name: str = "") -> str:
     return ""
 
 
+def _schema_text(value: object) -> str:
+    """Return the first textual value from a schema.org scalar or repeated field."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return next((text for item in value if (text := _schema_text(item))), "")
+    return ""
+
+
+def _person_card_name(card: Tag) -> str:
+    """Return the first plausible name published inside a staff card."""
+    name_tags = list(card.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]))
+    name_tags.extend(card.find_all(["div", "span", "p"], class_=re.compile("name", re.I)))
+    for tag in name_tags:
+        candidate = str(tag.get_text(" ", strip=True))
+        if _is_plausible_person_name(candidate):
+            return candidate
+    return ""
+
+
 def _find_person_ancestor(tag: Any) -> Any:
     """Climb the DOM looking for a card/block that likely contains one person."""
     for _ in range(6):
@@ -645,28 +474,45 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             data = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        if isinstance(data, dict):
-            data = [data]
-        for item in data if isinstance(data, list) else [data]:
+        pending: list[Any] = [data]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, list):
+                pending.extend(item)
+                continue
             if not isinstance(item, dict):
                 continue
+            pending.extend(value for value in item.values() if isinstance(value, (dict, list)))
             types = item.get("@type", [])
             if isinstance(types, str):
                 types = [types]
-            if "Person" not in types and "employee" not in types:
+            type_names = {
+                entry.rstrip("/").rsplit("/", 1)[-1].lower()
+                for entry in types
+                if isinstance(entry, str)
+            }
+            if not type_names.intersection({"person", "employee"}):
                 continue
-            name = item.get("name", "")
-            title = item.get("jobTitle", "") or item.get("title", "")
-            email = item.get("email", "")
-            phone = item.get("telephone", "")
+            name = _schema_text(item.get("name", ""))
+            title = _schema_text(item.get("jobTitle", "")) or _schema_text(item.get("title", ""))
+            email = _schema_text(item.get("email", ""))
+            phone = _schema_text(item.get("telephone", ""))
             linkedin = ""
             same_as = item.get("sameAs", [])
             if isinstance(same_as, str):
                 same_as = [same_as]
             for sa in same_as:
-                if isinstance(sa, str) and "linkedin.com/in/" in sa:
-                    linkedin = sa
-            p = _PersonResult(name=name, title=title, email=email, phone=phone, linkedin=linkedin)
+                if isinstance(sa, str):
+                    linkedin = extract_linkedin_profile_url(sa) or linkedin
+            p = _PersonResult(
+                name=name,
+                title=title,
+                email=email,
+                phone=phone,
+                linkedin=linkedin,
+                structured=True,
+                email_is_person_specific=True,
+            )
             if email:
                 people[email] = p
             elif linkedin:
@@ -674,7 +520,90 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             elif name:
                 people[name.lower()] = p
 
-    # 2. Anchor tags: mailto, tel, LinkedIn
+    # 2. Schema.org Person microdata used by many staff/profile templates.
+    for card in soup.find_all(attrs={"itemscope": True}):
+        item_type = str(card.get("itemtype", "")).lower()
+        if "schema.org/person" not in item_type:
+            continue
+
+        props: dict[str, str] = {}
+        for prop_name in ("name", "jobTitle", "email", "telephone", "sameAs"):
+            tag = None
+            for candidate in card.find_all(attrs={"itemprop": prop_name}):
+                parent = candidate.parent
+                while parent is not None and parent is not card:
+                    if parent.has_attr("itemscope"):
+                        break
+                    parent = parent.parent
+                if parent is card:
+                    tag = candidate
+                    break
+            props[prop_name] = (
+                str(tag.get("content") or tag.get("href") or tag.get_text(" ", strip=True))
+                if tag is not None
+                else ""
+            )
+
+        name = props["name"]
+        title = props["jobTitle"]
+        email = extract_email(props["email"]) or ""
+        phone = extract_phone(props["telephone"]) or ""
+        linkedin = extract_linkedin_profile_url(props["sameAs"]) or ""
+        if name:
+            people[f"microdata:{name.lower()}"] = _PersonResult(
+                name=name,
+                title=title,
+                email=email,
+                phone=phone,
+                linkedin=linkedin,
+                structured=True,
+                email_is_person_specific=True,
+            )
+
+    # 3. Ordinary staff/profile cards with an explicit name and job title.
+    for card in soup.find_all(["article", "li", "div"], class_=_PERSON_CARD_RE):
+        nested_person_cards = sum(
+            bool(_person_card_name(candidate))
+            for candidate in card.find_all(["article", "li", "div"], class_=_PERSON_CARD_RE)
+        )
+        if nested_person_cards:
+            continue
+        name = _person_card_name(card)
+        if not name:
+            continue
+
+        title = ""
+        title_tags = list(
+            card.find_all(
+                ["div", "span", "p"],
+                class_=re.compile(r"(?:job|position|role|title)", re.I),
+            )
+        )
+        title_tags.extend(card.find_all(["p", "span"]))
+        for tag in title_tags:
+            candidate = tag.get_text(" ", strip=True)
+            keyword = _TITLE_RE.search(candidate)
+            prefix = candidate[: keyword.start()].strip(" ,-|") if keyword else ""
+            if prefix and _is_plausible_person_name(prefix):
+                continue
+            if _is_plausible_title(candidate):
+                title = candidate
+                break
+        if title:
+            card_text = card.get_text(" ", strip=True)
+            people.setdefault(
+                f"card:{name.lower()}",
+                _PersonResult(
+                    name=name,
+                    title=title,
+                    email=extract_email(card_text) or "",
+                    phone=extract_phone(card_text) or "",
+                    linkedin=extract_linkedin_profile_url(card_text) or "",
+                    structured=True,
+                ),
+            )
+
+    # 4. Anchor tags: mailto, tel, LinkedIn
     for a in soup.find_all("a", href=True):
         href = a.get("href") or ""
         if href.startswith("mailto:"):
@@ -696,10 +625,10 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             p = _PersonResult(name=name, title=title, phone=phone)
             people[phone] = p
         else:
-            m = _LINKEDIN_RE.search(href)
-            if m:
-                slug = m.group(1)
-                linkedin = urljoin("https://www.linkedin.com/", f"in/{slug}")
+            linkedin_url = extract_linkedin_profile_url(href)
+            if linkedin_url:
+                path_parts = urlparse(linkedin_url).path.strip("/").split("/")
+                slug = path_parts[1] if len(path_parts) > 1 else ""
                 name = _parse_linkedin_slug(slug)
                 title = ""
                 # Try to find a better name/title in the parent block
@@ -718,10 +647,10 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                     )
                 if not _is_plausible_person_name(name):
                     name = _parse_linkedin_slug(slug)
-                p = _PersonResult(name=name, title=title, linkedin=linkedin)
-                people[linkedin] = p
+                p = _PersonResult(name=name, title=title, linkedin=linkedin_url)
+                people[linkedin_url] = p
 
-    # 3. data-* attributes (common on directory/contact widgets)
+    # 5. data-* attributes (common on directory/contact widgets)
     data_attrs: list[tuple[str, str, Callable[[str], str]]] = [
         ("data-email", "email", lambda v: v.strip().lower()),
         ("data-phone", "phone", lambda v: v.strip()),
@@ -750,12 +679,12 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 phone=value if route_type == "phone" else "",
             )
 
-    # 4. Visible text emails that appear next to a name
+    # 6. Visible text emails that appear next to a name
     for email_match in re.finditer(
         r"[\w.+-]+@[\w-]+\.[\w.-]+", soup.get_text(separator=" ", strip=True)
     ):
         email = email_match.group(0).lower()
-        if email in people:
+        if email in people or any(person.email == email for person in people.values()):
             continue
         if "example.com" in email or "test.com" in email:
             continue
@@ -836,12 +765,27 @@ class TeamPagesAdapter(BaseSourceAdapter):
         first_body_excerpt = ""
         first_company_name = ""
         pages_crawled = 0
+        domain_timeout = float(self.config.adapter_config.get("domain_timeout_seconds", 30))
+        deadline = asyncio.get_running_loop().time() + domain_timeout
         for path in paths[:max_pages]:
             url = urljoin(base_url, path)
-            if not await self._robots_allowed(url):
+            completed, allowed = await self._run_before_deadline(
+                deadline,
+                domain,
+                partial(self._robots_allowed, url),
+            )
+            if not completed:
+                break
+            if not allowed:
                 continue
+            completed, response = await self._run_before_deadline(
+                deadline,
+                domain,
+                partial(self._http_get, url, expected_host=domain),
+            )
+            if not completed or response is None:
+                break
             try:
-                response = await self._http_get(url, expected_host=domain)
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" not in content_type:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +18,7 @@ from config.enums import IntentLabel
 from db.models.campaign import Campaign
 from db.models.company import Company as DBCompany
 from db.models.contact_route import ContactRoute as DBContactRoute
+from db.models.source_hit import SourceHit as DBSourceHit
 from db.models.workspace import Workspace
 from db.session import AsyncSessionLocal
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
@@ -60,11 +63,260 @@ def test_source_registry_loads() -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_writes_one_readable_row_per_named_person(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "export_leads_csv",
+        Path(__file__).resolve().parent.parent / "scripts" / "export_leads_csv.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(
+            name="Named contact export",
+            slug=f"named-contact-export-{uuid4().hex}",
+            billing_email="test@example.org",
+        )
+        session.add(workspace)
+        await session.flush()
+        first = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Alpha Realty",
+            primary_domain="alpha.example.org",
+            country_code="NZ",
+            industry="Real Estate",
+            employee_count=5,
+        )
+        second = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Beta Realty",
+            primary_domain="beta.example.org",
+            country_code="NZ",
+            industry="Real Estate",
+            employee_count=5,
+        )
+        session.add_all([first, second])
+        await session.flush()
+        first_email = "Alice Morgan (Property Manager) <alice@alpha.example.org>"
+        session.add_all(
+            [
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_work_email_approved",
+                    value="Alice Morgan (Property Manager) <a.morgan@alpha.example.org>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_work_email_approved",
+                    value=first_email,
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_work_email_approved",
+                    value=first_email,
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Alice Morgan (Property Manager) - https://www.linkedin.com/in/alice-morgan"
+                    ),
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="business_phone",
+                    value="Bob Taylor (Director) <+64 21 555 0102>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="generic_email",
+                    value="office@alpha.example.org",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="social_profile_review_only",
+                    value="https://www.linkedin.com/in/unassigned-person",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=second.id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Alice Morgan (Principal) - https://www.linkedin.com/in/alice-morgan-beta"
+                    ),
+                    is_verified=False,
+                ),
+                DBSourceHit(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    source_key="openstreetmap",
+                    source_native_id=f"test-{uuid4().hex}",
+                    source_url="https://www.openstreetmap.org/node/1",
+                    observed_at=datetime.now(timezone.utc),
+                    published_at=datetime.now(timezone.utc),
+                    title="Property Management Administration Support",
+                    body_excerpt="Remote-friendly property administration and tenant support.",
+                    company_name_raw="Alpha Realty",
+                    company_domain_raw="alpha.example.org",
+                    location_raw="Auckland, New Zealand",
+                    workplace_type="inferred_remote_friendly",
+                    intent_label="company_existence_only",
+                    contact_routes_raw=[],
+                    content_hash=uuid4().hex,
+                    access_policy_version="source-policy-v1",
+                ),
+            ]
+        )
+        await session.commit()
+        workspace_id = workspace.id
+        first_id = first.id
+        second_id = second.id
+
+    leads_path = tmp_path / "leads.csv"
+    companies_path = tmp_path / "companies.csv"
+    contacts_path = tmp_path / "named_contacts.csv"
+    leads_alias_path = tmp_path / "targeted_leads.csv"
+    companies_alias_path = tmp_path / "targeted_companies.csv"
+    base_argv = [
+        "export_leads_csv.py",
+        "--workspace-id",
+        str(workspace_id),
+        "--leads-path",
+        str(leads_path),
+        "--companies-path",
+        str(companies_path),
+    ]
+    monkeypatch.setattr(sys, "argv", base_argv)
+    await module.main()
+    leads_without_named_export = leads_path.read_bytes()
+    companies_without_named_export = companies_path.read_bytes()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        base_argv
+        + [
+            "--named-contacts-path",
+            str(contacts_path),
+            "--leads-alias-path",
+            str(leads_alias_path),
+            "--companies-alias-path",
+            str(companies_alias_path),
+        ],
+    )
+    await module.main()
+
+    assert leads_path.read_bytes() == leads_without_named_export
+    assert companies_path.read_bytes() == companies_without_named_export
+    assert leads_alias_path.read_bytes() == leads_path.read_bytes()
+    assert companies_alias_path.read_bytes() == companies_path.read_bytes()
+    assert b"\r\n" in leads_path.read_bytes()
+    assert b"\n" not in leads_path.read_bytes().replace(b"\r\n", b"")
+    with leads_path.open(newline="", encoding="utf-8") as handle:
+        lead_rows = list(csv.DictReader(handle))
+    assert len(lead_rows) == 1
+    assert lead_rows[0]["company_name"] == "Alpha Realty"
+    with contacts_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows == [
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "named_contact_name": "Alice Morgan",
+            "named_contact_title": "Property Manager",
+            "named_contact_emails": ("a.morgan@alpha.example.org; alice@alpha.example.org"),
+            "named_contact_phones": "",
+            "named_contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "named_contact_name": "Bob Taylor",
+            "named_contact_title": "Director",
+            "named_contact_emails": "",
+            "named_contact_phones": "+64 21 555 0102",
+            "named_contact_linkedin_urls": "",
+        },
+        {
+            "company_id": str(second_id),
+            "company_name": "Beta Realty",
+            "primary_domain": "beta.example.org",
+            "named_contact_name": "Alice Morgan",
+            "named_contact_title": "Principal",
+            "named_contact_emails": "",
+            "named_contact_phones": "",
+            "named_contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan-beta",
+        },
+    ]
+
+
+def test_checked_in_contact_exports_are_readable_and_synchronized() -> None:
+    exports_dir = Path(__file__).resolve().parent.parent / "exports"
+    contacts_path = exports_dir / "anz_named_contacts.csv"
+    with contacts_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    assert rows
+    assert list(rows[0]) == [
+        "company_id",
+        "company_name",
+        "primary_domain",
+        "named_contact_name",
+        "named_contact_title",
+        "named_contact_emails",
+        "named_contact_phones",
+        "named_contact_linkedin_urls",
+    ]
+    keys = [(row["company_id"], row["named_contact_name"].casefold()) for row in rows]
+    assert len(keys) == len(set(keys))
+    for row in rows:
+        assert any(
+            row[field]
+            for field in (
+                "named_contact_emails",
+                "named_contact_phones",
+                "named_contact_linkedin_urls",
+            )
+        )
+        assert "<" not in "".join(row.values())
+
+    for canonical_name, alias_name in (
+        (
+            "anz_remote_leads_with_contacts.csv",
+            "anz_remote_leads_with_targeted_contacts.csv",
+        ),
+        ("anz_all_companies.csv", "anz_all_companies_targeted.csv"),
+    ):
+        canonical = (exports_dir / canonical_name).read_bytes()
+        alias = (exports_dir / alias_name).read_bytes()
+        assert canonical
+        assert alias == canonical
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("script_name", "function_name"),
     [
-        ("extract_team_pages_missing", "get_missing_domains"),
-        ("extract_company_web_missing", "get_missing_contact_domains"),
+        ("extract_targeted_contacts", "get_missing_contact_domains"),
     ],
 )
 async def test_missing_contact_backfills_deduplicate_domains(
@@ -112,14 +364,14 @@ async def test_missing_contact_backfills_deduplicate_domains(
 
     domains = await getattr(module, function_name)(workspace_id)
     assert domains == ["shared-domain.test"]
+    assert await getattr(module, function_name)(workspace_id, 0) == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("script_name", "function_name"),
     [
-        ("extract_team_pages_missing", "get_missing_domains"),
-        ("extract_company_web_missing", "get_missing_contact_domains"),
+        ("extract_targeted_contacts", "get_missing_contact_domains"),
     ],
 )
 async def test_contact_backfills_include_named_people_missing_direct_details(
@@ -184,6 +436,15 @@ async def test_contact_backfills_include_named_people_missing_direct_details(
                     company_id=company_id,
                     route_type="business_phone",
                     value="Aimee Trott (Financial Adviser) <+64 21 555 0101>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace_id,
+                    company_id=company_id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Aimee Trott (Financial Adviser) - https://www.linkedin.com/in/aimee-trott"
+                    ),
                     is_verified=False,
                 ),
             ]

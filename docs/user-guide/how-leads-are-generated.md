@@ -53,10 +53,12 @@ Every row in the export contains an `explanation` column. It looks like this:
 
 This means anyone can open the CSV and immediately understand why a company was selected.
 
-## 5. We export everything into two CSV files
+## 5. We export synchronized CSV files
 
 - `anz_remote_leads_with_contacts.csv` — one row per lead, with targeted person fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_phone`, `named_contact_linkedin`), separate generic office fields (`company_email`, `company_phone`, `company_form`), and `best_*` fallback fields for compatibility.
 - `anz_all_companies.csv` — one row per company, with the primary domain and all collected contact routes.
+- `anz_named_contacts.csv` — one row per company/person, with separate email, phone, and LinkedIn columns. Multiple values are sorted and separated with semicolons; generic and unassigned routes are excluded.
+- `anz_remote_leads_with_targeted_contacts.csv` and `anz_all_companies_targeted.csv` — exact synchronized copies of the complete lead and company exports.
 
 ## 6. How to run it yourself
 
@@ -81,21 +83,26 @@ Finally, score and export the leads:
 python scripts/export_leads_csv.py \
   --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
   --region anz \
+  --min-rank medium \
   --leads-path /tmp/anz_remote_leads_with_contacts.csv \
-  --companies-path /tmp/anz_all_companies.csv
+  --companies-path /tmp/anz_all_companies.csv \
+  --named-contacts-path /tmp/anz_named_contacts.csv \
+  --leads-alias-path /tmp/anz_remote_leads_with_targeted_contacts.csv \
+  --companies-alias-path /tmp/anz_all_companies_targeted.csv
 ```
 
-Change the `--leads-path` and `--companies-path` values to save the CSV files wherever you like.
+Change the output paths to save the CSV files wherever you like. Omit
+`--named-contacts-path` if you only need the existing lead and company exports.
 
 ## 7. Optional: get named hiring contacts
 
 If you want named people rather than generic email addresses, you can run the bounded `team_pages` enrichment. It takes the domains found by OpenStreetMap, visits each company's own `/team`, `/about`, `/people`, or `/leadership` pages, and extracts real names, job titles, emails, phones, and LinkedIn profiles. It checks `robots.txt` first and only visits pages the site makes public.
 
 ```bash
-python scripts/extract_team_pages.py \
+python scripts/extract_targeted_contacts.py \
   --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
   --campaign-id 2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc \
-  --max-domains 100
+  --shards 3
 ```
 
 Then export again and the `named_contact_*` columns will be filled where the company publishes them.

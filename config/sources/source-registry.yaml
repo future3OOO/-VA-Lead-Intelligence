@@ -153,7 +153,10 @@ sources:
     rate_limit:
       requests_per_second: 2
       max_concurrency_per_host: 1
+      max_total_concurrency: 10
     kill_switch: sources.team_pages.enabled
+    adapter_config:
+      domain_timeout_seconds: 30
 
   company_web:
     source_class: company_web
@@ -180,8 +183,10 @@ sources:
     rate_limit:
       requests_per_second: 2
       max_concurrency_per_host: 1
+      max_total_concurrency: 10
     kill_switch: sources.company_web.enabled
     adapter_config:
+      domain_timeout_seconds: 30
       max_pages_per_domain: 6
       max_depth: 2
 
@@ -208,8 +213,9 @@ sources:
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
-      requests_per_second: 2
-      max_concurrency_per_host: 1
+      requests_per_second: 3
+      max_concurrency_per_host: 3
+      max_total_concurrency: 3
     kill_switch: sources.finance_directory.enabled
     adapter_config:
       max_profile_pages: 1200
@@ -237,8 +243,9 @@ sources:
     raw_retention_days: 90
     normalized_retention_days: 730
     rate_limit:
-      requests_per_second: 1
-      max_concurrency_per_host: 1
+      requests_per_second: 3
+      max_concurrency_per_host: 3
+      max_total_concurrency: 3
     kill_switch: sources.nz_finance_advisers.enabled
     adapter_config:
       max_list_pages: 30

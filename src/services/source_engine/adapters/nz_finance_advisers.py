@@ -7,6 +7,7 @@ fetches the provider page for the FAP's website and phone.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from services.source_engine.adapters.base import BaseSourceAdapter
 from services.source_engine.adapters.team_pages import _is_plausible_person_name
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_email,
     extract_phone,
     is_valid_named_contact,
@@ -87,6 +88,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
     def __init__(self, source_config: SourceConfig) -> None:
         super().__init__(source_config)
         self._provider_cache: dict[str, dict[str, Any]] = {}
+        self._provider_locks: dict[str, asyncio.Lock] = {}
         self.client = self._new_async_client(
             httpx.Timeout(15.0, connect=5.0, read=15.0, write=5.0, pool=5.0),
             httpx.Limits(max_connections=20, max_keepalive_connections=10),
@@ -184,28 +186,32 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
     async def _fetch_provider(self, provider_url: str) -> dict[str, Any]:
         if provider_url in self._provider_cache:
             return self._provider_cache[provider_url]
-        if not await self._robots_allowed(provider_url):
-            return {}
-        try:
-            html = await self._get(provider_url)
-        except httpx.HTTPStatusError:
-            return {}
-        except httpx.HTTPError:
-            self.metrics.record_error("fetch")
-            return {}
-        data = self._extract_jsonld_by_type(
-            html, "FinancialService"
-        ) or self._extract_jsonld_by_type(html, "Organization")
-        if not isinstance(data, dict):
-            return {}
-        result = {
-            "name": str(data.get("name", "")).strip(),
-            "website": str(data.get("url", "")).strip(),
-            "phone": str(data.get("telephone", "")).strip(),
-            "address": data.get("address", {}),
-        }
-        self._provider_cache[provider_url] = result
-        return result
+        lock = self._provider_locks.setdefault(provider_url, asyncio.Lock())
+        async with lock:
+            if provider_url in self._provider_cache:
+                return self._provider_cache[provider_url]
+            if not await self._robots_allowed(provider_url):
+                return {}
+            try:
+                html = await self._get(provider_url)
+            except httpx.HTTPStatusError:
+                return {}
+            except httpx.HTTPError:
+                self.metrics.record_error("fetch")
+                return {}
+            data = self._extract_jsonld_by_type(
+                html, "FinancialService"
+            ) or self._extract_jsonld_by_type(html, "Organization")
+            if not isinstance(data, dict):
+                return {}
+            result = {
+                "name": str(data.get("name", "")).strip(),
+                "website": str(data.get("url", "")).strip(),
+                "phone": str(data.get("telephone", "")).strip(),
+                "address": data.get("address", {}),
+            }
+            self._provider_cache[provider_url] = result
+            return result
 
     async def _fetch_profile(self, profile_url: str) -> dict[str, Any] | None:
         if not await self._robots_allowed(profile_url):
@@ -275,21 +281,19 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
         max_pages = int(
             query.get("max_list_pages") or self.config.adapter_config.get("max_list_pages", 30)
         )
-        profile_urls = await self._discover_profile_urls(max_pages)
+        profile_urls = list(dict.fromkeys(await self._discover_profile_urls(max_pages)))
+        if max_pages > 0 and not profile_urls:
+            self.metrics.record_error("fetch")
+            raise httpx.HTTPError("nz_finance_advisers discovered no adviser profiles")
         print(
             f"[nz_finance_advisers] discovered {len(profile_urls)} plausible adviser profiles",
             flush=True,
         )
-        results: list[dict[str, Any]] = []
-        for i, url in enumerate(profile_urls, 1):
-            result = await self._fetch_profile(url)
-            if i % 100 == 0:
-                print(
-                    f"[nz_finance_advisers] {i}/{len(profile_urls)} profiles fetched",
-                    flush=True,
-                )
-            if result:
-                results.append(result)
+        results = [
+            result
+            for result in await self._map_bounded(profile_urls, self._fetch_profile)
+            if result is not None
+        ]
         await self.aclose()
         print(
             f"[nz_finance_advisers] extracted {len(results)} adviser records",
@@ -318,7 +322,7 @@ class NzFinanceAdvisersAdapter(BaseSourceAdapter):
             )
         person_email = extract_email(str(raw.get("person_email", "")))
         if person_email:
-            if _name_in_email_local(raw["name"], person_email):
+            if email_matches_person(raw["name"], person_email):
                 contact_routes.append(
                     {
                         "type": "named_work_email_approved",

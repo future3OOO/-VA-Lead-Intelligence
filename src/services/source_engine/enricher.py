@@ -16,6 +16,11 @@ from db.models.contact_route import ContactRoute as DBContactRoute
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"[+\d][\d\s().-]{5,}\d")
 _URL_RE = re.compile(r"https?://[^\s<>\"{}|\\^`\[\]]+")
+_LINKEDIN_PROFILE_RE = re.compile(
+    r"(?<![\w./?=&#,:-])(?:(?:https?:)?//)?(?:[\w-]+\.)?linkedin\.com/"
+    r"(?P<kind>in|pub)/(?P<path>[A-Za-z0-9%_.~/-]+)",
+    re.I,
+)
 _CONTACT_FORM_PATH_RE = re.compile(
     r"(?:^|/)(?:contact(?:-us)?|get-in-touch|enquir(?:e|y)|inquir(?:e|y)|"
     r"request-(?:a-)?quote|quote|book(?:ing)?|demo|consultation|appointment)"
@@ -33,17 +38,24 @@ _SOCIAL_HOSTS = {
 
 _NAV_LABELS = {
     "about",
+    "apply now",
+    "book now",
     "call",
     "call now",
     "call today",
+    "call us",
+    "call us now",
     "ceiling fans",
     "click here",
     "contact",
     "contact me",
     "contact our team",
     "contact us",
+    "close menu",
     "details",
     "email us",
+    "enquire now",
+    "explore more",
     "follow",
     "free quote",
     "get a quote",
@@ -51,6 +63,9 @@ _NAV_LABELS = {
     "learn more",
     "link",
     "menu",
+    "meet our team",
+    "meet the team",
+    "my profile",
     "navigation",
     "page",
     "plumber bulimba",
@@ -64,9 +79,14 @@ _NAV_LABELS = {
     "send message",
     "send us a message",
     "sitemap",
+    "our agency",
+    "our leadership team",
+    "our people",
+    "our team",
     "this week",
     "use",
     "visit",
+    "view profile",
     "web design",
     "website",
 }
@@ -75,78 +95,146 @@ _GENERIC_NAME_WORDS = {
     "account",
     "agent",
     "appraisal",
+    "assistant",
+    "back",
     "broker",
     "brokers",
+    "buyer",
+    "buyers",
     "calculator",
+    "call",
     "client",
+    "company",
     "compliance",
     "consultant",
     "corp",
     "corporation",
     "director",
     "email",
+    "enquiries",
     "enquiry",
     "entrants",
     "executive",
+    "facebook",
     "finance",
     "financial",
+    "group",
+    "home",
     "homes",
     "hours",
     "inc",
     "incorporated",
+    "instagram",
     "inspections",
+    "insurance",
+    "lawyers",
     "limited",
     "links",
+    "location",
     "llc",
+    "lp",
     "ltd",
     "manager",
+    "marketing",
     "mortgage",
+    "office",
     "officers",
     "partner",
     "plc",
     "policy",
     "principal",
+    "profile",
+    "property",
     "pty",
     "registers",
+    "realty",
     "requirements",
+    "sale",
     "service",
     "services",
     "sign",
     "size",
     "support",
+    "team",
     "vents",
     "week",
+    "whole",
+    "youtube",
 }
 
 _PAGE_LABELS = {
+    "additional information",
     "aml compliance",
     "asset registers",
+    "blackshaw manuka",
     "belimba park",
     "bookings my account sign",
+    "book appointment",
+    "brisbane northside",
     "broome wa",
+    "business advice",
     "buyer enquiry",
+    "car loan",
+    "call place",
+    "carlton north office",
     "cavill ave",
+    "close search",
     "eligible entrants",
     "entry requirements",
+    "due diligence",
+    "dundas lawyers youtube",
     "final thoughts",
+    "faq business loan",
+    "first last",
+    "first name",
+    "forthcoming auctions",
     "foreshore promenade",
     "get in touch",
+    "gold coast",
+    "home loan",
+    "home loans",
+    "home claims",
     "kimberley address",
+    "investment management",
+    "licensing information",
     "land size",
+    "nni life",
+    "new loan",
+    "need an installation quote",
     "open homes",
     "opening hours",
+    "our mission",
+    "our partners",
+    "our practice",
+    "our story",
+    "plan conveyancing",
     "privacy policy",
+    "phone lines open now",
+    "phone number",
+    "properties for sale",
+    "property management",
     "quick links",
     "recently leased",
+    "recent sales",
     "rental appraisal",
     "request measurement",
+    "resources currency converter",
+    "resources faqs blog guides",
     "routine inspections",
+    "sensitive information",
+    "search login",
+    "search properties",
     "solar vents",
+    "sam white loan market",
     "stamp duty calculator",
     "thailand pdpa",
     "this week",
     "wellness officers",
+    "water filter cartridge replacement",
+    "view all our partnerships",
     "what we do",
+    "we cover people",
+    "ask your question",
 }
 
 
@@ -196,6 +284,7 @@ def extract_phone(value: str) -> str | None:
     value = value.replace("%20", " ").replace("%2B", "+").replace("%2b", "+")
     m = re.search(r"<([+\d\s().-]+)>", value)
     candidate = m.group(1) if m else value
+    candidate = re.sub(r"(?<=\d)\+(?=\d)", " ", candidate)
     # Require at least seven digits.
     digits = re.sub(r"\D", "", candidate)
     if len(digits) < 7:
@@ -227,6 +316,22 @@ def extract_url(value: str) -> str | None:
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return None
     return candidate
+
+
+def extract_linkedin_profile_url(value: str) -> str | None:
+    """Return one canonical LinkedIn person-profile URL."""
+    if looks_like_html(value):
+        return None
+    match = _LINKEDIN_PROFILE_RE.search(value)
+    if not match:
+        return None
+    kind = match.group("kind").lower()
+    path = match.group("path").strip("/")
+    if not path:
+        return None
+    if kind == "in":
+        path = path.split("/", 1)[0]
+    return f"https://www.linkedin.com/{kind}/{path}"
 
 
 def extract_contact_form_url(value: str) -> str | None:
@@ -306,16 +411,32 @@ def _name_in_email_local(name: str, email: str) -> bool:
 def _parse_named_contact_display(value: str) -> dict[str, str] | None:
     """Parse a display string such as 'Name (Title) <contact>' or 'Name - URL'."""
     text = value.strip()
-    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*[<-]\s*(.+?)\s*$", text)
+    m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*(?:<(.+?)>| - (.+?))\s*$", text)
     if not m:
         return None
     name = m.group(1).strip()
     title = m.group(2).strip() if m.group(2) else ""
-    payload = m.group(3).strip().rstrip(">")
+    payload = (m.group(3) or m.group(4)).strip()
+    if not title:
+        appended_title = re.match(
+            r"^(.+?)\s+(Marketing Assistant|Commercial Sales|Sales Administration|"
+            r"Sales Associate|Sales)$",
+            name,
+            re.I,
+        )
+        if appended_title:
+            name = appended_title.group(1).strip()
+            title = appended_title.group(2).title()
     display_name = f"{name} ({title})" if title else name
     if not is_valid_named_contact(display_name):
         return None
     return {"name": name, "title": title, "value": payload}
+
+
+# Stable public names for the shared enrichment boundary. The private aliases
+# remain the implementation names so existing callers are not broken.
+email_matches_person = _name_in_email_local
+parse_named_contact = _parse_named_contact_display
 
 
 def normalize_route_value(route_type: str, value: str) -> str | None:
@@ -353,14 +474,14 @@ def normalize_route_value(route_type: str, value: str) -> str | None:
     if route_type == "social_profile_review_only":
         parsed = _parse_named_contact_display(value)
         if parsed:
-            url = extract_url(parsed["value"])
+            url = extract_linkedin_profile_url(parsed["value"])
             if url:
                 return (
                     f"{parsed['name']} - {url}"
                     if not parsed["title"]
                     else f"{parsed['name']} ({parsed['title']}) - {url}"
                 )
-        url = extract_url(value)
+        url = extract_linkedin_profile_url(value)
         return url if url else None
     # Unknown route types fall through unchanged.
     return value
@@ -446,11 +567,14 @@ async def enrich_contact_routes(
 
 
 __all__ = [
+    "email_matches_person",
     "enrich_contact_routes",
     "extract_contact_form_url",
     "extract_email",
+    "extract_linkedin_profile_url",
     "extract_phone",
     "extract_url",
     "is_valid_named_contact",
     "normalize_route_value",
+    "parse_named_contact",
 ]

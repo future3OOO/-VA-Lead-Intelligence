@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import os
+import socket
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +16,8 @@ import httpx
 import pytest
 from bs4 import BeautifulSoup
 
+from services.source_engine import contact_selection
+from services.source_engine.adapters.base import _resolve_public_ips, _SafeAsyncHTTPTransport
 from services.source_engine.adapters.company_web import CompanyWebAdapter
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
 from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdvisersAdapter
@@ -19,13 +25,15 @@ from services.source_engine.adapters.openstreetmap import OpenStreetMapAdapter
 from services.source_engine.adapters.team_pages import TeamPagesAdapter, _extract_from_soup
 from services.source_engine.config import SourceConfig
 from services.source_engine.enricher import (
-    _name_in_email_local,
+    email_matches_person,
     extract_contact_form_url,
     extract_email,
+    extract_linkedin_profile_url,
     extract_phone,
     extract_url,
     is_valid_named_contact,
     normalize_route_value,
+    parse_named_contact,
 )
 from services.source_engine.runner import SourceRunner
 
@@ -38,7 +46,8 @@ def _load_export_helpers() -> tuple:
         "export_leads_csv", REPO_ROOT / "scripts" / "export_leads_csv.py"
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
     return (
         module._best_contact,
         module._best_company_contact,
@@ -48,6 +57,16 @@ def _load_export_helpers() -> tuple:
         module._build_explanation,
         module._csv_safe,
     )
+
+
+def _load_targeted_contact_script() -> object:
+    spec = importlib.util.spec_from_file_location(
+        "extract_targeted_contacts", REPO_ROOT / "scripts" / "extract_targeted_contacts.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 (
@@ -164,6 +183,182 @@ async def test_team_pages_compacts_completed_page_state(
     assert adapter.normalize(uuid4(), raw)["body_excerpt"] == "Acme Team Acme Services Email us"
 
 
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_fetches_each_profile_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pagination overlap must not trigger duplicate adviser profile requests."""
+    adapter = NzFinanceAdvisersAdapter(_make_adapter_config("nz_finance_advisers", "web"))
+    fetched: list[str] = []
+
+    async def discover(_max_pages: int) -> list[str]:
+        return ["https://example.org/adviser/alice", "https://example.org/adviser/bob"] * 2
+
+    async def fetch_profile(url: str) -> dict[str, str]:
+        fetched.append(url)
+        return {"profile_url": url}
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_fetch_profile", fetch_profile)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert fetched == [
+        "https://example.org/adviser/alice",
+        "https://example.org/adviser/bob",
+    ]
+    assert [result["profile_url"] for result in results] == fetched
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_rejects_empty_directory_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = NzFinanceAdvisersAdapter(_make_adapter_config("nz_finance_advisers", "web"))
+
+    async def discover(_max_pages: int) -> list[str]:
+        return []
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    try:
+        with pytest.raises(httpx.HTTPError, match="no adviser profiles"):
+            await adapter.fetch(uuid4(), {})
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_processes_profiles_with_bounded_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("nz_finance_advisers", "web")
+    config.rate_limit = {"max_total_concurrency": 3}
+    adapter = NzFinanceAdvisersAdapter(config)
+    active = 0
+    peak = 0
+
+    async def discover(_max_pages: int) -> list[str]:
+        return [f"https://example.org/adviser/{index}" for index in range(6)]
+
+    async def fetch_profile(url: str) -> dict[str, str]:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"profile_url": url}
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_fetch_profile", fetch_profile)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert peak == 3
+    assert len(results) == 6
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_fetches_shared_provider_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("nz_finance_advisers", "web")
+    config.rate_limit = {"max_total_concurrency": 2}
+    adapter = NzFinanceAdvisersAdapter(config)
+    provider_url = "https://financeadvisers.co.nz/provider/example-advice"
+    provider_fetches = 0
+
+    async def discover(_max_pages: int) -> list[str]:
+        return [
+            "https://financeadvisers.co.nz/adviser/alice",
+            "https://financeadvisers.co.nz/adviser/bob",
+        ]
+
+    async def robots_allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def get(url: str) -> str:
+        nonlocal provider_fetches
+        if "/provider/" in url:
+            provider_fetches += 1
+            await asyncio.sleep(0.01)
+            return (
+                '<script type="application/ld+json">'
+                '{"@type":"Organization","name":"Example Advice",'
+                '"url":"https://example.org","telephone":"+64 9 555 0100"}'
+                "</script>"
+            )
+        name = "Alice Morgan" if url.endswith("alice") else "Bob Taylor"
+        return (
+            '<script type="application/ld+json">'
+            f'{{"@type":"Person","name":"{name}","jobTitle":"Financial Adviser",'
+            f'"worksFor":{{"name":"Example Advice","url":"{provider_url}"}}}}'
+            "</script>"
+        )
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_get", get)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert provider_fetches == 1
+    assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_rejects_partial_query_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed Overpass slice must fail the source run instead of truncating coverage."""
+    config = _make_adapter_config("openstreetmap", "public_api")
+    config.adapter_config = {
+        "areas": ["Australia"],
+        "tags": [
+            {"key": "office", "value": "accountant"},
+            {"key": "office", "value": "lawyer"},
+        ],
+    }
+    adapter = OpenStreetMapAdapter(config)
+    responses: list[dict[str, list[object]] | None] = [{"elements": []}, None]
+
+    async def execute(_query: str) -> dict[str, list[object]] | None:
+        return responses.pop(0)
+
+    monkeypatch.setattr(adapter, "_execute_query", execute)
+    try:
+        with pytest.raises(httpx.HTTPError, match="incomplete"):
+            await adapter.fetch(uuid4(), {})
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_retries_endpoints_once_after_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    responses = [503, 503, 200]
+    requests = 0
+
+    async def post(url: str, **_kwargs: object) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        status = responses.pop(0)
+        return httpx.Response(
+            status,
+            json={"elements": []} if status == 200 else None,
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(adapter, "_http_post", post)
+    try:
+        assert await adapter._execute_query("[out:json];") == {"elements": []}
+    finally:
+        await adapter.aclose()
+
+    assert requests == 3
+
+
 def test_filter_hit_fields_preserves_classification_and_workplace_data() -> None:
     """Intent and workplace type should survive the allowed_fields filter."""
     cfg = _make_source_config(
@@ -222,6 +417,7 @@ def test_contact_normalization_rejects_malformed_values() -> None:
     assert extract_phone("Call 1800 013 937 today") == "1800 013 937"
     assert extract_phone("+61 3 5278 2814") == "+61 3 5278 2814"
     assert extract_phone("Camp Hill <07 3264 2311>") == "07 3264 2311"
+    assert extract_phone("0402+425+304") == "0402 425 304"
     assert extract_url("//example.com") is None
     assert extract_url("https://example.com/contact") == "https://example.com/contact"
     assert extract_contact_form_url("https://example.com") is None
@@ -324,9 +520,70 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
         "Rental Appraisal",
         "Open Homes",
         "Buyer Enquiry",
+        "Book Now",
+        "Back To Team",
+        "Blackshaw Manuka",
+        "Business Advice",
+        "Brisbane Northside",
+        "Call Back",
+        "Car Loan",
+        "Call Place",
+        "Call Us",
+        "Call Us Now",
+        "Carlton North Office",
+        "Close Menu",
+        "Charlotte Gall Marketing Assistant",
+        "Close Search",
+        "Due Diligence",
+        "Dundas Lawyers Youtube",
+        "Dwell Realty",
+        "Enquire Now",
+        "Explore More",
+        "First Last",
+        "First Name",
+        "First Home Buyer",
+        "Facebook Instagram",
+        "Forthcoming Auctions",
+        "General Enquiries",
         "Get In Touch",
+        "Gold Coast",
+        "Home Loan",
+        "Home Loans",
+        "Head Office",
+        "Home Claims",
+        "Investment Management",
+        "Meet Our Team",
+        "Meet The Team",
+        "My Profile",
+        "New Loan",
+        "Need An Installation Quote",
+        "Nni Life",
+        "Office Administrator",
+        "Our Agency",
+        "Our Leadership Team",
+        "Our People",
+        "Our Team",
+        "Our Mission",
+        "Our Practice",
+        "Phone Number",
+        "Phone Lines Open Now",
+        "Property Associate",
+        "Property Lawyers Sydney",
+        "Properties For Sale",
+        "Plan Conveyancing",
+        "Property Management",
+        "Recent Sales",
+        "Sensitive Information",
+        "View Profile",
+        "We Cover People",
+        "Sam White Loan Market",
+        "Steadfast Group",
+        "Whole Home",
+        "Water Filter Cartridge Replacement",
         "Quick Links",
         "This Week",
+        "Apply Now",
+        "Faq Business Loan",
     ]:
         assert is_valid_named_contact(label) is False
 
@@ -334,11 +591,24 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
 def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> None:
     assert is_valid_named_contact("Grant Hill") is True
     assert is_valid_named_contact("Brooke Taylor") is True
+    assert is_valid_named_contact("Timothy David Raymond Loan") is True
+
+
+def test_parse_named_contact_separates_appended_marketing_assistant_title() -> None:
+    assert parse_named_contact("Charlotte Gall Marketing Assistant <charlotte@ayre.com.au>") == {
+        "name": "Charlotte Gall",
+        "title": "Marketing Assistant",
+        "value": "charlotte@ayre.com.au",
+    }
 
 
 def test_named_contacts_reject_legal_entities_and_company_names() -> None:
     assert is_valid_named_contact("Absolute Solutions Limited") is False
     assert is_valid_named_contact("Acme Advice Pty Ltd") is False
+    assert is_valid_named_contact("Global People's Trust Lp") is False
+    assert is_valid_named_contact("Tōtara Forestry Lp") is False
+    assert is_valid_named_contact("Our Company") is False
+    assert is_valid_named_contact("Group Company") is False
     assert is_valid_named_contact("Cirrus Legal", "Cirrus Legal") is False
     assert is_valid_named_contact("Mortgage Broker") is False
     assert is_valid_named_contact("Service Email") is False
@@ -414,6 +684,253 @@ def test_targeted_contact_does_not_borrow_another_advisers_details() -> None:
     assert lead_contact["name"] == "Adviser One"
     assert lead_contact["email"] == "adviser.one@example.org"
     assert lead_contact["phone"] == "+64 21 555 0101"
+
+
+def test_list_named_contacts_preserves_every_person_route_in_separate_fields() -> None:
+    routes = [
+        {"type": "generic_email", "value": "office@example.org"},
+        {"type": "business_phone", "value": "+64 9 555 0100"},
+        {"type": "named_contact", "value": "Alice Morgan (Property Manager)"},
+        {"type": "named_contact", "value": "Name Only (Property Manager)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <alice.morgan@example.org>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <a.morgan@example.org>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <alice.morgan@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Alice Morgan (Property Manager) <+64 21 555 0101>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": ("Alice Morgan (Property Manager) - https://www.linkedin.com/in/alice-morgan"),
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Bob Taylor (Director) <bob@example.org>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "Bob Taylor (Director) - https://www.linkedin.com/in/bob-taylor",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "https://www.linkedin.com/in/unassigned-person",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "General Enquiries <enquiries@ocre.com.au>",
+        },
+    ]
+
+    assert contact_selection.list_named_contacts(routes, "Example Realty") == [
+        {
+            "name": "Alice Morgan",
+            "title": "Property Manager",
+            "emails": ("a.morgan@example.org", "alice.morgan@example.org"),
+            "phones": ("+64 21 555 0101",),
+            "linkedins": ("https://www.linkedin.com/in/alice-morgan",),
+        },
+        {
+            "name": "Bob Taylor",
+            "title": "Director",
+            "emails": ("bob@example.org",),
+            "phones": (),
+            "linkedins": ("https://www.linkedin.com/in/bob-taylor",),
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("display", "expected_name", "expected_title"),
+    [
+        ("Eboni Hemsley Sales <eboni@example.org>", "Eboni Hemsley", "Sales"),
+        (
+            "Alicia Parlby Commercial Sales <alicia@example.org>",
+            "Alicia Parlby",
+            "Commercial Sales",
+        ),
+        (
+            "Liv Middleton Sales Associate <liv@example.org>",
+            "Liv Middleton",
+            "Sales Associate",
+        ),
+        (
+            "Nakita Cahir Sales Administration <nakita@example.org>",
+            "Nakita Cahir",
+            "Sales Administration",
+        ),
+    ],
+)
+def test_parse_named_contact_separates_reproduced_appended_titles(
+    display: str, expected_name: str, expected_title: str
+) -> None:
+    assert parse_named_contact(display) == {
+        "name": expected_name,
+        "title": expected_title,
+        "value": display.rsplit("<", 1)[1][:-1],
+    }
+
+
+def test_named_contact_projection_removes_name_repeated_in_title() -> None:
+    assert contact_selection.list_named_contacts(
+        [
+            {
+                "type": "named_work_email_approved",
+                "value": "Tony Bove (DIRECTOR tony) <tony@example.org>",
+            }
+        ],
+        "AAA Above Group",
+    ) == [
+        {
+            "name": "Tony Bove",
+            "title": "Director",
+            "emails": ("tony@example.org",),
+            "phones": (),
+            "linkedins": (),
+        }
+    ]
+
+
+def test_generic_property_lead_prefers_relevant_published_role() -> None:
+    """Sector leads select the relevant operator instead of an arbitrary employee."""
+    routes = [
+        {
+            "type": "named_work_email_approved",
+            "value": "Zoe Taylor (Director) <zoe.taylor@example.org>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "Zoe Taylor (Director) - https://www.linkedin.com/in/zoe-taylor",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Senior Property Manager) <alice.morgan@example.org>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": (
+                "Alice Morgan (Senior Property Manager) - https://www.linkedin.com/in/alice-morgan"
+            ),
+        },
+    ]
+
+    selected = _lead_named_contact(
+        "Property Manager / Real Estate Office",
+        [],
+        routes,
+        "Example Realty",
+    )
+    assert selected["name"] == "Alice Morgan"
+    assert selected["title"] == "Senior Property Manager"
+    assert selected["email"] == "alice.morgan@example.org"
+    assert selected["linkedin"] == "https://www.linkedin.com/in/alice-morgan"
+    assert selected == _lead_named_contact(
+        "Property Manager / Real Estate Office",
+        [],
+        list(reversed(routes)),
+        "Example Realty",
+    )
+
+
+def test_generic_lead_prefers_reachable_person_over_unreachable_role_match() -> None:
+    """A usable direct route is more valuable than a title-only person match."""
+    routes = [
+        {"type": "named_contact", "value": "Alice Morgan (Property Manager)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Zoe Taylor (Director) <zoe.taylor@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Zoe Taylor (Director) <+61 3 9000 0000>",
+        },
+    ]
+
+    selected = _lead_named_contact(
+        "Property Manager / Real Estate Office",
+        [],
+        routes,
+        "Example Realty",
+    )
+
+    assert selected["name"] == "Zoe Taylor"
+    assert selected["email"] == "zoe.taylor@example.org"
+    assert selected["phone"] == "+61 3 9000 0000"
+
+
+def test_generic_lead_prefers_richer_direct_routes_before_role_title() -> None:
+    """Email and phone coverage must not be discarded for a role-only preference."""
+    routes = [
+        {
+            "type": "social_profile_review_only",
+            "value": (
+                "Andrew Hopkins (Finance Broker) - https://www.linkedin.com/in/andrew-hopkins"
+            ),
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "David Manou (Managing Director) <david@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "David Manou (Managing Director) <+61 4 1234 5678>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "David Manou (Managing Director) - https://www.linkedin.com/in/david-manou",
+        },
+    ]
+
+    selected = _lead_named_contact(
+        "Finance Directory listing for Accelerate Group",
+        [],
+        routes,
+        "Accelerate Group",
+    )
+
+    assert selected["name"] == "David Manou"
+    assert selected["email"] == "david@example.org"
+    assert selected["phone"] == "+61 4 1234 5678"
+
+
+@pytest.mark.parametrize(
+    ("lead_title", "contact_title"),
+    [
+        ("Lawyer / Legal Practice", "Practice Manager"),
+        ("Accountant / Accounting Practice", "Office Manager"),
+        ("Insurance Broker / Insurance Office", "Insurance Broker"),
+        ("Financial Planner / Financial Advisory", "Financial Planner"),
+        ("Maintenance Coordinator / Electrical Services", "Operations Manager"),
+        ("Plumber", "Service Manager"),
+    ],
+)
+def test_generic_sector_leads_prefer_relevant_published_roles(
+    lead_title: str,
+    contact_title: str,
+) -> None:
+    routes = [
+        {
+            "type": "named_work_email_approved",
+            "value": "Zoe Taylor (Director) <zoe.taylor@example.org>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": f"Alice Morgan ({contact_title}) <alice.morgan@example.org>",
+        },
+    ]
+
+    selected = _lead_named_contact(lead_title, [], routes, "Example Business")
+
+    assert selected["name"] == "Alice Morgan"
+    assert selected["title"] == contact_title
 
 
 def test_invalid_named_title_does_not_fall_back_to_another_employee() -> None:
@@ -503,6 +1020,222 @@ def test_contact_selection_is_independent_of_database_row_order() -> None:
     assert _best_contact(routes) == _best_contact(list(reversed(routes)))
 
 
+def test_targeted_contact_domains_partition_into_three_stable_shards() -> None:
+    """Every domain is assigned once and repeated partitioning is deterministic."""
+    module = _load_targeted_contact_script()
+    domains = ["c.example", "a.example", "b.example", "c.example", "d.example"]
+
+    shards = module.partition_domains(domains, 3)
+
+    assert shards == [["a.example", "d.example"], ["b.example"], ["c.example"]]
+    assert shards == module.partition_domains(list(reversed(domains)), 3)
+    assert len({domain for shard in shards for domain in shard}) == 4
+    with pytest.raises(ValueError, match="shard_count"):
+        module.partition_domains(domains, 0)
+
+
+@pytest.mark.asyncio
+async def test_targeted_contact_backfill_runs_three_shards_per_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deep crawl runs first and the guessed-path crawler handles unresolved domains."""
+    module = _load_targeted_contact_script()
+    active = 0
+    peak = 0
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Runner:
+        async def run(
+            self,
+            _session: object,
+            _workspace_id: object,
+            _campaign_id: object,
+            *,
+            source_keys: list[str],
+            query_overrides: dict[str, dict[str, list[str]]],
+        ) -> object:
+            nonlocal active, peak
+            source = source_keys[0]
+            domains = tuple(query_overrides[source]["domains"])
+            calls.append((source, domains))
+            active += 1
+            peak = max(peak, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+
+            class Record:
+                id = uuid4()
+                status = "succeeded"
+                hits_total = len(domains)
+                hits_qualified_total = len(domains)
+                hits_duplicate_total = 0
+                errors_total = 0
+
+            return Record()
+
+    async def domains(
+        _workspace_id: object,
+        _max_domains: object,
+        exclude_completed_source: str = "",
+    ) -> list[str]:
+        if exclude_completed_source == "company_web":
+            return [f"{letter}.example" for letter in "def"]
+        return [f"{letter}.example" for letter in "abcdef"]
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+    monkeypatch.setattr(module, "SourceRunner", Runner, raising=False)
+    monkeypatch.setattr(module, "get_missing_contact_domains", domains)
+
+    result = await module.run_targeted_contact_backfill(uuid4(), uuid4(), shard_count=3)
+
+    assert peak == 3
+    assert [source for source, _domains in calls] == ["company_web"] * 3 + ["team_pages"] * 3
+    company_expected = {
+        ("a.example", "d.example"),
+        ("b.example", "e.example"),
+        ("c.example", "f.example"),
+    }
+    assert {domains for source, domains in calls if source == "company_web"} == company_expected
+    assert {domains for source, domains in calls if source == "team_pages"} == {
+        ("d.example",),
+        ("e.example",),
+        ("f.example",),
+    }
+    assert result["shard_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_targeted_contact_backfill_fails_when_a_shard_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_targeted_contact_script()
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Runner:
+        async def run(self, *_args: object, **_kwargs: object) -> object:
+            class Record:
+                id = uuid4()
+                status = "failed"
+                hits_total = 0
+                hits_qualified_total = 0
+                hits_duplicate_total = 0
+                errors_total = 1
+
+            return Record()
+
+    async def domains(_workspace_id: object, _max_domains: object) -> list[str]:
+        return ["a.example"]
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+    monkeypatch.setattr(module, "SourceRunner", Runner)
+    monkeypatch.setattr(module, "get_missing_contact_domains", domains)
+
+    with pytest.raises(RuntimeError, match="company_web shard 0 failed"):
+        await module.run_targeted_contact_backfill(uuid4(), uuid4(), shard_count=3)
+
+
+@pytest.mark.asyncio
+async def test_targeted_contact_shard_failure_cancels_siblings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed shard must not leave sibling source runs crawling in the background."""
+    module = _load_targeted_contact_script()
+    ready = asyncio.Event()
+    started: set[str] = set()
+    cancelled: set[str] = set()
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Runner:
+        async def run(
+            self,
+            _session: object,
+            _workspace_id: object,
+            _campaign_id: object,
+            *,
+            source_keys: list[str],
+            query_overrides: dict[str, dict[str, list[str]]],
+        ) -> object:
+            source = source_keys[0]
+            domain = query_overrides[source]["domains"][0]
+            started.add(domain)
+            if len(started) == 3:
+                ready.set()
+            await ready.wait()
+            if domain == "a.example":
+                raise RuntimeError("boom")
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                cancelled.add(domain)
+                raise
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+    monkeypatch.setattr(module, "SourceRunner", Runner)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await module._run_source_shards(
+            uuid4(), uuid4(), "team_pages", ["a.example", "b.example", "c.example"], 3
+        )
+
+    assert cancelled == {"b.example", "c.example"}
+
+
+@pytest.mark.asyncio
+async def test_missing_contact_query_scopes_each_route_to_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant scope remains explicit inside every contact-route existence check."""
+    module = _load_targeted_contact_script()
+    statements: list[str] = []
+    workspace_id = uuid4()
+
+    class Rows:
+        def all(self) -> list[object]:
+            return []
+
+    class Session:
+        async def __aenter__(self) -> Session:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def execute(self, statement: object, params: dict[str, object]) -> Rows:
+            statements.append(str(statement))
+            assert params == {
+                "workspace_id": workspace_id,
+                "exclude_completed_source": "",
+            }
+            return Rows()
+
+    monkeypatch.setattr(module, "AsyncSessionLocal", Session)
+
+    assert await module.get_missing_contact_domains(workspace_id) == []
+    assert len(statements) == 1
+    for alias in ("named", "email", "phone", "social"):
+        assert f"{alias}.workspace_id = :workspace_id" in statements[0]
+    assert "completed.workspace_id = :workspace_id" in statements[0]
+
+
 def test_named_email_is_preferred_over_generic_email() -> None:
     """A person-associated route outranks a generic inbox."""
     routes = [
@@ -524,14 +1257,14 @@ def test_best_named_contact_rejects_partial_token_email_match() -> None:
             "value": "Peter Sedy Li <belinda@blackfoxrealestate.com.au>",
         },
     ]
-    assert _name_in_email_local("Peter Sedy Li", "belinda@blackfoxrealestate.com.au") is False
+    assert email_matches_person("Peter Sedy Li", "belinda@blackfoxrealestate.com.au") is False
     best = _best_named_contact(routes)
     assert best["name"] == "Peter Sedy Li"
     assert best["email"] == ""
 
 
 def test_name_email_match_accepts_complete_multi_part_name() -> None:
-    assert _name_in_email_local(
+    assert email_matches_person(
         "Jody Jansen Van Vuuren",
         "jody.jansenvanvuuren@icib.co.nz",
     )
@@ -740,6 +1473,387 @@ def test_team_page_explicit_person_card_keeps_named_phone() -> None:
         "Adam Thompson (Financial Adviser) <+642041232483>",
     ) in values
     assert ("named_contact", "Adam Thompson (Financial Adviser)") in values
+
+
+def test_team_page_extracts_person_from_nested_jsonld_graph() -> None:
+    """Official nested Person data retains the property manager's direct routes."""
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Person",
+              "name": "Mia Williams",
+              "jobTitle": "Senior Property Manager",
+              "email": "mia.williams@example.org",
+              "telephone": "+64 3 555 0123",
+              "sameAs": "https://www.linkedin.com/in/mia-williams"
+            }
+          ]
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/our-team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Mia Williams (Senior Property Manager) <mia.williams@example.org>",
+        ),
+        (
+            "business_phone",
+            "Mia Williams (Senior Property Manager) <+64 3 555 0123>",
+        ),
+        (
+            "social_profile_review_only",
+            "Mia Williams (Senior Property Manager) - https://www.linkedin.com/in/mia-williams",
+        ),
+        ("named_contact", "Mia Williams (Senior Property Manager)"),
+    }
+
+
+def test_team_page_trusts_email_published_on_jsonld_person() -> None:
+    """A schema.org Person email remains targeted even when it uses a known alias."""
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Person",
+          "name": "Elizabeth Morgan",
+          "jobTitle": "Property Manager",
+          "email": "liz@example.org"
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/our-team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Elizabeth Morgan (Property Manager) <liz@example.org>",
+        ),
+        ("named_contact", "Elizabeth Morgan (Property Manager)"),
+    }
+
+
+def test_team_page_accepts_list_valued_jsonld_job_title() -> None:
+    """Schema.org permits repeated job titles; the primary published title is used."""
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Person",
+          "name": "Scott Spencer",
+          "jobTitle": ["Mortgage Broker", "Founder and Chief Executive Officer"],
+          "sameAs": [
+            "https://www.linkedin.com/in/scottmichaelspencer/",
+            "https://example.org/scott-spencer/"
+          ]
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "social_profile_review_only",
+            "Scott Spencer (Mortgage Broker) - https://www.linkedin.com/in/scottmichaelspencer",
+        ),
+        ("named_contact", "Scott Spencer (Mortgage Broker)"),
+    }
+
+
+def test_team_page_extracts_person_microdata_attributes() -> None:
+    """Schema.org profile attributes bind all direct routes to one employee."""
+    soup = BeautifulSoup(
+        """
+        <article itemscope itemtype="https://schema.org/Person">
+          <meta itemprop="name" content="Sophie Chen">
+          <meta itemprop="jobTitle" content="Property Manager">
+          <meta itemprop="email" content="sophie.chen@example.org">
+          <meta itemprop="telephone" content="+61 2 5550 0199">
+          <link itemprop="sameAs" href="https://au.linkedin.com/in/sophie-chen">
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/people", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Sophie Chen (Property Manager) <sophie.chen@example.org>",
+        ),
+        ("business_phone", "Sophie Chen (Property Manager) <+61 2 5550 0199>"),
+        (
+            "social_profile_review_only",
+            "Sophie Chen (Property Manager) - https://www.linkedin.com/in/sophie-chen",
+        ),
+        ("named_contact", "Sophie Chen (Property Manager)"),
+    }
+
+
+def test_team_page_extracts_named_contact_from_staff_card() -> None:
+    """A structured staff card retains a published name and operational title."""
+    soup = BeautifulSoup(
+        """
+        <article class="staff-profile">
+          <h3>Ella Martin</h3>
+          <p class="position">Senior Property Manager</p>
+          <a href="/agents/ella-martin">View profile</a>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/our-people", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        ("named_contact", "Ella Martin (Senior Property Manager)")
+    }
+
+
+def test_team_page_binds_plain_contact_text_within_staff_card() -> None:
+    """Plain contact text remains associated only within its published staff card."""
+    soup = BeautifulSoup(
+        """
+        <div class="employee-card">
+          <h3>Noah Patel</h3>
+          <p class="role">Administration Manager</p>
+          <p>noah.patel@example.org</p>
+          <p>+61 7 5550 0177</p>
+          <p>https://www.linkedin.com/in/noah-patel</p>
+        </div>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/staff", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Noah Patel (Administration Manager) <noah.patel@example.org>",
+        ),
+        ("business_phone", "Noah Patel (Administration Manager) <+61 7 5550 0177>"),
+        (
+            "social_profile_review_only",
+            "Noah Patel (Administration Manager) - https://www.linkedin.com/in/noah-patel",
+        ),
+        ("named_contact", "Noah Patel (Administration Manager)"),
+    }
+
+
+def test_team_page_canonicalizes_protocol_relative_linkedin_profile() -> None:
+    """Official protocol-relative person links become one canonical profile URL."""
+    soup = BeautifulSoup(
+        """
+        <article class="person-card">
+          <h3>Lucas Brown</h3>
+          <p class="job-title">Practice Manager</p>
+          <a href="//au.linkedin.com/in/lucas-brown/?trk=team">LinkedIn</a>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        ("named_contact", "Lucas Brown (Practice Manager)"),
+        (
+            "social_profile_review_only",
+            "Lucas Brown (Practice Manager) - https://www.linkedin.com/in/lucas-brown",
+        ),
+    }
+
+
+def test_linkedin_matching_accepts_people_and_rejects_company_pages() -> None:
+    assert (
+        extract_linkedin_profile_url("//nz.linkedin.com/in/mia-williams/?trk=team")
+        == "https://www.linkedin.com/in/mia-williams"
+    )
+    assert extract_linkedin_profile_url("https://linkedin.com/company/example") is None
+    assert extract_linkedin_profile_url("https://notlinkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/?r=linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/#linkedin.com/in/foo") is None
+    assert extract_linkedin_profile_url("https://evil.com/,linkedin.com/in/foo") is None
+    assert (
+        normalize_route_value(
+            "social_profile_review_only",
+            "Example Team - https://linkedin.com/company/example",
+        )
+        is None
+    )
+
+
+def test_social_route_preserves_hyphenated_person_name() -> None:
+    assert normalize_route_value(
+        "social_profile_review_only",
+        "Anne-Marie Smith - https://www.linkedin.com/in/anne-marie-smith",
+    ) == ("Anne-Marie Smith - https://www.linkedin.com/in/anne-marie-smith")
+
+
+def test_team_page_accepts_fully_qualified_jsonld_person_type() -> None:
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@type": "https://schema.org/Person",
+          "name": "Aroha Wilson",
+          "jobTitle": "Office Manager",
+          "email": "aroha.wilson@example.org"
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Aroha Wilson (Office Manager) <aroha.wilson@example.org>",
+        ),
+        ("named_contact", "Aroha Wilson (Office Manager)"),
+    }
+
+
+def test_team_page_uses_innermost_staff_cards() -> None:
+    """A wrapper cannot assign one employee's phone to another employee."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-section">
+          <article class="employee-card">
+            <h3>Emily Jones</h3>
+            <p class="role">Property Manager</p>
+            <p>emily.jones@example.org</p>
+          </article>
+          <article class="employee-card">
+            <h3>Liam Brown</h3>
+            <p class="role">Office Manager</p>
+            <p>+61 2 5550 0100</p>
+          </article>
+        </div>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in values
+    assert (
+        "business_phone",
+        "Liam Brown (Office Manager) <+61 2 5550 0100>",
+    ) in values
+    assert not any(
+        route_type == "business_phone" and value.startswith("Emily Jones")
+        for route_type, value in values
+    )
+
+
+def test_team_page_does_not_assign_wrapper_phone_to_single_nested_person() -> None:
+    """An office phone outside a staff card must remain a company-level route."""
+    soup = BeautifulSoup(
+        """
+        <div class="team-section">
+          <p>+61 2 5550 0100</p>
+          <article class="employee-card">
+            <h3>Emily Jones</h3>
+            <p class="role">Property Manager</p>
+            <p>emily.jones@example.org</p>
+          </article>
+        </div>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in values
+    assert not any(
+        route_type == "business_phone" and value.startswith("Emily Jones")
+        for route_type, value in values
+    )
+
+
+@pytest.mark.parametrize(
+    "inner_markup",
+    [
+        '<div class="team-member__photo"><img alt="Emily"></div>',
+        '<div class="staff-bio"><p>Experienced property manager.</p></div>',
+    ],
+)
+def test_team_page_keeps_person_card_with_non_person_nested_block(inner_markup: str) -> None:
+    """Decorative BEM and bio blocks must not suppress their enclosing person."""
+    soup = BeautifulSoup(
+        f"""
+        <article class="team-member">
+          {inner_markup}
+          <h3>Emily Jones</h3>
+          <p class="role">Property Manager</p>
+          <p>emily.jones@example.org</p>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/team", "example.org")
+
+    assert (
+        "named_work_email_approved",
+        "Emily Jones (Property Manager) <emily.jones@example.org>",
+    ) in {(route["type"], route["value"]) for route in routes}
+
+
+def test_team_page_microdata_ignores_nested_organisation_properties() -> None:
+    """A nested organisation phone must not become the enclosing person's phone."""
+    soup = BeautifulSoup(
+        """
+        <article itemscope itemtype="https://schema.org/Person">
+          <meta itemprop="name" content="Sophie Chen">
+          <meta itemprop="jobTitle" content="Property Manager">
+          <meta itemprop="email" content="sophie.chen@example.org">
+          <div itemprop="worksFor" itemscope itemtype="https://schema.org/Organization">
+            <meta itemprop="telephone" content="+61 2 5550 9999">
+          </div>
+        </article>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/people", "example.org")
+    values = {(route["type"], route["value"]) for route in routes}
+
+    assert (
+        "named_work_email_approved",
+        "Sophie Chen (Property Manager) <sophie.chen@example.org>",
+    ) in values
+    assert not any(route_type == "business_phone" for route_type, _value in values)
 
 
 @pytest.mark.asyncio
@@ -970,6 +2084,336 @@ async def test_http_request_rejects_redirect_outside_expected_host(
 
 
 @pytest.mark.asyncio
+async def test_robots_lookup_failure_does_not_block_source_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable robots file is not evidence that the source disallows crawling."""
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+
+    async def unavailable(_url: str, **_kwargs: object) -> httpx.Response:
+        raise httpx.ConnectError("robots unavailable")
+
+    monkeypatch.setattr(adapter, "_http_get", unavailable)
+    try:
+        assert await adapter._robots_allowed("https://example.org/team") is True
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_http_request_uses_the_adapter_client_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+    request_kwargs: dict[str, object] = {}
+
+    async def request(_method: str, url: str, **kwargs: object) -> httpx.Response:
+        request_kwargs.update(kwargs)
+        return httpx.Response(200, request=httpx.Request("GET", url))
+
+    async def safe_url(_url: str) -> bool:
+        return True
+
+    assert adapter.client is not None
+    monkeypatch.setattr(adapter.client, "request", request)
+    monkeypatch.setattr(adapter, "_is_safe_url", safe_url)
+    try:
+        await adapter._http_get("https://example.org/team")
+    finally:
+        await adapter.aclose()
+
+    assert "timeout" not in request_kwargs
+
+
+@pytest.mark.asyncio
+async def test_company_web_bounds_time_spent_on_one_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("company_web", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.01
+    adapter = CompanyWebAdapter(config)
+
+    async def slow_sitemap(_domain: str) -> list[str]:
+        await asyncio.sleep(10)
+        return []
+
+    async def empty_page(_url: str, _domain: str) -> None:
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", slow_sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", empty_page)
+    try:
+        assert (
+            await asyncio.wait_for(
+                adapter.fetch(uuid4(), {"domains": ["example.org"]}), timeout=0.1
+            )
+            == []
+        )
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_company_web_crawls_homepage_before_sitemap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = CompanyWebAdapter(_make_adapter_config("company_web", "scoped_public_web_crawl"))
+    actions: list[str] = []
+
+    async def sitemap(_domain: str) -> list[str]:
+        actions.append("sitemap")
+        return []
+
+    async def page(_url: str, _domain: str) -> None:
+        actions.append("page")
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", page)
+    try:
+        assert await adapter.fetch(uuid4(), {"domains": ["example.org"]}) == []
+    finally:
+        await adapter.aclose()
+
+    assert actions == ["page", "sitemap"]
+
+
+@pytest.mark.asyncio
+async def test_company_web_preserves_routes_collected_before_domain_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("company_web", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.02
+    adapter = CompanyWebAdapter(config)
+
+    async def sitemap(_domain: str) -> list[str]:
+        return ["https://example.org/team"]
+
+    async def page(url: str, _domain: str) -> tuple[str, BeautifulSoup] | None:
+        if url == "https://example.org":
+            return (
+                url,
+                BeautifulSoup(
+                    '<a href="/team">Team</a><a href="mailto:hello@example.org">Email</a>',
+                    "html.parser",
+                ),
+            )
+        await asyncio.sleep(10)
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", page)
+    try:
+        results = await asyncio.wait_for(
+            adapter.fetch(uuid4(), {"domains": ["example.org"]}), timeout=0.1
+        )
+    finally:
+        await adapter.aclose()
+
+    assert len(results) == 1
+    assert any(route["type"] == "generic_email" for route in results[0]["contact_routes"])
+
+
+@pytest.mark.asyncio
+async def test_team_pages_bounds_time_spent_on_one_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("team_pages", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.01
+    adapter = TeamPagesAdapter(config)
+
+    async def allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def slow_get(_url: str, **_kwargs: object) -> httpx.Response:
+        await asyncio.sleep(10)
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(adapter, "_robots_allowed", allowed)
+    monkeypatch.setattr(adapter, "_http_get", slow_get)
+    try:
+        assert (
+            await asyncio.wait_for(
+                adapter.fetch(
+                    uuid4(),
+                    {"domains": ["example.org"], "paths": ["/team"]},
+                ),
+                timeout=0.1,
+            )
+            == []
+        )
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_team_pages_preserves_routes_collected_before_domain_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("team_pages", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.02
+    adapter = TeamPagesAdapter(config)
+
+    async def allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def get(url: str, **_kwargs: object) -> httpx.Response:
+        if url.endswith("/team"):
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text='<a href="mailto:hello@example.org">Email</a>',
+                request=httpx.Request("GET", url),
+            )
+        await asyncio.sleep(10)
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(adapter, "_robots_allowed", allowed)
+    monkeypatch.setattr(adapter, "_http_get", get)
+    try:
+        results = await asyncio.wait_for(
+            adapter.fetch(
+                uuid4(),
+                {
+                    "domains": ["example.org"],
+                    "paths": ["/team", "/slow"],
+                },
+            ),
+            timeout=0.1,
+        )
+    finally:
+        await adapter.aclose()
+
+    assert len(results) == 1
+    assert any(route["type"] == "generic_email" for route in results[0]["contact_routes"])
+
+
+@pytest.mark.asyncio
+async def test_safe_transport_reuses_the_pinned_ip_per_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A crawl resolves each host once instead of repeating DNS for every page."""
+    resolutions: list[str] = []
+    connected_hosts: list[str] = []
+
+    async def resolve(host: str) -> list[str]:
+        resolutions.append(host)
+        return ["203.0.113.10"]
+
+    async def send(
+        _transport: httpx.AsyncHTTPTransport,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        connected_hosts.append(request.url.host)
+        return httpx.Response(200, request=request)
+
+    monkeypatch.setattr("services.source_engine.adapters.base._resolve_public_ips", resolve)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    transport = _SafeAsyncHTTPTransport()
+    try:
+        await transport.handle_async_request(httpx.Request("GET", "https://example.org/team"))
+        await transport.handle_async_request(httpx.Request("GET", "https://example.org/contact"))
+    finally:
+        await transport.aclose()
+
+    assert resolutions == ["example.org"]
+    assert connected_hosts == ["203.0.113.10", "203.0.113.10"]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_retries_a_transient_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    monkeypatch.delenv("RES_OPTIONS", raising=False)
+
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise socket.gaierror(-3, "temporary failure")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    assert await _resolve_public_ips("example.org") == ["93.184.216.34"]
+    assert attempts == 2
+    assert os.environ["RES_OPTIONS"] == "timeout:1 attempts:1"
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_falls_back_after_system_resolver_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(*_args: object) -> list[tuple[object, ...]]:
+        raise socket.gaierror(-3, "temporary failure")
+
+    def public_dns(host: str) -> list[str]:
+        assert host == "example.org"
+        return ["93.184.216.34"]
+
+    async def no_delay(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(socket, "getaddrinfo", unavailable)
+    monkeypatch.setattr(
+        "services.source_engine.adapters.base._resolve_with_public_dns",
+        public_dns,
+        raising=False,
+    )
+    monkeypatch.setattr(asyncio, "sleep", no_delay)
+
+    assert await _resolve_public_ips("example.org") == ["93.184.216.34"]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_prefers_ipv4_when_both_families_are_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        return [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:2800:220:1::", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    assert await _resolve_public_ips("example.org") == [
+        "93.184.216.34",
+        "2606:2800:220:1::",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_bounds_concurrent_system_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.02)
+        with lock:
+            active -= 1
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    await asyncio.gather(*(_resolve_public_ips(f"host-{index}.example") for index in range(20)))
+
+    assert peak <= 4
+
+
+@pytest.mark.asyncio
 async def test_http_request_allows_www_redirect_for_expected_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1045,9 +2489,7 @@ async def test_http_request_allows_subdomain_redirect_for_expected_apex(
     ("script_name", "function_name"),
     [
         ("extract_team_pages", "get_target_domains"),
-        ("extract_team_pages_missing", "get_missing_domains"),
         ("extract_company_web", "get_target_domains"),
-        ("extract_company_web_missing", "get_missing_contact_domains"),
     ],
 )
 async def test_extraction_zero_limit_is_preserved(
