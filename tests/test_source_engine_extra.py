@@ -16,6 +16,7 @@ import httpx
 import pytest
 from bs4 import BeautifulSoup
 
+from services.source_engine import contact_selection
 from services.source_engine.adapters.base import _resolve_public_ips, _SafeAsyncHTTPTransport
 from services.source_engine.adapters.company_web import CompanyWebAdapter
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
@@ -32,6 +33,7 @@ from services.source_engine.enricher import (
     extract_url,
     is_valid_named_contact,
     normalize_route_value,
+    parse_named_contact,
 )
 from services.source_engine.runner import SourceRunner
 
@@ -518,7 +520,66 @@ def test_is_valid_named_contact_rejects_page_labels() -> None:
         "Rental Appraisal",
         "Open Homes",
         "Buyer Enquiry",
+        "Book Now",
+        "Back To Team",
+        "Blackshaw Manuka",
+        "Business Advice",
+        "Brisbane Northside",
+        "Call Back",
+        "Car Loan",
+        "Call Place",
+        "Call Us",
+        "Call Us Now",
+        "Carlton North Office",
+        "Close Menu",
+        "Charlotte Gall Marketing Assistant",
+        "Close Search",
+        "Due Diligence",
+        "Dundas Lawyers Youtube",
+        "Dwell Realty",
+        "Enquire Now",
+        "Explore More",
+        "First Last",
+        "First Name",
+        "First Home Buyer",
+        "Facebook Instagram",
+        "Forthcoming Auctions",
+        "General Enquiries",
         "Get In Touch",
+        "Gold Coast",
+        "Home Loan",
+        "Home Loans",
+        "Head Office",
+        "Home Claims",
+        "Investment Management",
+        "Meet Our Team",
+        "Meet The Team",
+        "My Profile",
+        "New Loan",
+        "Need An Installation Quote",
+        "Nni Life",
+        "Office Administrator",
+        "Our Agency",
+        "Our Leadership Team",
+        "Our People",
+        "Our Team",
+        "Our Mission",
+        "Our Practice",
+        "Phone Number",
+        "Phone Lines Open Now",
+        "Property Associate",
+        "Property Lawyers Sydney",
+        "Properties For Sale",
+        "Plan Conveyancing",
+        "Property Management",
+        "Recent Sales",
+        "Sensitive Information",
+        "View Profile",
+        "We Cover People",
+        "Sam White Loan Market",
+        "Steadfast Group",
+        "Whole Home",
+        "Water Filter Cartridge Replacement",
         "Quick Links",
         "This Week",
         "Apply Now",
@@ -531,6 +592,14 @@ def test_is_valid_named_contact_accepts_names_that_overlap_business_words() -> N
     assert is_valid_named_contact("Grant Hill") is True
     assert is_valid_named_contact("Brooke Taylor") is True
     assert is_valid_named_contact("Timothy David Raymond Loan") is True
+
+
+def test_parse_named_contact_separates_appended_marketing_assistant_title() -> None:
+    assert parse_named_contact("Charlotte Gall Marketing Assistant <charlotte@ayre.com.au>") == {
+        "name": "Charlotte Gall",
+        "title": "Marketing Assistant",
+        "value": "charlotte@ayre.com.au",
+    }
 
 
 def test_named_contacts_reject_legal_entities_and_company_names() -> None:
@@ -615,6 +684,89 @@ def test_targeted_contact_does_not_borrow_another_advisers_details() -> None:
     assert lead_contact["name"] == "Adviser One"
     assert lead_contact["email"] == "adviser.one@example.org"
     assert lead_contact["phone"] == "+64 21 555 0101"
+
+
+def test_list_named_contact_routes_preserves_every_person_route() -> None:
+    routes = [
+        {"type": "generic_email", "value": "office@example.org"},
+        {"type": "business_phone", "value": "+64 9 555 0100"},
+        {"type": "named_contact", "value": "Alice Morgan (Property Manager)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <alice.morgan@example.org>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <a.morgan@example.org>",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Alice Morgan (Property Manager) <alice.morgan@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Alice Morgan (Property Manager) <+64 21 555 0101>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": ("Alice Morgan (Property Manager) - https://www.linkedin.com/in/alice-morgan"),
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "Bob Taylor (Director) <bob@example.org>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "Bob Taylor (Director) - https://www.linkedin.com/in/bob-taylor",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "https://www.linkedin.com/in/unassigned-person",
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "General Enquiries <enquiries@ocre.com.au>",
+        },
+    ]
+
+    assert contact_selection.list_named_contact_routes(routes, "Example Realty") == [
+        {
+            "name": "Alice Morgan",
+            "title": "Property Manager",
+            "contact_type": "email",
+            "contact_value": "a.morgan@example.org",
+        },
+        {
+            "name": "Alice Morgan",
+            "title": "Property Manager",
+            "contact_type": "email",
+            "contact_value": "alice.morgan@example.org",
+        },
+        {
+            "name": "Alice Morgan",
+            "title": "Property Manager",
+            "contact_type": "phone",
+            "contact_value": "+64 21 555 0101",
+        },
+        {
+            "name": "Alice Morgan",
+            "title": "Property Manager",
+            "contact_type": "linkedin",
+            "contact_value": "https://www.linkedin.com/in/alice-morgan",
+        },
+        {
+            "name": "Bob Taylor",
+            "title": "Director",
+            "contact_type": "email",
+            "contact_value": "bob@example.org",
+        },
+        {
+            "name": "Bob Taylor",
+            "title": "Director",
+            "contact_type": "linkedin",
+            "contact_value": "https://www.linkedin.com/in/bob-taylor",
+        },
+    ]
 
 
 def test_generic_property_lead_prefers_relevant_published_role() -> None:

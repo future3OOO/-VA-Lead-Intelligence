@@ -273,7 +273,8 @@ You can also run the older `extract_team_pages.py` against the domains with the 
   --region anz \
   --min-rank medium \
   --leads-path exports/anz_remote_leads_with_contacts.csv \
-  --companies-path exports/anz_all_companies.csv
+  --companies-path exports/anz_all_companies.csv \
+  --named-contacts-path exports/anz_named_contacts.csv
 ```
 
 Columns in `anz_remote_leads_with_contacts.csv`:
@@ -290,6 +291,12 @@ Columns in `anz_remote_leads_with_contacts.csv`:
 - `published_at`
 - `qualification_score` / `rank` — High, Medium, Low
 - `explanation` — human-readable reason this is a VA lead, placed last
+
+`anz_named_contacts.csv` preserves every validated person-linked route instead of
+choosing one contact per lead. Each row contains the company, person's name and
+title, `contact_type` (`email`, `phone`, or `linkedin`), and a plain
+`contact_value`. Generic office routes and LinkedIn URLs that are not explicitly
+associated with a named person are excluded.
 
 The checked-in uncapped full-scrape snapshot with these targeted/company lanes is
 `exports/anz_remote_leads_with_targeted_contacts.csv`; its matching company snapshot is

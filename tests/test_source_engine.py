@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +59,175 @@ def test_source_registry_loads() -> None:
     registry = SourceRegistryLoader().load()
     assert "manual_seed" in registry
     assert "openstreetmap" in registry
+
+
+@pytest.mark.asyncio
+async def test_export_writes_every_named_contact_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "export_leads_csv",
+        Path(__file__).resolve().parent.parent / "scripts" / "export_leads_csv.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    async with AsyncSessionLocal() as session:
+        workspace = Workspace(
+            name="Named contact export",
+            slug=f"named-contact-export-{uuid4().hex}",
+            billing_email="test@example.org",
+        )
+        session.add(workspace)
+        await session.flush()
+        first = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Alpha Realty",
+            primary_domain="alpha.example.org",
+            country_code="NZ",
+            industry="Real Estate",
+            employee_count=5,
+        )
+        second = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Beta Realty",
+            primary_domain="beta.example.org",
+            country_code="NZ",
+            industry="Real Estate",
+            employee_count=5,
+        )
+        session.add_all([first, second])
+        await session.flush()
+        first_email = "Alice Morgan (Property Manager) <alice@alpha.example.org>"
+        session.add_all(
+            [
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_work_email_approved",
+                    value=first_email,
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_work_email_approved",
+                    value=first_email,
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Alice Morgan (Property Manager) - https://www.linkedin.com/in/alice-morgan"
+                    ),
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="business_phone",
+                    value="Bob Taylor (Director) <+64 21 555 0102>",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="generic_email",
+                    value="office@alpha.example.org",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="social_profile_review_only",
+                    value="https://www.linkedin.com/in/unassigned-person",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=second.id,
+                    route_type="social_profile_review_only",
+                    value=(
+                        "Alice Morgan (Principal) - https://www.linkedin.com/in/alice-morgan-beta"
+                    ),
+                    is_verified=False,
+                ),
+            ]
+        )
+        await session.commit()
+        workspace_id = workspace.id
+        first_id = first.id
+        second_id = second.id
+
+    leads_path = tmp_path / "leads.csv"
+    companies_path = tmp_path / "companies.csv"
+    contacts_path = tmp_path / "named_contacts.csv"
+    base_argv = [
+        "export_leads_csv.py",
+        "--workspace-id",
+        str(workspace_id),
+        "--leads-path",
+        str(leads_path),
+        "--companies-path",
+        str(companies_path),
+    ]
+    monkeypatch.setattr(sys, "argv", base_argv)
+    await module.main()
+    leads_without_named_export = leads_path.read_bytes()
+    companies_without_named_export = companies_path.read_bytes()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        base_argv + ["--named-contacts-path", str(contacts_path)],
+    )
+    await module.main()
+
+    assert leads_path.read_bytes() == leads_without_named_export
+    assert companies_path.read_bytes() == companies_without_named_export
+    with contacts_path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows == [
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "named_contact_name": "Alice Morgan",
+            "named_contact_title": "Property Manager",
+            "contact_type": "email",
+            "contact_value": "alice@alpha.example.org",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "named_contact_name": "Alice Morgan",
+            "named_contact_title": "Property Manager",
+            "contact_type": "linkedin",
+            "contact_value": "https://www.linkedin.com/in/alice-morgan",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "named_contact_name": "Bob Taylor",
+            "named_contact_title": "Director",
+            "contact_type": "phone",
+            "contact_value": "+64 21 555 0102",
+        },
+        {
+            "company_id": str(second_id),
+            "company_name": "Beta Realty",
+            "primary_domain": "beta.example.org",
+            "named_contact_name": "Alice Morgan",
+            "named_contact_title": "Principal",
+            "contact_type": "linkedin",
+            "contact_value": "https://www.linkedin.com/in/alice-morgan-beta",
+        },
+    ]
 
 
 @pytest.mark.asyncio

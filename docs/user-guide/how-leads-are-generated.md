@@ -53,10 +53,11 @@ Every row in the export contains an `explanation` column. It looks like this:
 
 This means anyone can open the CSV and immediately understand why a company was selected.
 
-## 5. We export everything into two CSV files
+## 5. We export three CSV files
 
 - `anz_remote_leads_with_contacts.csv` — one row per lead, with targeted person fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_phone`, `named_contact_linkedin`), separate generic office fields (`company_email`, `company_phone`, `company_form`), and `best_*` fallback fields for compatibility.
 - `anz_all_companies.csv` — one row per company, with the primary domain and all collected contact routes.
+- `anz_named_contacts.csv` — one row per validated person-linked email, phone, or LinkedIn route. Contact values are plain values, and generic or unassigned routes are excluded.
 
 ## 6. How to run it yourself
 
@@ -82,10 +83,12 @@ python scripts/export_leads_csv.py \
   --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
   --region anz \
   --leads-path /tmp/anz_remote_leads_with_contacts.csv \
-  --companies-path /tmp/anz_all_companies.csv
+  --companies-path /tmp/anz_all_companies.csv \
+  --named-contacts-path /tmp/anz_named_contacts.csv
 ```
 
-Change the `--leads-path` and `--companies-path` values to save the CSV files wherever you like.
+Change the three output paths to save the CSV files wherever you like. Omit
+`--named-contacts-path` if you only need the existing lead and company exports.
 
 ## 7. Optional: get named hiring contacts
 

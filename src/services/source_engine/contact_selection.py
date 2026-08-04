@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from typing import TypedDict
 
 from services.source_engine.enricher import (
     email_matches_person,
@@ -105,6 +106,150 @@ def _parse_named_route(value: str) -> dict[str, str]:
     return {"name": name, "title": title, "value": parsed["value"]}
 
 
+class _NamedPersonRoutes(TypedDict):
+    name: str
+    title: str
+    emails: set[str]
+    phones: set[str]
+    linkedins: set[str]
+
+
+def _name_key(name: str) -> tuple[str, ...]:
+    return tuple(re.findall(r"[a-z]+", name.lower()))
+
+
+def _generic_email_matches_target(target_name: str, email: str) -> bool:
+    target = _name_key(target_name)
+    if len(target) < 2 or "@" not in email:
+        return False
+    local = tuple(re.findall(r"[a-z]+", email.split("@", 1)[0].lower()))
+    if not local:
+        return False
+    compact = "".join(local)
+    return local in (target, (target[0], target[-1])) or compact in {
+        "".join(target),
+        target[0] + target[-1],
+    }
+
+
+def _collect_named_people(
+    routes: list[dict[str, str]],
+    company_name: str = "",
+    target_name: str = "",
+) -> tuple[dict[str, _NamedPersonRoutes], list[str]]:
+    """Parse and group every validated person-associated route."""
+    candidates: dict[str, _NamedPersonRoutes] = {}
+
+    def _matches_target(name: str) -> bool:
+        if not target_name:
+            return True
+        candidate = _name_key(name)
+        target = _name_key(target_name)
+        if not candidate or not target:
+            return False
+        return candidate == target or (
+            len(candidate) >= 2
+            and len(target) >= 2
+            and (len(candidate) == 2 or len(target) == 2)
+            and candidate[0] == target[0]
+            and candidate[-1] == target[-1]
+        )
+
+    def _upsert(
+        name: str,
+        title: str = "",
+        email: str = "",
+        phone: str = "",
+        linkedin: str = "",
+    ) -> None:
+        person = _validated_person(name, title, company_name)
+        if not person or not _matches_target(name):
+            return
+        name, title = person
+        key = " ".join(_name_key(name))
+        existing = candidates.get(key)
+        if not existing:
+            existing = {
+                "name": name,
+                "title": title,
+                "emails": set(),
+                "phones": set(),
+                "linkedins": set(),
+            }
+            candidates[key] = existing
+        elif title and not existing["title"]:
+            existing["title"] = title
+        if email:
+            existing["emails"].add(email)
+        if phone:
+            existing["phones"].add(phone)
+        if linkedin:
+            existing["linkedins"].add(linkedin)
+
+    generic_emails: list[str] = []
+    for route in sorted(routes, key=lambda item: (item["type"], item["value"].lower())):
+        route_type = route["type"]
+        value = route["value"]
+        if route_type == "named_contact":
+            match = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", value.strip())
+            if match:
+                _upsert(match.group(1).strip(), (match.group(2) or "").strip())
+        elif route_type == "generic_email" and target_name:
+            email = extract_email(value)
+            if email and _generic_email_matches_target(target_name, email):
+                generic_emails.append(email)
+        elif route_type in (
+            "named_work_email_approved",
+            "business_phone",
+            "social_profile_review_only",
+        ):
+            parsed = _parse_named_route(value)
+            if not parsed:
+                continue
+            name = parsed["name"]
+            title = parsed["title"]
+            payload = parsed["value"]
+            if route_type == "named_work_email_approved":
+                email = extract_email(payload)
+                if email and email_matches_person(name, email):
+                    _upsert(name, title=title, email=email)
+            elif route_type == "business_phone":
+                phone = extract_phone(payload)
+                if phone:
+                    _upsert(name, title=title, phone=phone)
+            else:
+                url = extract_linkedin_profile_url(payload)
+                if url and url.startswith("http"):
+                    _upsert(name, title=title, linkedin=url)
+    return candidates, generic_emails
+
+
+def list_named_contact_routes(
+    routes: list[dict[str, str]], company_name: str = ""
+) -> list[dict[str, str]]:
+    """Return every validated person-linked email, phone, and LinkedIn route."""
+    candidates, _ = _collect_named_people(routes, company_name)
+    results: list[dict[str, str]] = []
+    for candidate in sorted(
+        candidates.values(), key=lambda item: (item["name"].lower(), item["title"].lower())
+    ):
+        for contact_type, values in (
+            ("email", candidate["emails"]),
+            ("phone", candidate["phones"]),
+            ("linkedin", candidate["linkedins"]),
+        ):
+            for value in sorted(values, key=str.lower):
+                results.append(
+                    {
+                        "name": candidate["name"],
+                        "title": candidate["title"],
+                        "contact_type": contact_type,
+                        "contact_value": value,
+                    }
+                )
+    return results
+
+
 def select_named_person(
     routes: list[dict[str, str]],
     company_name: str = "",
@@ -123,107 +268,7 @@ def select_named_person(
     A business_phone display route is person-specific only when it explicitly
     carries the person's name.
     """
-    candidates: dict[str, dict[str, str]] = {}
-
-    def _name_key(name: str) -> tuple[str, ...]:
-        return tuple(re.findall(r"[a-z]+", name.lower()))
-
-    def _matches_target(name: str) -> bool:
-        if not target_name:
-            return True
-        candidate = _name_key(name)
-        target = _name_key(target_name)
-        if not candidate or not target:
-            return False
-        return candidate == target or (
-            len(candidate) >= 2
-            and len(target) >= 2
-            and (len(candidate) == 2 or len(target) == 2)
-            and candidate[0] == target[0]
-            and candidate[-1] == target[-1]
-        )
-
-    def _generic_email_matches_target(email: str) -> bool:
-        target = _name_key(target_name)
-        if len(target) < 2 or "@" not in email:
-            return False
-        local = tuple(re.findall(r"[a-z]+", email.split("@", 1)[0].lower()))
-        if not local:
-            return False
-        compact = "".join(local)
-        return local in (target, (target[0], target[-1])) or compact in {
-            "".join(target),
-            target[0] + target[-1],
-        }
-
-    def _upsert(
-        name: str,
-        title: str = "",
-        email: str = "",
-        phone: str = "",
-        linkedin: str = "",
-    ) -> None:
-        person = _validated_person(name, title, company_name)
-        if not person or not _matches_target(name):
-            return
-        name, title = person
-        key = " ".join(_name_key(name))
-        existing = candidates.get(key)
-        if not existing:
-            candidates[key] = {
-                "name": name,
-                "title": title,
-                "email": email,
-                "phone": phone,
-                "linkedin": linkedin,
-            }
-            return
-        if title and not existing.get("title"):
-            existing["title"] = title
-        if email and not existing.get("email"):
-            existing["email"] = email
-        if phone and not existing.get("phone"):
-            existing["phone"] = phone
-        if linkedin and not existing.get("linkedin"):
-            existing["linkedin"] = linkedin
-
-    generic_emails: list[str] = []
-    for r in sorted(routes, key=lambda route: (route["type"], route["value"].lower())):
-        t = r["type"]
-        v = r["value"]
-        if t == "named_contact":
-            m = re.match(r"^(.*?)\s*(?:\((.*?)\))?\s*$", v.strip())
-            if not m:
-                continue
-            name = m.group(1).strip()
-            person = _validated_person(name, (m.group(2) or "").strip())
-            if person:
-                name, title = person
-                _upsert(name, title=title)
-        elif t == "generic_email" and target_name:
-            email = extract_email(v)
-            if email and _generic_email_matches_target(email):
-                generic_emails.append(email)
-        elif t in ("named_work_email_approved", "business_phone", "social_profile_review_only"):
-            parsed = _parse_named_route(v)
-            if not parsed:
-                continue
-            name = parsed["name"]
-            title = parsed["title"]
-            payload = parsed["value"]
-            if t == "named_work_email_approved":
-                email = extract_email(payload)
-                if email and email_matches_person(name, email):
-                    _upsert(name, title=title, email=email)
-            elif t == "business_phone":
-                phone = extract_phone(payload)
-                if phone:
-                    _upsert(name, title=title, phone=phone)
-            elif t == "social_profile_review_only":
-                url = extract_linkedin_profile_url(payload)
-                if url and url.startswith("http"):
-                    _upsert(name, title=title, linkedin=url)
-
+    candidates, generic_emails = _collect_named_people(routes, company_name, target_name)
     matching = list(candidates.values())
     if target_name and matching:
         target_key = _name_key(target_name)
@@ -233,10 +278,20 @@ def select_named_person(
         elif len(matching) > 1:
             return {}
     if not matching and target_name and generic_emails:
-        _upsert(target_name, email=generic_emails[0])
-        matching = list(candidates.values())
-    elif len(matching) == 1 and generic_emails and not matching[0].get("email"):
-        matching[0]["email"] = generic_emails[0]
+        person = _validated_person(target_name, "", company_name)
+        if person:
+            name, title = person
+            matching = [
+                {
+                    "name": name,
+                    "title": title,
+                    "emails": {generic_emails[0]},
+                    "phones": set(),
+                    "linkedins": set(),
+                }
+            ]
+    elif len(matching) == 1 and generic_emails and not matching[0]["emails"]:
+        matching[0]["emails"].add(generic_emails[0])
 
     if not matching:
         return {}
@@ -327,11 +382,9 @@ def select_named_person(
             0,
         )
 
-    def _score(c: dict[str, str]) -> tuple[bool, int, int]:
-        contactability = (
-            bool(c.get("email")) * 3 + bool(c.get("phone")) * 2 + bool(c.get("linkedin"))
-        )
-        return bool(contactability), contactability, _role_score(c.get("title", ""))
+    def _score(c: _NamedPersonRoutes) -> tuple[bool, int, int]:
+        contactability = bool(c["emails"]) * 3 + bool(c["phones"]) * 2 + bool(c["linkedins"])
+        return bool(contactability), contactability, _role_score(c["title"])
 
     best = max(
         matching,
@@ -339,10 +392,10 @@ def select_named_person(
     )
     return {
         "name": best["name"],
-        "title": best.get("title", ""),
-        "email": best.get("email", ""),
-        "phone": best.get("phone", ""),
-        "linkedin": best.get("linkedin", ""),
+        "title": best["title"],
+        "email": sorted(best["emails"], key=str.lower)[0] if best["emails"] else "",
+        "phone": sorted(best["phones"], key=str.lower)[0] if best["phones"] else "",
+        "linkedin": sorted(best["linkedins"], key=str.lower)[0] if best["linkedins"] else "",
     }
 
 
@@ -369,6 +422,7 @@ def select_lead_person(
 
 
 __all__ = [
+    "list_named_contact_routes",
     "select_company_routes",
     "select_contact_routes",
     "select_lead_person",

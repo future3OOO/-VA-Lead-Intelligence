@@ -16,6 +16,7 @@ In:
 - Same-card person/email/phone/LinkedIn association and canonical LinkedIn profile handling.
 - Role-aware deterministic contact selection for generic sector lead titles.
 - One replacement targeted-contact backfill CLI that snapshots eligible domains, partitions them into three disjoint shards, runs each phase concurrently, and fails if any shard fails.
+- A normalized named-contact export that retains every validated person-linked email, phone, and LinkedIn route without changing lead or company row grain.
 - Focused behavior tests, operator documentation, full validation, clean scrape, export, and accuracy/performance audit.
 
 Out:
@@ -41,7 +42,7 @@ Out:
 
 - Changed boundary: `team_pages._extract_from_soup` and the `company_web` reuse path that turns one official website page into evidence-bound contact routes.
 - Changed operator boundary: the missing-contact backfill command and its deterministic domain partition.
-- Changed export boundary: `_lead_named_contact` / `_best_named_contact` choose the strongest role-relevant person without borrowing another person's details.
+- Changed export boundary: `select_lead_person` chooses the strongest role-relevant person for each lead, while `list_named_contact_routes` projects every validated person-linked route into the normalized named-contact export. Both use the same association rules.
 - Upstream callers: `TeamPagesAdapter.fetch`, `CompanyWebAdapter._crawl_domain`, and the targeted-contact backfill CLI.
 - Adjacent consumers: `enrich_contact_routes`, `SourceRunner._persist_hit`, company contact-route persistence, and both targeted CSV exports.
 - No-change surfaces requiring proof: `SourceRunner.run` signature/status/counters, company/workspace isolation, source-hit upsert replay, resolver franchise/shared-domain behavior, contact normalization, generic company contacts, scoring/ranks, SSRF/redirect/robots/per-host limiting, API schemas, and existing six-source registry.
@@ -51,7 +52,7 @@ Out:
 ## Module shape
 
 - Public extraction interface: `_extract_from_soup(soup, base_url, domain)`; deepen the existing module rather than add another parser.
-- Public selection interface: `contact_selection.select_lead_person(...)`; keep the exporter thin while one deep module hides route parsing, validation, role matching, and deterministic ranking.
+- Public selection interface: `contact_selection.select_lead_person(...)` and `contact_selection.list_named_contact_routes(...)`; keep the exporter thin while one deep module hides route parsing, validation, role matching, deterministic ranking, and all-route projection.
 - Public operator interface: one targeted-contact backfill CLI replacing `extract_team_pages_missing.py` and `extract_company_web_missing.py`.
 - New CLI justification: it replaces two duplicated SQL/runner scripts and hides a real two-phase, three-shard orchestration and failure-aggregation workflow.
 - New selection-module justification: the production gate identified an already oversized exporter; moving the cohesive 337-line selection policy behind four stable functions reduces that file and creates a real testable seam instead of another wrapper.
@@ -86,6 +87,7 @@ Out:
 - [x] Re-walk affected/no-change surfaces and run focused plus full gates.
 - [x] Run clean three-shard scrape, export, accuracy audit, and runtime reporting.
 - [x] Run independent precommit challenge, production quality gate, and cleanup.
+- [x] Add and audit the normalized named-contact email/phone/LinkedIn export.
 - [ ] Commit, push, open/update the owning PR, and close the exact-head reviewer loop.
 
 ## Self-critique incorporated

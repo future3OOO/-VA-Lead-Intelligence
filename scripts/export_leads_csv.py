@@ -16,6 +16,7 @@ from db.models.company import Company
 from db.models.contact_route import ContactRoute
 from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
+from services.source_engine.contact_selection import list_named_contact_routes
 from services.source_engine.contact_selection import select_company_routes as _best_company_contact
 from services.source_engine.contact_selection import select_contact_routes as _best_contact
 from services.source_engine.contact_selection import select_lead_person as _lead_named_contact
@@ -685,6 +686,11 @@ async def main() -> None:
     parser.add_argument("--leads-path", default="/tmp/small_business_leads_with_contacts.csv")
     parser.add_argument("--companies-path", default="/tmp/all_companies.csv")
     parser.add_argument(
+        "--named-contacts-path",
+        default="",
+        help="Optional normalized CSV containing every validated person-linked route",
+    )
+    parser.add_argument(
         "--region",
         choices=["all", "anz"],
         default="all",
@@ -701,6 +707,7 @@ async def main() -> None:
     workspace_id = args.workspace_id
     leads_path = args.leads_path
     companies_path = args.companies_path
+    named_contacts_path = args.named_contacts_path
     region_filter = args.region
     min_rank = args.min_rank
 
@@ -731,6 +738,53 @@ async def main() -> None:
             )
         ).all()
         companies_by_id = {c.id: c for c in company_rows}
+
+        if named_contacts_path:
+            named_contact_fields = [
+                "company_id",
+                "company_name",
+                "primary_domain",
+                "named_contact_name",
+                "named_contact_title",
+                "contact_type",
+                "contact_value",
+            ]
+            named_contact_count = 0
+            with open(named_contacts_path, "w", newline="", encoding="utf-8") as f:
+                named_writer = csv.DictWriter(
+                    f,
+                    fieldnames=named_contact_fields,
+                    lineterminator="\n",
+                )
+                named_writer.writeheader()
+                for named_company in company_rows:
+                    for route in list_named_contact_routes(
+                        contact_by_company.get(named_company.id, []),
+                        named_company.canonical_name,
+                    ):
+                        contact_type = route["contact_type"]
+                        named_row = {
+                            "company_id": named_company.id,
+                            "company_name": named_company.canonical_name,
+                            "primary_domain": named_company.primary_domain or "",
+                            "named_contact_name": route["name"],
+                            "named_contact_title": route["title"],
+                            "contact_type": contact_type,
+                            "contact_value": route["contact_value"],
+                        }
+                        named_writer.writerow(
+                            {
+                                field: _csv_safe(
+                                    value,
+                                    phone_number=(
+                                        field == "contact_value" and contact_type == "phone"
+                                    ),
+                                )
+                                for field, value in named_row.items()
+                            }
+                        )
+                        named_contact_count += 1
+            print(f"Exported {named_contact_count} named contact routes to {named_contacts_path}")
 
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
