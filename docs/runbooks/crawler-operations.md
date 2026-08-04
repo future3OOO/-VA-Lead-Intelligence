@@ -6,11 +6,12 @@ first-time setup and copy/paste commands.
 
 ## Definition of a complete run
 
-A current export requires all three phases to succeed for the same workspace:
+A current workbook requires all four steps to succeed for the same workspace:
 
 1. `openstreetmap`, `finance_directory`, and `nz_finance_advisers`
 2. `extract_targeted_contacts.py --shards 3` with no `--max-domains` limit
 3. `export_leads_csv.py` after phases 1 and 2 finish
+4. `build_leads_workbook.py` from the three canonical CSV exports
 
 The result is a full run of the checked-in bounds. It is not an exhaustive list
 of all Australian and New Zealand companies.
@@ -22,6 +23,7 @@ docker compose ps
 .venv/bin/python scripts/run_source_engine.py --help
 .venv/bin/python scripts/extract_targeted_contacts.py --help
 .venv/bin/python scripts/export_leads_csv.py --help
+.venv/bin/python scripts/build_leads_workbook.py --help
 ```
 
 Confirm that:
@@ -81,6 +83,18 @@ mkdir -p exports
   --companies-alias-path exports/anz_all_companies_targeted.csv
 ```
 
+### 4. Build the workbook
+
+```bash
+.venv/bin/python scripts/build_leads_workbook.py
+```
+
+The output is
+`exports/anz_full_leads_with_targeted_contacts.xlsx`. It contains `Leads`,
+`Named Contacts`, and `Companies` sheets sourced directly from the three
+canonical CSV files. Generated CSV and XLSX files remain local under
+`exports/`; they are ignored by Git.
+
 ## Resume after a failure
 
 Do not delete the workspace. Fix the failing dependency or source, then rerun
@@ -128,7 +142,7 @@ measured adapter concurrency changes with tests.
 
 ## Post-run verification
 
-Check that all five files exist and are non-empty:
+Check that all six files exist and are non-empty:
 
 ```bash
 wc -l \
@@ -137,6 +151,8 @@ wc -l \
   exports/anz_all_companies.csv \
   exports/anz_all_companies_targeted.csv \
   exports/anz_named_contacts.csv
+
+test -s exports/anz_full_leads_with_targeted_contacts.xlsx
 ```
 
 Confirm each alias is byte-identical to its canonical export:

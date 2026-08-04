@@ -99,7 +99,12 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
     _ENDPOINTS = (
         "https://z.overpass-api.de/api/interpreter",
         "https://lz4.overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     )
+    _QUERY_ATTEMPTS = 3
+    _SERVER_TIMEOUT_SECONDS = 60
+    _REQUEST_TIMEOUT_SECONDS = 70.0
+    _QUERY_DEADLINE_SECONDS = 180.0
     _OSM_WEB_URL = "https://www.openstreetmap.org"
 
     # (key, value) -> (title used for VA-role signal, human-readable category label)
@@ -254,7 +259,7 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
             for t in element_types
         )
         return (
-            f"[out:json][timeout:180];\n"
+            f"[out:json][timeout:{self._SERVER_TIMEOUT_SECONDS}];\n"
             f'area[name="{self._escape(area)}"]->.searchArea;\n'
             f"(\n"
             f"{selectors}\n"
@@ -266,13 +271,19 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
         """Post a query to the configured Overpass endpoints with retries."""
         last_error: Exception | None = None
         client_error = False
-        for attempt in range(2):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._QUERY_DEADLINE_SECONDS
+        for attempt in range(self._QUERY_ATTEMPTS):
             for endpoint in self._ENDPOINTS:
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    break
                 try:
                     response = await self._http_post(
                         endpoint,
                         content=query,
                         headers={"Content-Type": "text/plain"},
+                        timeout=min(self._REQUEST_TIMEOUT_SECONDS, remaining),
                     )
                 except Exception as exc:
                     last_error = exc
@@ -296,8 +307,11 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
                     last_error = exc
             if client_error:
                 break
-            if attempt == 0:
-                await asyncio.sleep(1.0)
+            if attempt < self._QUERY_ATTEMPTS - 1:
+                delay = float(2**attempt)
+                if deadline - loop.time() <= delay:
+                    break
+                await asyncio.sleep(delay)
         if last_error:
             self.metrics.record_error("fetch")
         return None

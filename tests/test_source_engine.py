@@ -267,25 +267,6 @@ async def test_export_writes_one_readable_row_per_named_person(
             "named_contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan-beta",
         },
     ]
-
-
-def test_checked_in_contact_exports_are_readable_and_synchronized() -> None:
-    exports_dir = Path(__file__).resolve().parent.parent / "exports"
-    contacts_path = exports_dir / "anz_named_contacts.csv"
-    with contacts_path.open(newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle))
-
-    assert rows
-    assert list(rows[0]) == [
-        "company_id",
-        "company_name",
-        "primary_domain",
-        "named_contact_name",
-        "named_contact_title",
-        "named_contact_emails",
-        "named_contact_phones",
-        "named_contact_linkedin_urls",
-    ]
     keys = [(row["company_id"], row["named_contact_name"].casefold()) for row in rows]
     assert len(keys) == len(set(keys))
     for row in rows:
@@ -298,18 +279,6 @@ def test_checked_in_contact_exports_are_readable_and_synchronized() -> None:
             )
         )
         assert "<" not in "".join(row.values())
-
-    for canonical_name, alias_name in (
-        (
-            "anz_remote_leads_with_contacts.csv",
-            "anz_remote_leads_with_targeted_contacts.csv",
-        ),
-        ("anz_all_companies.csv", "anz_all_companies_targeted.csv"),
-    ):
-        canonical = (exports_dir / canonical_name).read_bytes()
-        alias = (exports_dir / alias_name).read_bytes()
-        assert canonical
-        assert alias == canonical
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -26,3 +28,29 @@ def test_runbooks_exist() -> None:
     ]
     for name in required:
         assert (runbook_dir / name).exists(), f"Missing runbook: {name}"
+
+
+def test_readme_lists_every_configured_openstreetmap_tag() -> None:
+    registry = yaml.safe_load(
+        (REPO_ROOT / "config" / "sources" / "source-registry.yaml").read_text()
+    )
+    tags = registry["sources"]["openstreetmap"]["adapter_config"]["tags"]
+    readme = (REPO_ROOT / "README.md").read_text()
+
+    assert len(tags) == 16
+    for tag in tags:
+        row = f"| `{tag['key']}` | `{tag['value']}` | {tag['title']} | {tag['category']} |"
+        assert readme.count(row) == 1
+
+    for detail in (
+        "https://z.overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "operator` tag is retained as listing context only",
+        "`branch` or `addr:suburb` value is appended",
+        "Latitude/longitude is used when no address is available",
+        "a website remains company metadata",
+        "0.2 requests/second",
+        "bounded per-request and overall query",
+    ):
+        assert detail in readme

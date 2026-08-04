@@ -95,6 +95,12 @@ Use `anz_named_contacts.csv` when you want one readable row per validated
 person. Use `anz_remote_leads_with_targeted_contacts.csv` when you want every
 ranked lead with both targeted and generic contact lanes.
 
+For normal review, run `scripts/build_leads_workbook.py` after the CSV export
+and open `anz_full_leads_with_targeted_contacts.xlsx`. Its `Leads`,
+`Named Contacts`, and `Companies` sheets preserve the same data in compact,
+filtered views. The workbook and CSVs are local generated artifacts under
+`exports/`; none are committed to the repository.
+
 ## Expanding the scope
 
 Other industries can use the same pipeline when their normal operations create

@@ -35,6 +35,11 @@ def check_git_clean() -> tuple[bool, str]:
     return not dirty_files.strip(), dirty_files
 
 
+def check_no_tracked_exports() -> tuple[bool, list[str]]:
+    tracked = run(["git", "ls-files", "exports"]).stdout.splitlines()
+    return not tracked, tracked
+
+
 def check_adrs() -> tuple[bool, list[str]]:
     adr_dir = REPO_ROOT / "docs" / "adr"
     statuses: list[str] = []
@@ -200,6 +205,12 @@ def main() -> int:
             return fail(f"DOD report {req_path} flagged blockers")
 
     # Validation gates
+    exports_ok, tracked_exports = check_no_tracked_exports()
+    if not exports_ok:
+        for path in tracked_exports:
+            print(path)
+        return fail("Generated files under exports/ must not be tracked by Git.")
+
     clean, dirty_files = check_git_clean()
     if not clean:
         print(dirty_files)

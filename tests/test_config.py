@@ -37,6 +37,29 @@ def test_web_contact_shards_limit_total_domain_concurrency() -> None:
         assert registry[source_key].rate_limit["max_total_concurrency"] == 10
 
 
+def test_openstreetmap_keeps_the_complete_business_tag_mapping() -> None:
+    registry = SourceRegistryLoader().load()
+    tags = registry["openstreetmap"].adapter_config["tags"]
+    assert [(tag["key"], tag["value"]) for tag in tags] == [
+        ("office", "estate_agent"),
+        ("office", "property_manager"),
+        ("office", "real_estate"),
+        ("office", "accountant"),
+        ("office", "lawyer"),
+        ("office", "insurance"),
+        ("office", "financial_advisor"),
+        ("office", "bookkeeper"),
+        ("office", "construction_company"),
+        ("office", "administrative"),
+        ("craft", "plumber"),
+        ("craft", "electrician"),
+        ("craft", "carpenter"),
+        ("craft", "painter"),
+        ("craft", "roofer"),
+        ("craft", "hvac"),
+    ]
+
+
 def test_validate_source_registry_rejects_unknown_allowed_fields() -> None:
     """Unknown allowed_fields tokens such as names, titles, and social_profiles are rejected."""
     import importlib.util

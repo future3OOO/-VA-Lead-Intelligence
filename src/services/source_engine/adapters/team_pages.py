@@ -857,7 +857,12 @@ class TeamPagesAdapter(BaseSourceAdapter):
         self._counter = 0
 
         async def process(domain: str) -> dict[str, Any] | None:
-            return await self._process_domain(domain, paths, len(domains), max_pages)
+            try:
+                return await self._process_domain(domain, paths, len(domains), max_pages)
+            except httpx.HTTPError as exc:
+                self.metrics.record_error("fetch")
+                print(f"[team_pages] network error https://{domain}: {exc}", flush=True)
+                return None
 
         results = [
             result for result in await self._map_bounded(domains, process) if result is not None

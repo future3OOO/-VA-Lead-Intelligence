@@ -3,7 +3,7 @@
 VA Lead Intelligence builds a ranked list of Australian and New Zealand
 businesses that may benefit from remote administrative support. It collects
 business listings, finds contact details on official company websites, scores
-the results, and exports readable CSV files.
+the results, and exports readable CSV files plus a three-sheet Excel workbook.
 
 This is a targeted prospecting tool. It is **not** a complete directory of every
 business in Australia or New Zealand, and a lead does not mean that the company
@@ -36,14 +36,59 @@ Coverage is limited by the data published by each source:
 Therefore, “full scrape” in this guide means a **full run of the current
 configuration**, not exhaustive ANZ market coverage.
 
+## How OpenStreetMap discovery works
+
+`openstreetmap` queries real business nodes through the public Overpass API. It
+tries these endpoints in order and falls back when the first is unavailable or
+rate-limited:
+
+1. `https://z.overpass-api.de/api/interpreter`
+2. `https://lz4.overpass-api.de/api/interpreter`
+3. `https://maps.mail.ru/osm/tools/overpass/api/interpreter`
+
+The complete checked-in business mapping is:
+
+| OSM key | OSM value | Synthetic workload title | VA-fit category |
+|---|---|---|---|
+| `office` | `estate_agent` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `property_manager` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `real_estate` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `accountant` | Accountant / Accounting Practice | accounting and tax services practice |
+| `office` | `lawyer` | Lawyer / Legal Practice | law firm and legal services practice |
+| `office` | `insurance` | Insurance Broker / Insurance Office | insurance brokerage and financial services |
+| `office` | `financial_advisor` | Financial Planner / Financial Advisory | financial planning and advisory practice |
+| `office` | `bookkeeper` | Bookkeeper / Bookkeeping Practice | bookkeeping and accounting support practice |
+| `office` | `construction_company` | Operations Coordinator / Construction Office | construction and home services business |
+| `office` | `administrative` | Administrative Assistant / Office | administrative and business support services |
+| `craft` | `plumber` | Maintenance Coordinator / Plumbing Services | plumbing and home services trade |
+| `craft` | `electrician` | Maintenance Coordinator / Electrical Services | electrical contractor and home services trade |
+| `craft` | `carpenter` | Maintenance Coordinator / Carpentry Services | carpentry and home services trade |
+| `craft` | `painter` | Maintenance Coordinator / Painting Services | painting and home services trade |
+| `craft` | `roofer` | Maintenance Coordinator / Roofing Services | roofing and home services trade |
+| `craft` | `hvac` | Maintenance Coordinator / HVAC Services | hvac and home services trade |
+
+Each listing contributes its name, website, email, phone, address tags, brand,
+and geographic coordinates. A `branch` or `addr:suburb` value is appended to
+the company name when present so distinct offices are not collapsed. The
+`operator` tag is retained as listing context only; it is never treated as a
+person. Latitude/longitude is used when no address is available.
+
+The synthetic title describes the likely administrative workload for that
+sector. It is not an observed vacancy. OSM email and phone tags become contact
+routes; a website remains company metadata and is not mislabeled as a contact
+form. Requests run at the registry limit of 0.2 requests/second, use node-only
+queries, and retry both endpoints with bounded per-request and overall query
+deadlines after transient timeout or rate-limit failures.
+
 ## What the pipeline produces
 
-The normal run has three phases:
+The normal run has four steps:
 
 1. **Discover companies** from OpenStreetMap and the two finance directories.
 2. **Enrich contacts** from official company websites using three parallel
    shards.
 3. **Export** ranked leads, companies, and one-row-per-person named contacts.
+4. **Build the workbook** from those three canonical CSV exports.
 
 The final files are written under `exports/`:
 
@@ -54,6 +99,10 @@ The final files are written under `exports/`:
 | `anz_all_companies.csv` | One row per company with the best collected routes |
 | `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
 | `anz_named_contacts.csv` | One row per validated person, with separate email, phone, and LinkedIn columns |
+| `anz_full_leads_with_targeted_contacts.xlsx` | Three sheets: complete Leads, one-row-per-person Named Contacts, and Companies |
+
+Everything under `exports/` is a generated local artifact. CSV and XLSX output
+files are intentionally ignored by Git and must not be committed or pushed.
 
 Named-person fields are kept separate from generic office details:
 
@@ -203,6 +252,27 @@ mkdir -p exports
 Open `exports/anz_remote_leads_with_targeted_contacts.csv` for the complete
 lead list and `exports/anz_named_contacts.csv` for the clean person-level view.
 Re-running the export replaces those files from the current database state.
+
+### 6. Build the readable workbook
+
+Build the workbook from the three canonical CSVs:
+
+```bash
+.venv/bin/python scripts/build_leads_workbook.py
+```
+
+This writes
+`exports/anz_full_leads_with_targeted_contacts.xlsx` with these sheets:
+
+| Sheet | Contents |
+|---|---|
+| `Leads` | Every ranked lead and all 24 lead-export columns, including targeted-person and generic-company contact lanes |
+| `Named Contacts` | One readable row per validated person with separate name, title, email, phone, and LinkedIn columns |
+| `Companies` | One row per company with its best company routes and selected named-contact routes |
+
+The builder validates the exact CSV headers before writing, freezes the header
+row, enables filters, keeps contact values as text, uses compact non-wrapped
+rows, and does not re-score, re-match, or otherwise change export data.
 
 ## Safe reruns and partial runs
 

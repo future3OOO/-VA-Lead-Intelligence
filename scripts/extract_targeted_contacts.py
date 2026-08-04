@@ -148,10 +148,14 @@ async def run_targeted_contact_backfill(
     shard_count: int = 3,
     max_domains: int | None = None,
 ) -> dict[str, Any]:
-    """Run team-page then deeper company-web backfills across concurrent shards."""
+    """Run company-web then team-page backfills across concurrent shards."""
     if shard_count < 1:
         raise ValueError("shard_count must be at least 1")
-    company_domains = await get_missing_contact_domains(workspace_id, max_domains)
+    company_domains = await get_missing_contact_domains(
+        workspace_id,
+        max_domains,
+        exclude_completed_source="company_web",
+    )
     company_results = await _run_source_shards(
         workspace_id,
         campaign_id,
@@ -162,7 +166,7 @@ async def run_targeted_contact_backfill(
     team_domains = await get_missing_contact_domains(
         workspace_id,
         max_domains,
-        exclude_completed_source="company_web",
+        exclude_completed_source="team_pages",
     )
     team_results = await _run_source_shards(
         workspace_id,
