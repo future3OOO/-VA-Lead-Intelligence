@@ -1,187 +1,152 @@
 # VA Lead Intelligence
 
-Production-ready lead-generation platform for virtual assistants, built on FastAPI, SQLAlchemy, Pydantic, Temporal, and Terraform.
+VA Lead Intelligence builds a ranked list of Australian and New Zealand
+businesses that may benefit from remote administrative support. It collects
+business listings, finds contact details on official company websites, scores
+the results, and exports readable CSV files plus a three-sheet Excel workbook.
 
-## What this does (in plain English)
+This is a targeted prospecting tool. It is **not** a complete directory of every
+business in Australia or New Zealand, and a lead does not mean that the company
+is actively hiring.
 
-This platform finds **real Australian and New Zealand businesses** that are likely to need remote virtual-assistant (VA) support, scores them, and exports a ranked list with contact details and a short explanation of *why* each one is a good prospect.
+## Current coverage
 
-### Where the leads come from
+The checked-in configuration searches the country-level OpenStreetMap areas
+`Australia` and `New Zealand`, plus two bounded finance directories. It targets
+these sectors:
 
-The main live sources are public, bounded directories and the company's own website:
+| Sector | Examples currently included |
+|---|---|
+| Property and real estate | Estate agencies and property managers |
+| Financial services | Accountants, bookkeepers, insurance offices, financial advisers, and Australian/NZ finance-directory profiles |
+| Legal services | Lawyers and legal practices |
+| Trades and construction | Construction companies, plumbers, electricians, carpenters, painters, roofers, and HVAC businesses |
+| Business support | Businesses tagged as administrative offices |
 
-- `openstreetmap` — public Overpass API for real ANZ business listings (real estate, property management, accounting, legal, insurance/financial advisory, bookkeeping, construction, trades).
-- `finance_directory` — public Australian finance-professionals directory (`financedirectory.net.au`).
-- `nz_finance_advisers` — public New Zealand FSPR adviser directory (`financeadvisers.co.nz`).
-- `team_pages` — bounded crawl of `/team`, `/about`, `/people`, `/leadership`, `/directors`, `/contact`, etc., to extract named contacts, emails, phones, and LinkedIn profiles.
-- `company_web` — bounded breadth-first website crawl for contact routes.
-- `manual_seed` — CSV/JSON seed import.
+Coverage is limited by the data published by each source:
 
-We do **not** scrape LinkedIn, Google, or private business directories, and we do **not** use fake data.
+- OpenStreetMap queries the configured business **nodes** in Australia and New
+  Zealand. Missing or differently tagged businesses will not appear.
+- `finance_directory` processes at most 1,200 Australian profile pages per run.
+- `nz_finance_advisers` processes at most 30 New Zealand list pages per run.
+- Official-site enrichment only visits domains found during the source run and
+  only keeps contact details that can be validated and associated safely.
+- Each website crawl has a 30-second domain budget.
 
-### How we decide a company needs a VA
+Therefore, “full scrape” in this guide means a **full run of the current
+configuration**, not exhaustive ANZ market coverage.
 
-Each business type is mapped to the kind of remote admin work that business usually needs:
+## How OpenStreetMap discovery works
 
-| Business type | Typical VA work |
-|---------------|-----------------|
-| Real estate / property management | Listing admin, CRM updates, buyer/tenant follow-up, appointment scheduling, rent-roll data entry |
-| Accounting / bookkeeping / tax | Client file admin, data entry, invoicing, reconciliations, inbox/CRM management, compliance paperwork |
-| Insurance / mortgage broking | Claims/loan file processing, scheduling, customer enquiries, CRM updates, documentation |
-| Legal / conveyancing | Client intake, document prep, diary management, billing admin, filing |
-| Trades / construction / home services | Job scheduling, dispatch, invoicing, customer follow-up, maintenance coordination |
-
-Every lead gets a **score out of 100** and a rank:
-
-- **High (75+ and has a usable email, phone, or actionable contact-form URL)** — strong prospect fit with a direct outreach route.
-- **Medium (55–74, or 75+ without a contact route)** — good sector but the available signal is weaker, or the score is high but no contact route is available yet.
-- **Low (<55)** — weaker sector or service fit.
-
-Directory and OpenStreetMap rows are prospecting signals, not evidence that a company is hiring.
-
-### What you get
-
-The export is a CSV with one row per lead:
-
-- `company_name` and `primary_domain`
-- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_phone` / `named_contact_linkedin` — the contact explicitly associated with the person named by that lead, when available
-- `company_email` / `company_phone` / `company_form` — generic company or office routes kept separate from the named person
-- `best_email`, `best_phone`, `best_form` — the named person's route first, then the company route as a fallback; international phones retain their `+` country code
-- `job_title` — a synthetic sector label for directory/listing sources
-- `location` — city/suburb or lat/lon in Australia / New Zealand
-- `workplace_type` — `inferred_remote_friendly` for directory/listing prospects
-- `category` — Property/Facilities, Financial Services, Legal/Professional, Home Services/Construction, etc.
-- `qualification_score` and `rank` — 0–100 score and High/Medium/Low
-- `source_url` — link back to the source listing
-- `explanation` — a short, human-readable reason why this lead scored well, placed last so it does not obscure the contact columns
-
-Each source is configured in `config/sources/source-registry.yaml` with rate limits, kill switches, and retention policies. All web-crawling sources (`team_pages`, `company_web`, `finance_directory`, and `nz_finance_advisers`) fetch and respect `robots.txt`. `openstreetmap` uses the public Overpass API and does not touch `robots.txt`.
-
-## How we use OpenStreetMap
-
-`openstreetmap` is the largest public source. It queries the Overpass API for real business nodes in Australia and New Zealand and turns each listing into a VA-fit lead.
-
-### Endpoints
-
-The adapter tries these public Overpass endpoints in order and falls back if one is rate-limited or overloaded:
+`openstreetmap` queries real business nodes through the public Overpass API. It
+tries these endpoints in order and falls back when the first is unavailable or
+rate-limited:
 
 1. `https://z.overpass-api.de/api/interpreter`
 2. `https://lz4.overpass-api.de/api/interpreter`
+3. `https://maps.mail.ru/osm/tools/overpass/api/interpreter`
 
-### Business tags we query
+The complete checked-in business mapping is:
 
-These tags map to target sectors:
+| OSM key | OSM value | Synthetic workload title | VA-fit category |
+|---|---|---|---|
+| `office` | `estate_agent` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `property_manager` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `real_estate` | Property Manager / Real Estate Office | real estate agency providing property management and property services |
+| `office` | `accountant` | Accountant / Accounting Practice | accounting and tax services practice |
+| `office` | `lawyer` | Lawyer / Legal Practice | law firm and legal services practice |
+| `office` | `insurance` | Insurance Broker / Insurance Office | insurance brokerage and financial services |
+| `office` | `financial_advisor` | Financial Planner / Financial Advisory | financial planning and advisory practice |
+| `office` | `bookkeeper` | Bookkeeper / Bookkeeping Practice | bookkeeping and accounting support practice |
+| `office` | `construction_company` | Operations Coordinator / Construction Office | construction and home services business |
+| `office` | `administrative` | Administrative Assistant / Office | administrative and business support services |
+| `craft` | `plumber` | Maintenance Coordinator / Plumbing Services | plumbing and home services trade |
+| `craft` | `electrician` | Maintenance Coordinator / Electrical Services | electrical contractor and home services trade |
+| `craft` | `carpenter` | Maintenance Coordinator / Carpentry Services | carpentry and home services trade |
+| `craft` | `painter` | Maintenance Coordinator / Painting Services | painting and home services trade |
+| `craft` | `roofer` | Maintenance Coordinator / Roofing Services | roofing and home services trade |
+| `craft` | `hvac` | Maintenance Coordinator / HVAC Services | hvac and home services trade |
 
-| OSM key | OSM value | Synthetic title | VA-fit category |
-|---------|-----------|-----------------|-----------------|
-| `office` | `estate_agent` | Property Manager / Real Estate Office | real estate agency |
-| `office` | `property_manager` | Property Manager / Real Estate Office | real estate agency |
-| `office` | `real_estate` | Property Manager / Real Estate Office | real estate agency |
-| `office` | `accountant` | Accountant / Accounting Practice | accounting/tax practice |
-| `office` | `lawyer` | Lawyer / Legal Practice | legal practice |
-| `office` | `insurance` | Insurance Broker / Insurance Office | insurance brokerage |
-| `office` | `financial_advisor` | Financial Planner / Financial Advisory | financial advisory |
-| `office` | `bookkeeper` | Bookkeeper / Bookkeeping Practice | bookkeeping practice |
-| `office` | `construction_company` | Operations Coordinator / Construction Office | construction/home services |
-| `office` | `administrative` | Administrative Assistant / Office | business support |
-| `craft` | `plumber` | Maintenance Coordinator / Plumbing Services | plumbing trade |
-| `craft` | `electrician` | Maintenance Coordinator / Electrical Services | electrical trade |
-| `craft` | `carpenter` | Maintenance Coordinator / Carpentry Services | carpentry trade |
-| `craft` | `painter` | Maintenance Coordinator / Painting Services | painting trade |
-| `craft` | `roofer` | Maintenance Coordinator / Roofing Services | roofing trade |
-| `craft` | `hvac` | Maintenance Coordinator / HVAC Services | HVAC trade |
+Each listing contributes its name, website, email, phone, address tags, brand,
+and geographic coordinates. A `branch` or `addr:suburb` value is appended to
+the company name when present so distinct offices are not collapsed. The
+`operator` tag is retained as listing context only; it is never treated as a
+person. Latitude/longitude is used when no address is available.
 
-### What we extract from each listing
+The synthetic title describes the likely administrative workload for that
+sector. It is not an observed vacancy. OSM email and phone tags become contact
+routes; a website remains company metadata and is not mislabeled as a contact
+form. Requests run at the registry limit of 0.2 requests/second, use node-only
+queries, and retry both endpoints with bounded per-request and overall query
+deadlines after transient timeout or rate-limit failures.
 
-- `name` (with `branch` or `addr:suburb` appended when present)
-- `website`, `email`, `phone`
-- `operator` — retained only as listing context; it is not treated as a person
-- `addr:*` tags — turned into a location string
-- `brand` — added to the excerpt for context
-- Latitude/longitude if no address is present
+## What the pipeline produces
 
-### How it becomes a lead
+The normal run has four steps:
 
-For each business, the adapter creates a `SourceHit` with:
+1. **Discover companies** from OpenStreetMap and the two finance directories.
+2. **Enrich contacts** from official company websites using three parallel
+   shards.
+3. **Export** ranked leads, companies, and one-row-per-person named contacts.
+4. **Build the workbook** from those three canonical CSV exports.
 
-- `title` = the synthetic VA role for that sector (e.g. "Maintenance Coordinator / Plumbing Services")
-- `body_excerpt` = the business category, address, brand/operator context, and source link
-- `workplace_type` = `inferred_remote_friendly` (a prospecting inference, not an observed workplace policy)
-- `contact_routes_raw` = email and phone values found in OSM tags; a website is company metadata, not a contact form
-- `location_raw` = assembled address or lat/lon
+The final files are written under `exports/`:
 
-The resolver then creates or links a `Company`, and the contact routes are stored in `contact_route`.
+| File | Contents |
+|---|---|
+| `anz_remote_leads_with_contacts.csv` | Complete ranked lead export with named-person and company contact fields |
+| `anz_remote_leads_with_targeted_contacts.csv` | Byte-identical alias of the complete lead export |
+| `anz_all_companies.csv` | One row per company with the best collected routes |
+| `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
+| `anz_named_contacts.csv` | One row per validated person, with separate email, phone, and LinkedIn columns |
+| `anz_full_leads_with_targeted_contacts.xlsx` | Three sheets: complete Leads, one-row-per-person Named Contacts, and Companies |
 
-### Rate limits and retries
+Everything under `exports/` is a generated local artifact. CSV and XLSX output
+files are intentionally ignored by Git and must not be committed or pushed.
 
-- Overpass requests are made at ~0.2 req/s per the registry.
-- The adapter starts with `node`-only queries (the most reliable source in ANZ). If a query times out or is rate-limited, it tries the second endpoint.
-- A 2-second pause is added between each query.
+Named-person fields are kept separate from generic office details:
 
-### Why it works for VA lead generation
+- `named_contact_name`, `named_contact_title`, `named_contact_email`,
+  `named_contact_phone`, `named_contact_linkedin`
+- `company_email`, `company_phone`, `company_form`
+- `best_email`, `best_phone`, `best_form` use a named route first and fall back
+  to a company route
 
-Instead of scraping job boards, the OSM source targets the businesses themselves. Ranking uses sector fit and available contact evidence; it does not claim the business is hiring or has advertised a remote role.
+Multiple contact values in the named-contact export are deduplicated and
+separated with semicolons. Phone numbers retain their international `+` prefix.
 
-## Quick start
+## Run the full configured scrape
 
-### 1. Install and start the database
+The commands below are written for a Linux shell. On Windows, run them inside
+WSL2 rather than native PowerShell.
+
+### 1. Install and start the services
+
+Requirements: Python 3.11+, GNU Make, Docker, Docker Compose, and `curl`.
 
 ```bash
-# Copy default environment variables
 cp .env.example .env
-
-# Create the Python virtual environment and install dependencies
 make install
-
-# Start Postgres, Redis, and Temporal
-docker compose up -d
-
-# Run Alembic migrations and render the ERD
+docker compose up -d postgres redis temporal
 make migration-check
 ```
 
-The default `.env` connects to:
-
-- Postgres: `postgresql+asyncpg://postgres:postgres@localhost:5432/postgres`
-- Redis: `redis://localhost:6379/0`
-- Temporal: `localhost:7233`
-- API key: `dev-api-key`
-
-### 2. Run the test suite
+Start the API locally so you can create a workspace and campaign:
 
 ```bash
-make test
-make lint
-make typecheck
+.venv/bin/python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000
 ```
 
-### 3. Start the API (optional)
+Leave that process running and open a second terminal in the repository.
+
+### 2. Create a workspace and campaign
+
+Create a workspace:
 
 ```bash
-.venv/bin/python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Or use the Docker Compose `api` service:
-
-```bash
-docker compose up -d api
-```
-
-The OpenAPI docs are at `http://localhost:8000/docs`.
-
-## Running the source engine
-
-### Create a workspace and campaign
-
-If the API is running, use the endpoints:
-
-```bash
-export API_KEY=dev-api-key
-
-# Create a workspace
-curl -X POST http://localhost:8000/workspaces \
+curl -sS -X POST http://localhost:8000/workspaces/ \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
+  -H "x-api-key: dev-api-key" \
   -H "x-workspace-id: 00000000-0000-0000-0000-000000000000" \
   -d '{
     "name": "VA Lead Intelligence",
@@ -189,62 +154,66 @@ curl -X POST http://localhost:8000/workspaces \
     "billing_email": "ops@example.com",
     "plan": "trial"
   }'
+```
 
-# Create a campaign in that workspace
-curl -X POST http://localhost:8000/campaigns \
+Copy the returned `id`, then create a campaign using that workspace ID:
+
+```bash
+curl -sS -X POST http://localhost:8000/campaigns/ \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
+  -H "x-api-key: dev-api-key" \
   -H "x-workspace-id: <workspace-uuid>" \
   -d '{
     "name": "ANZ VA leads",
-    "score_threshold": 0.5,
-    "status": "active"
+    "status": "active",
+    "capability_filter": ["virtual_assistant"],
+    "score_threshold": 0.5
   }'
 ```
 
-Keep the returned `workspace_id` and `campaign_id` for the run scripts.
-
-### Run sources from the command line
+Copy the returned campaign `id` and set both values in the shell:
 
 ```bash
-WORKSPACE_ID="<workspace-uuid>"
-CAMPAIGN_ID="<campaign-uuid>"
+export WORKSPACE_ID="<workspace-uuid>"
+export CAMPAIGN_ID="<campaign-uuid>"
+```
 
-# Run the full enabled portfolio
-.venv/bin/python scripts/run_source_engine.py \
-  --workspace-id "$WORKSPACE_ID" \
-  --campaign-id "$CAMPAIGN_ID"
+You can reuse an existing workspace and campaign instead. Use a new workspace
+when you need an isolated comparison with an earlier scrape.
 
-# Run one source only
+### 3. Run the company sources
+
+Run the three company-discovery sources explicitly. This avoids invoking the
+website adapters without a domain list and avoids the empty `manual_seed`
+source.
+
+```bash
 .venv/bin/python scripts/run_source_engine.py \
   --workspace-id "$WORKSPACE_ID" \
   --campaign-id "$CAMPAIGN_ID" \
-  --source-keys openstreetmap
+  --source-keys openstreetmap finance_directory nz_finance_advisers
+```
 
-# Override adapter config (example: limit NZ finance pages for a quick test)
+A successful run prints JSON containing `"status": "succeeded"`. Treat a
+non-zero exit code or `"status": "failed"` as a failed scrape; do not export
+that run as complete.
+
+For a quick NZ-directory smoke test, limit its list pages:
+
+```bash
 .venv/bin/python scripts/run_source_engine.py \
   --workspace-id "$WORKSPACE_ID" \
   --campaign-id "$CAMPAIGN_ID" \
   --source-keys nz_finance_advisers \
-  --query-overrides '{"nz_finance_advisers": {"max_list_pages": 5}}'
+  --query-overrides '{"nz_finance_advisers": {"max_list_pages": 2}}'
 ```
 
-Source keys available:
+### 4. Drain the eligible domains for targeted contacts
 
-- `openstreetmap`
-- `finance_directory`
-- `nz_finance_advisers`
-- `team_pages`
-- `company_web`
-- `manual_seed`
-
-### Backfill targeted contacts from company websites
-
-After the main sources have run, enrich companies that still lack a named person, direct email,
-direct phone, or LinkedIn profile. The command snapshots eligible domains, runs `company_web`
-across three disjoint shards in parallel, then runs `team_pages` only for domains where the first
-pass found no contact routes. Each domain has a 30-second crawl budget; routes found before that
-deadline are retained. Omit `--max-domains` to process every eligible domain:
+This command takes a stable snapshot of eligible company domains, runs
+`company_web` across three disjoint shards concurrently, and then uses
+`team_pages` for domains where the first pass did not produce a persisted
+contact hit:
 
 ```bash
 .venv/bin/python scripts/extract_targeted_contacts.py \
@@ -253,21 +222,22 @@ deadline are retained. Omit `--max-domains` to process every eligible domain:
   --shards 3
 ```
 
-Each shard has its own database session and source-run record. The command exits non-zero if any
-shard fails; rerunning it safely processes the remaining incomplete domains.
+Omitting `--max-domains` drains every currently eligible domain. For a quick
+test, add `--max-domains 25`. The command exits non-zero if a shard fails.
+Rerun the same command after a failure; stored hits are deduplicated and the
+domain query is recalculated from the remaining incomplete contact coverage.
 
-You can also run the older `extract_team_pages.py` against the domains with the most source hits:
+Three shards are the supported default. Increasing the count can make external
+sites or the database the bottleneck and should be benchmarked before use.
+
+### 5. Export the results
+
+Run the export only after the company-source and contact-enrichment commands
+have succeeded:
 
 ```bash
-.venv/bin/python scripts/extract_team_pages.py \
-  --workspace-id "$WORKSPACE_ID" \
-  --campaign-id "$CAMPAIGN_ID" \
-  --max-domains 1000
-```
+mkdir -p exports
 
-### Export leads and companies
-
-```bash
 .venv/bin/python scripts/export_leads_csv.py \
   --workspace-id "$WORKSPACE_ID" \
   --region anz \
@@ -279,114 +249,167 @@ You can also run the older `extract_team_pages.py` against the domains with the 
   --companies-alias-path exports/anz_all_companies_targeted.csv
 ```
 
-Columns in `anz_remote_leads_with_contacts.csv`:
+Open `exports/anz_remote_leads_with_targeted_contacts.csv` for the complete
+lead list and `exports/anz_named_contacts.csv` for the clean person-level view.
+Re-running the export replaces those files from the current database state.
 
-- `company_name` / `primary_domain`
-- `named_contact_name` / `named_contact_title` / `named_contact_email` / `named_contact_phone` / `named_contact_linkedin` — only details explicitly associated with that person
-- `company_email` / `company_phone` / `company_form` — generic office details, never assigned to the named person
-- `best_email` / `best_phone` / `best_form` — targeted contact first with company fallback
-- `job_title` — synthetic sector label for public business listings
-- `location`, `workplace_type`
-- `category` — Property/Facilities, Financial Services, Home Services/Construction, Real Estate, etc.
-- `source` / `source_url`
-- `intent_label`
-- `published_at`
-- `qualification_score` / `rank` — High, Medium, Low
-- `explanation` — human-readable reason this is a VA lead, placed last
+### 6. Build the readable workbook
 
-`anz_named_contacts.csv` contains one readable row per company/person. Email,
-phone, and LinkedIn routes have separate columns; multiple validated values are
-sorted, deduplicated, and separated with semicolons. Generic office routes and
-LinkedIn URLs that are not explicitly associated with a named person are excluded.
-
-The complete current lead spreadsheet is
-`exports/anz_remote_leads_with_targeted_contacts.csv`. It is regenerated as an
-exact copy of `anz_remote_leads_with_contacts.csv`; the matching company files are
-synchronized the same way.
-
-### Check named-contact coverage
+Build the workbook from the three canonical CSVs:
 
 ```bash
-# Companies with a named contact
-psql -U postgres -d postgres -c \
-  "SELECT COUNT(DISTINCT c.id) FILTER (WHERE cr.route_type = 'named_contact') AS named, COUNT(DISTINCT c.id) AS total FROM company c LEFT JOIN contact_route cr ON cr.company_id = c.id WHERE c.workspace_id = '$WORKSPACE_ID';"
+.venv/bin/python scripts/build_leads_workbook.py
 ```
 
-## Pipeline overview
+This writes
+`exports/anz_full_leads_with_targeted_contacts.xlsx` with these sheets:
 
+| Sheet | Contents |
+|---|---|
+| `Leads` | Every ranked lead and all 24 lead-export columns, including targeted-person and generic-company contact lanes |
+| `Named Contacts` | One readable row per validated person with separate name, title, email, phone, and LinkedIn columns |
+| `Companies` | One row per company with its best company routes and selected named-contact routes |
+
+The builder validates the exact CSV headers before writing, freezes the header
+row, enables filters, keeps contact values as text, uses compact non-wrapped
+rows, and does not re-score, re-match, or otherwise change export data.
+
+## Safe reruns and partial runs
+
+- Reuse the same workspace to continue enriching or refresh its source data.
+  Source hits are deduplicated by content hash.
+- Use a new workspace and campaign for a clean, isolated comparison. This is
+  safer than deleting an existing dataset.
+- Run one company source with `--source-keys <source>` when diagnosing it.
+- Use `--max-domains` only for a bounded contact-enrichment test. Omit it for
+  the full configured drain.
+- Do not treat an export as current until both preceding phases succeeded.
+
+See [Crawler operations](docs/runbooks/crawler-operations.md) for failure and
+rerun checks.
+
+## How scoring works
+
+Directory and OpenStreetMap records use `company_existence_only`: the company
+exists in a target sector, but no hiring intent is claimed. The exporter scores
+sector fit, remotely delegable workload, role signals, and usable contact
+routes.
+
+- **High**: score 75+ and has a usable email, phone, or actionable form URL.
+- **Medium**: score 55–74, or a 75+ score without a usable route.
+- **Low**: score below 55.
+
+Each lead includes an `explanation` column describing the signals used. The
+current sector mapping is explained in
+[How VA leads are generated](docs/user-guide/how-leads-are-generated.md).
+
+## Expand to other industries or areas
+
+The simplest expansion path is OpenStreetMap because its areas and business
+tags are configuration-driven.
+
+### Add another industry
+
+1. Find the real OpenStreetMap key/value used by that business type.
+2. Add one entry under `sources.openstreetmap.adapter_config.tags` in
+   `config/sources/source-registry.yaml`. Supply a clear synthetic `title` and
+   `category` describing the VA-relevant workload.
+3. Add the new sector vocabulary to `CATEGORY_PATTERNS` and its explanation to
+   `VA_USE_CASES` in `scripts/export_leads_csv.py`. Without this, the exporter
+   may classify the new records as `Other` and filter them out.
+4. Add focused adapter and export tests in `tests/test_source_engine_extra.py`
+   or `tests/test_source_engine.py`.
+5. Run the validation commands below, then perform a small source run before a
+   full scrape.
+
+Prefer expanding these existing configuration and classification surfaces over
+creating a new adapter. Add a new adapter only when the source is genuinely
+different—for example, a sector-specific public directory with its own
+pagination and profile structure.
+
+### Change the geographic target
+
+Edit `sources.openstreetmap.adapter_config.areas` in
+`config/sources/source-registry.yaml`. The values are OpenStreetMap area names.
+The current values are the whole named areas `Australia` and `New Zealand`.
+
+If the new output is outside ANZ, export with `--region all`. The existing
+`--region anz` filter intentionally keeps only Australia/New Zealand location
+signals. Review location normalization, category language, phone formatting,
+and tests before claiming support for another country.
+
+### Expand official-site contact coverage
+
+`company_web` and `team_pages` enrich domains already discovered by a company
+source; they do not discover a new market by themselves. To increase named
+contacts in another industry, first add or import the companies, ensure their
+official domains resolve correctly, then run the same three-shard enrichment
+and export phases.
+
+For a curated list, place a CSV or JSON file under
+`$MANUAL_SEED_DIR/<workspace-uuid>/` and run `manual_seed` with a sandboxed
+relative `path` override:
+
+```bash
+export MANUAL_SEED_DIR="$PWD/data/manual_seed"
+
+.venv/bin/python scripts/run_source_engine.py \
+  --workspace-id "$WORKSPACE_ID" \
+  --campaign-id "$CAMPAIGN_ID" \
+  --source-keys manual_seed \
+  --query-overrides '{"manual_seed": {"path": "companies.csv"}}'
 ```
-Source Registry / Query Library
-        |
-        v
-SourceRunner -> BaseSourceAdapter.fetch()
-        |
-        v
-normalize() -> SourceHit
-        |
-        v
-classify_intent() -> IntentLabel
-score_source_hit() -> priority
-        |
-        v
-resolve_company() -> Company
-        |
-        v
-enrich_contact_routes() -> ContactRoute(s)
-        |
-        v
-persist DBSourceHit + DBSourceRun
-        |
-        v
-export_leads_csv.py -> ranked CSV
+
+In this example the file is
+`data/manual_seed/$WORKSPACE_ID/companies.csv`. Accepted fields are listed under
+`sources.manual_seed.allowed_fields` in the source registry.
+
+## Validation
+
+Before committing a configuration, scoring, or runtime change:
+
+```bash
+make lint
+make typecheck
+make test
+make config-validate
+make benchmark
+make handover
 ```
 
-More detail is in `docs/architecture/source-engine-data-flow.md` and `docs/architecture/source-access-matrix.md`.
+`make handover` is the complete production-readiness gate and also detects
+generated-model drift.
 
-## Source access matrix
+## Source reference
 
-| Source | Access Mode | Data Collected | Rate Limit | API Key | Kill Switch |
-|--------|-------------|----------------|------------|---------|-------------|
-| `manual_seed` | manual_import | company_name, title, body, contact_routes | none | none | `sources.manual_seed.enabled` |
-| `openstreetmap` | public_api | real ANZ business name, address, phone, email, website, operator, business category | 0.2 req/s | none | `sources.openstreetmap.enabled` |
-| `finance_directory` | scoped_public_web_crawl | Australian finance-professional profile pages: company, website, phone | 2 req/s | none | `sources.finance_directory.enabled` |
-| `nz_finance_advisers` | scoped_public_web_crawl | NZ FSPR adviser profiles and provider pages: adviser name, FAP, website, phone | 1 req/s | none | `sources.nz_finance_advisers.enabled` |
-| `team_pages` | scoped_public_web_crawl | named contacts, job titles, emails, phones, LinkedIn profiles from `/team` and `/about` pages | 2 req/s | none | `sources.team_pages.enabled` |
-| `company_web` | scoped_public_web_crawl | website contact routes and named people from priority pages | 2 req/s | none | `sources.company_web.enabled` |
+| Source | Purpose | Configured bound |
+|---|---|---|
+| `openstreetmap` | Discover ANZ businesses in configured sectors | 16 tags across Australia and New Zealand; node records only |
+| `finance_directory` | Discover Australian finance profiles | 1,200 profile pages |
+| `nz_finance_advisers` | Discover NZ adviser/provider profiles | 30 list pages |
+| `company_web` | Find contact routes on known official domains | 6 pages/domain, depth 2, 30 seconds/domain |
+| `team_pages` | Find named people and person-linked routes | Public team/about/contact paths, 30 seconds/domain |
+| `manual_seed` | Import a curated CSV or JSON list | File must be inside `MANUAL_SEED_DIR` |
 
-See `docs/architecture/source-access-matrix.md` for prohibited access modes.
+Source limits, allowed fields, and adapter settings live in
+`config/sources/source-registry.yaml`. Architecture details are in
+[Source engine data flow](docs/architecture/source-engine-data-flow.md) and
+[Source access matrix](docs/architecture/source-access-matrix.md).
 
-## Operational controls
+## Development commands
 
-- **Rate limiting**: token-bucket `RateLimiter` per adapter.
-- **Concurrency**: `max_concurrency_per_host` caps parallel requests.
-- **Kill switch**: source registry `kill_switch` disables an adapter at runtime.
-- **Checkpoint**: `CheckpointStore` records last observed time per adapter/workspace.
-- **Metrics**: `SourceMetrics` captures hit, duplicate, qualified and error counts.
+```bash
+make help
+make test
+make lint
+make typecheck
+make config-validate
+make migration-check
+make benchmark
+make contracts
+make handover
+```
 
-## Makefile targets
-
-- `make lint` — ruff lint and format check
-- `make format` — auto-format source files
-- `make typecheck` — mypy strict
-- `make test` — pytest suite
-- `make contracts` — export OpenAPI and JSON Schemas
-- `make config-validate` — validate taxonomy/scorecard/policy YAML
-- `make migration-check` — Alembic upgrade and ERD render
-- `make benchmark` — frozen benchmark and report
-- `make infra-check` — Terraform fmt/validate
-- `make handover` — regenerate, validate and bundle all release artifacts
-
-## Production-readiness
-
-`make handover` is the production-readiness gate. It fails if generated artifacts drift, tests fail, Terraform is invalid, or any DOD item lacks evidence.
-
-Run `make handover` before every PR.
-
-## Architecture
-
-- `spec/domain.yaml` is the single source of truth for domain models, events, and API contracts.
-- `scripts/generate_models.py` regenerates Pydantic models, SQLAlchemy models, events, and FastAPI routers from `spec/domain.yaml`.
-- `config/scorecards/default.yaml` and `config/source-policy/default.yaml` drive runtime scoring and compliance.
-- `infra/terraform/` contains AWS ECS/RDS/Redis/ElastiCache modules and the environment catalogue.
-- `docs/adr/` contains accepted Architecture Decision Records.
-- `docs/runbooks/` contains operational playbooks.
+The API documentation is available at `http://localhost:8000/docs` while the
+API is running. `spec/domain.yaml` is the canonical source for generated domain
+models and API contracts.

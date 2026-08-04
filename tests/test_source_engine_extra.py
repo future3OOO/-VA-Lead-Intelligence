@@ -184,6 +184,43 @@ async def test_team_pages_compacts_completed_page_state(
 
 
 @pytest.mark.asyncio
+async def test_team_pages_isolates_domain_network_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = TeamPagesAdapter(_make_adapter_config("team_pages", "web"))
+
+    async def robots_allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def http_get(url: str, **_kwargs: object) -> httpx.Response:
+        if "bad.example" in url:
+            raise httpx.ConnectError("handshake failed", request=httpx.Request("GET", url))
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/html"},
+            text='<html><a href="mailto:info@good.example">Email us</a></html>',
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_http_get", http_get)
+    try:
+        results = await adapter.fetch(
+            uuid4(),
+            {
+                "domains": ["bad.example", "good.example"],
+                "paths": ["/team"],
+                "max_pages_per_domain": 1,
+            },
+        )
+    finally:
+        await adapter.aclose()
+
+    assert [result["domain"] for result in results] == ["good.example"]
+    assert adapter.metrics.errors["source_adapter_error_rate_fetch"] == 1
+
+
+@pytest.mark.asyncio
 async def test_nz_finance_advisers_fetches_each_profile_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -333,17 +370,15 @@ async def test_openstreetmap_rejects_partial_query_results(
 
 
 @pytest.mark.asyncio
-async def test_openstreetmap_retries_endpoints_once_after_transient_failures(
+async def test_openstreetmap_fails_over_to_an_independent_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
-    responses = [503, 503, 200]
-    requests = 0
+    requested_urls: list[str] = []
 
     async def post(url: str, **_kwargs: object) -> httpx.Response:
-        nonlocal requests
-        requests += 1
-        status = responses.pop(0)
+        requested_urls.append(url)
+        status = 200 if "maps.mail.ru" in url else 503
         return httpx.Response(
             status,
             json={"elements": []} if status == 200 else None,
@@ -356,7 +391,118 @@ async def test_openstreetmap_retries_endpoints_once_after_transient_failures(
     finally:
         await adapter.aclose()
 
-    assert requests == 3
+    assert requested_urls == [
+        "https://z.overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_recovers_on_a_third_endpoint_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    responses = [503, 503, 503, 503, 200]
+    requests = 0
+
+    async def post(url: str, **_kwargs: object) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        status = responses.pop(0)
+        return httpx.Response(
+            status,
+            json={"elements": []} if status == 200 else None,
+            request=httpx.Request("POST", url),
+        )
+
+    async def no_delay(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(adapter, "_http_post", post)
+    monkeypatch.setattr(asyncio, "sleep", no_delay)
+    try:
+        assert await adapter._execute_query("[out:json];") == {"elements": []}
+    finally:
+        await adapter.aclose()
+
+    assert requests == 5
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_aligns_server_and_request_timeouts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    captured_timeout: float | None = None
+
+    async def post(url: str, **kwargs: object) -> httpx.Response:
+        nonlocal captured_timeout
+        captured_timeout = float(kwargs["timeout"])
+        return httpx.Response(
+            200,
+            json={"elements": []},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(adapter, "_http_post", post)
+    query = adapter._build_query("Australia", "office", "real_estate", ["node"])
+    try:
+        assert "[timeout:60]" in query
+        assert await adapter._execute_query(query) == {"elements": []}
+    finally:
+        await adapter.aclose()
+
+    assert captured_timeout == 70.0
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_stops_when_the_query_deadline_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    requests = 0
+
+    class ExpiredLoop:
+        calls = 0
+
+        def time(self) -> float:
+            self.calls += 1
+            return 0.0 if self.calls == 1 else 181.0
+
+    async def post(_url: str, **_kwargs: object) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        raise AssertionError("deadline exhaustion must prevent another request")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(asyncio, "get_running_loop", lambda: ExpiredLoop())
+        scoped.setattr(adapter, "_http_post", post)
+        assert await adapter._execute_query("[out:json];") is None
+    await adapter.aclose()
+
+    assert requests == 0
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_does_not_retry_a_non_transient_client_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    requests = 0
+
+    async def post(url: str, **_kwargs: object) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        return httpx.Response(400, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(adapter, "_http_post", post)
+    try:
+        assert await adapter._execute_query("[out:json];") is None
+    finally:
+        await adapter.aclose()
+
+    assert requests == 1
 
 
 def test_filter_hit_fields_preserves_classification_and_workplace_data() -> None:
@@ -1043,6 +1189,7 @@ async def test_targeted_contact_backfill_runs_three_shards_per_phase(
     active = 0
     peak = 0
     calls: list[tuple[str, tuple[str, ...]]] = []
+    domain_queries: list[str] = []
 
     class Session:
         async def __aenter__(self) -> Session:
@@ -1085,6 +1232,7 @@ async def test_targeted_contact_backfill_runs_three_shards_per_phase(
         _max_domains: object,
         exclude_completed_source: str = "",
     ) -> list[str]:
+        domain_queries.append(exclude_completed_source)
         if exclude_completed_source == "company_web":
             return [f"{letter}.example" for letter in "def"]
         return [f"{letter}.example" for letter in "abcdef"]
@@ -1098,17 +1246,18 @@ async def test_targeted_contact_backfill_runs_three_shards_per_phase(
     assert peak == 3
     assert [source for source, _domains in calls] == ["company_web"] * 3 + ["team_pages"] * 3
     company_expected = {
-        ("a.example", "d.example"),
-        ("b.example", "e.example"),
-        ("c.example", "f.example"),
-    }
-    assert {domains for source, domains in calls if source == "company_web"} == company_expected
-    assert {domains for source, domains in calls if source == "team_pages"} == {
         ("d.example",),
         ("e.example",),
         ("f.example",),
     }
+    assert {domains for source, domains in calls if source == "company_web"} == company_expected
+    assert {domains for source, domains in calls if source == "team_pages"} == {
+        ("a.example", "d.example"),
+        ("b.example", "e.example"),
+        ("c.example", "f.example"),
+    }
     assert result["shard_count"] == 3
+    assert domain_queries == ["company_web", "team_pages"]
 
 
 @pytest.mark.asyncio
@@ -1136,7 +1285,11 @@ async def test_targeted_contact_backfill_fails_when_a_shard_fails(
 
             return Record()
 
-    async def domains(_workspace_id: object, _max_domains: object) -> list[str]:
+    async def domains(
+        _workspace_id: object,
+        _max_domains: object,
+        exclude_completed_source: str = "",
+    ) -> list[str]:
         return ["a.example"]
 
     monkeypatch.setattr(module, "AsyncSessionLocal", Session)

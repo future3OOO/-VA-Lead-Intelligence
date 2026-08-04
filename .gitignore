@@ -45,3 +45,4 @@ reports/
 *.zip
 tmp/
 data/
+exports/

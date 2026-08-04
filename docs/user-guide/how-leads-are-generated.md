@@ -1,112 +1,128 @@
 # How VA Leads Are Generated
 
-This guide explains, in plain language, how this platform turns public business data into a ranked list of Australian and New Zealand companies that are likely to need a virtual assistant.
+This guide explains what a row in the lead export means. For exact setup and
+run commands, use the [root README](../../README.md#run-the-full-configured-scrape).
 
-## 1. We start with a public business directory
+## What the system is looking for
 
-The main source we use is **OpenStreetMap**. It is a free, public map and business directory. Businesses are listed with real names, addresses, phone numbers, emails, and websites.
+The system looks for Australian and New Zealand service businesses whose
+normal work creates repeatable administrative tasks. It does not require an
+advertised vacancy and does not claim that a listed business is hiring.
 
-We query OpenStreetMap for business categories that naturally create administrative work, such as:
+The checked-in configuration targets:
 
-- Real-estate agencies and property managers
-- Accountants, bookkeepers, tax agents, and financial planners
-- Insurance and mortgage brokers
-- Law firms, conveyancers, and legal practices
-- Builders, electricians, plumbers, painters, roofers, and other trade businesses
-- Construction companies and home-service providers
+| Business sector | Typical work that can be delegated remotely |
+|---|---|
+| Property management and real estate | Listing administration, CRM updates, tenant/buyer follow-up, appointments, and rent-roll data entry |
+| Accounting, bookkeeping, and tax | Client files, data entry, invoicing, reconciliations, inbox/CRM work, and compliance paperwork |
+| Insurance, mortgage, and financial advice | Claims or loan files, scheduling, client enquiries, CRM updates, and documentation |
+| Legal services | Client intake, document preparation, diary management, billing administration, and filing |
+| Trades, construction, and home services | Job scheduling, dispatch, invoicing, customer follow-up, and maintenance coordination |
+| Administrative offices | General business support and coordination |
 
-We do **not** scrape LinkedIn, Google, or private directories. We do **not** use fake or purchased lists.
+These sectors are a deliberate starting scope, not a claim that they are the
+only industries suited to virtual assistants.
 
-## 2. We match each business type to VA work
+## Where the data comes from
 
-When OpenStreetMap tells us a business is, for example, an electrician, we do not just look for an advertised electrician job. Instead, we ask: *"What remote admin work does a busy electrical business usually need?"*
+The discovery phase uses:
 
-The answer is typically scheduling, dispatch, invoicing, customer follow-up, and maintenance coordination. So we label the business as a **Maintenance Coordinator / Electrical Services** lead.
+- OpenStreetMap business nodes in the named areas `Australia` and `New Zealand`
+- a bounded Australian finance-professional directory
+- a bounded New Zealand financial-adviser directory
+- optional CSV or JSON manual seeds
 
-The same logic applies to every business type:
+The enrichment phase visits official domains already associated with those
+companies. It searches bounded company, contact, team, about, people, and
+leadership pages for published email addresses, phone numbers, forms, named
+people, and person-linked LinkedIn URLs.
 
-| OpenStreetMap business type | Typical VA work |
-|-----------------------------|-----------------|
-| Real estate / property management | Listing admin, CRM updates, buyer/tenant follow-up, appointment scheduling, rent-roll data entry |
-| Accounting / bookkeeping / tax | Client file admin, data entry, invoicing, reconciliations, inbox/CRM management, compliance paperwork |
-| Insurance / mortgage broking | Claims/loan file processing, scheduling, customer enquiries, CRM updates, documentation |
-| Legal / conveyancing | Client intake, document prep, diary management, billing admin, filing |
-| Trades / construction / home services | Job scheduling, dispatch, invoicing, customer follow-up, maintenance coordination |
+The system does not crawl LinkedIn to discover people. A LinkedIn URL is only
+exported as a named route when it is published on the source or official company
+website and can be associated with that person.
 
-This is why we say the approach is **company-centric** rather than job-title-centric. We are looking at the business itself and deciding that it probably needs VA support, instead of only chasing specific job ads.
+## Why coverage is not exhaustive
 
-## 3. We score every lead from 0 to 100
+A full configured run is still narrower than the whole ANZ market:
 
-Each lead is scored and ranked automatically:
+- OpenStreetMap only returns businesses present as nodes with one of the 16
+  configured tags.
+- Directory sources have page limits.
+- A company needs a usable official domain before its website can be enriched.
+- Websites may omit staff details, block crawling, time out, or publish generic
+  office routes only.
+- Contact validation rejects malformed or ambiguous person/email associations.
 
-- **High (75–100)** — strong fit. The business type clearly needs remote admin help, the work can be done remotely, and we have at least one contact route.
-- **Medium (55–74)** — promising sector but the signal is weaker. For example, a job-board post from a target firm that is not itself a VA role.
-- **Low (0–54)** — weaker fit, or a senior professional role the firm is hiring for directly.
+Blank named-person fields therefore mean “no validated published route was
+found,” not “the company has no relevant staff.”
 
-Senior professional posts such as "Senior Accountant" or "Lead Lawyer" are pushed to the bottom or removed, because those are not VA roles.
+## How a source record becomes a lead
 
-## 4. We add a human-readable explanation
+1. An adapter normalizes a public listing into a source hit.
+2. The resolver creates or links the correct company and keeps distinct
+   branches separate where the evidence supports it.
+3. Contact routes are normalized and assigned either to a named person or to
+   the company.
+4. The exporter filters to the requested geography and target sectors.
+5. The exporter scores, ranks, deduplicates, and explains each lead.
 
-Every row in the export contains an `explanation` column. It looks like this:
+OpenStreetMap and directory rows use the intent label
+`company_existence_only`. Their synthetic `job_title` describes the likely VA
+workload for the sector; it is not an observed job advertisement.
 
-> High fit (90/100): ABC Electrical (Home Services/Construction) in Brisbane, QLD is an OpenStreetMap business listing tagged as 'Maintenance Coordinator / Electrical Services'. Trade and home-service businesses with field staff need scheduling, dispatch, invoicing, and customer follow-up. Key signal: company/role is in the Home Services/Construction sector; role is a direct VA/admin function; description signals high administrative workload. Best contact: phone +61 400 123 456.
+## Scores and ranks
 
-This means anyone can open the CSV and immediately understand why a company was selected.
+- **High**: score 75 or above and at least one usable email, phone, or contact
+  form URL.
+- **Medium**: score 55–74, or a 75+ score without a usable contact route.
+- **Low**: score below 55.
 
-## 5. We export synchronized CSV files
+The `explanation` column states the sector, workload, and contact evidence used
+for the result. Rankings are prospecting priorities, not guarantees of demand.
 
-- `anz_remote_leads_with_contacts.csv` — one row per lead, with targeted person fields (`named_contact_name`, `named_contact_title`, `named_contact_email`, `named_contact_phone`, `named_contact_linkedin`), separate generic office fields (`company_email`, `company_phone`, `company_form`), and `best_*` fallback fields for compatibility.
-- `anz_all_companies.csv` — one row per company, with the primary domain and all collected contact routes.
-- `anz_named_contacts.csv` — one row per company/person, with separate email, phone, and LinkedIn columns. Multiple values are sorted and separated with semicolons; generic and unassigned routes are excluded.
-- `anz_remote_leads_with_targeted_contacts.csv` and `anz_all_companies_targeted.csv` — exact synchronized copies of the complete lead and company exports.
+## Contact columns
 
-## 6. How to run it yourself
+The complete lead export deliberately separates person-level and company-level
+routes:
 
-Make sure the local database is running:
+| Column group | Meaning |
+|---|---|
+| `named_contact_*` | Name, title, email, phone, and LinkedIn explicitly associated with the selected person |
+| `company_*` | Generic office email, phone, or contact form |
+| `best_*` | Named route first, then the company route as a fallback |
 
-```bash
-docker compose up -d
-```
+Use `anz_named_contacts.csv` when you want one readable row per validated
+person. Use `anz_remote_leads_with_targeted_contacts.csv` when you want every
+ranked lead with both targeted and generic contact lanes.
 
-Then fetch the latest OpenStreetMap listings:
+For normal review, run `scripts/build_leads_workbook.py` after the CSV export
+and open `anz_full_leads_with_targeted_contacts.xlsx`. Its `Leads`,
+`Named Contacts`, and `Companies` sheets preserve the same data in compact,
+filtered views. The workbook and CSVs are local generated artifacts under
+`exports/`; none are committed to the repository.
 
-```bash
-python scripts/run_source_engine.py \
-  --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
-  --campaign-id 2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc \
-  --source-keys openstreetmap
-```
+## Expanding the scope
 
-Finally, score and export the leads:
+Other industries can use the same pipeline when their normal operations create
+delegable administrative work.
 
-```bash
-python scripts/export_leads_csv.py \
-  --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
-  --region anz \
-  --min-rank medium \
-  --leads-path /tmp/anz_remote_leads_with_contacts.csv \
-  --companies-path /tmp/anz_all_companies.csv \
-  --named-contacts-path /tmp/anz_named_contacts.csv \
-  --leads-alias-path /tmp/anz_remote_leads_with_targeted_contacts.csv \
-  --companies-alias-path /tmp/anz_all_companies_targeted.csv
-```
+For an OpenStreetMap-backed expansion:
 
-Change the output paths to save the CSV files wherever you like. Omit
-`--named-contacts-path` if you only need the existing lead and company exports.
+1. Add the real business tag, synthetic workload title, and category under
+   `sources.openstreetmap.adapter_config.tags` in
+   `config/sources/source-registry.yaml`.
+2. Teach `scripts/export_leads_csv.py` how to recognize and explain the new
+   category.
+3. Add focused source and export tests.
+4. Run a small source query, inspect false positives and contact quality, then
+   run the full configured scrape.
 
-## 7. Optional: get named hiring contacts
+Change `sources.openstreetmap.adapter_config.areas` to narrow or extend the
+geographic search. For countries outside Australia and New Zealand, export with
+`--region all` and review the location and phone assumptions before describing
+the new country as supported.
 
-If you want named people rather than generic email addresses, you can run the bounded `team_pages` enrichment. It takes the domains found by OpenStreetMap, visits each company's own `/team`, `/about`, `/people`, or `/leadership` pages, and extracts real names, job titles, emails, phones, and LinkedIn profiles. It checks `robots.txt` first and only visits pages the site makes public.
-
-```bash
-python scripts/extract_targeted_contacts.py \
-  --workspace-id 985cfd3b-a3af-4217-8b10-8c46b0915b92 \
-  --campaign-id 2ddbdd5f-3e7e-4667-a3ca-4ee2dfb3bdfc \
-  --shards 3
-```
-
-Then export again and the `named_contact_*` columns will be filled where the company publishes them.
-
-## 8. What about other sources?
-
-The platform is built so you can add licensed or permissioned sources later (for example Hunter.io or a job-board API with an API key). OpenStreetMap and the optional `team_pages` enrichment are the default, free, no-API-key sources that get you started immediately.
+Official-site enrichment is reusable across industries, but it only enriches
+companies already discovered or manually seeded. See
+[Expanding industries or areas](../../README.md#expand-to-other-industries-or-areas)
+for the exact files and validation commands.

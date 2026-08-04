@@ -16,6 +16,7 @@ dependencies = [
     "fastapi>=0.111,<1",
     "httpx>=0.27,<0.28",
     "jsonschema>=4.22,<5",
+    "openpyxl>=3.1,<4",
     "psycopg2-binary>=2.9,<3",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.3,<3",
@@ -41,6 +42,7 @@ dev = [
     "sqlalchemy-utils>=0.41,<1",
     "types-PyYAML",
     "types-beautifulsoup4",
+    "types-openpyxl>=3.1,<4",
 ]
 
 [tool.setuptools.packages.find]
@@ -65,7 +67,7 @@ warn_return_any = true
 warn_unused_ignores = true
 namespace_packages = true
 explicit_package_bases = true
-mypy_path = ["src"]
+mypy_path = ["src", "scripts"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

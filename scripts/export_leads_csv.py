@@ -31,6 +31,60 @@ EXPORT_SOURCES = {
     "nz_finance_advisers",
 }
 
+LEAD_FIELDS = [
+    "company_name",
+    "primary_domain",
+    "named_contact_name",
+    "named_contact_title",
+    "named_contact_email",
+    "named_contact_phone",
+    "named_contact_linkedin",
+    "company_email",
+    "company_phone",
+    "company_form",
+    "best_email",
+    "best_phone",
+    "best_form",
+    "job_title",
+    "location",
+    "workplace_type",
+    "category",
+    "source",
+    "source_url",
+    "intent_label",
+    "published_at",
+    "qualification_score",
+    "rank",
+    "explanation",
+]
+
+NAMED_CONTACT_FIELDS = [
+    "company_id",
+    "company_name",
+    "primary_domain",
+    "named_contact_name",
+    "named_contact_title",
+    "named_contact_emails",
+    "named_contact_phones",
+    "named_contact_linkedin_urls",
+]
+
+COMPANY_FIELDS = [
+    "company_id",
+    "company_name",
+    "primary_domain",
+    "target_fit",
+    "source_hit_count",
+    "best_email",
+    "best_phone",
+    "best_form",
+    "named_contact_name",
+    "named_contact_title",
+    "named_contact_email",
+    "named_contact_phone",
+    "named_contact_linkedin",
+]
+
 ANZ_REGION_RE = re.compile(
     r"\b(australia|new zealand|apac|sydney|melbourne|brisbane|perth|adelaide|canberra|darwin|hobart|auckland|wellington|christchurch|queensland|victoria|nsw|new south wales|western australia|south australia|tasmania|northern territory|north island|south island)\b",
     re.I,
@@ -756,21 +810,11 @@ async def main() -> None:
         companies_by_id = {c.id: c for c in company_rows}
 
         if named_contacts_path:
-            named_contact_fields = [
-                "company_id",
-                "company_name",
-                "primary_domain",
-                "named_contact_name",
-                "named_contact_title",
-                "named_contact_emails",
-                "named_contact_phones",
-                "named_contact_linkedin_urls",
-            ]
             named_contact_count = 0
             with open(named_contacts_path, "w", newline="", encoding="utf-8") as f:
                 named_writer = csv.DictWriter(
                     f,
-                    fieldnames=named_contact_fields,
+                    fieldnames=NAMED_CONTACT_FIELDS,
                     lineterminator="\r\n",
                 )
                 named_writer.writeheader()
@@ -811,22 +855,7 @@ async def main() -> None:
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, lineterminator="\r\n")
-            company_fields = [
-                "company_id",
-                "company_name",
-                "primary_domain",
-                "target_fit",
-                "source_hit_count",
-                "best_email",
-                "best_phone",
-                "best_form",
-                "named_contact_name",
-                "named_contact_title",
-                "named_contact_email",
-                "named_contact_phone",
-                "named_contact_linkedin",
-            ]
-            writer.writerow(company_fields)
+            writer.writerow(COMPANY_FIELDS)
             for c in company_rows:
                 company_routes = contact_by_company.get(c.id, [])
                 best = _best_contact(company_routes)
@@ -859,7 +888,7 @@ async def main() -> None:
                 writer.writerow(
                     [
                         _csv_safe(value, phone_number=field.endswith("phone"))
-                        for field, value in zip(company_fields, values, strict=True)
+                        for field, value in zip(COMPANY_FIELDS, values, strict=True)
                     ]
                 )
 
@@ -1017,32 +1046,7 @@ async def main() -> None:
             leads_writer = csv.DictWriter(
                 f,
                 lineterminator="\r\n",
-                fieldnames=[
-                    "company_name",
-                    "primary_domain",
-                    "named_contact_name",
-                    "named_contact_title",
-                    "named_contact_email",
-                    "named_contact_phone",
-                    "named_contact_linkedin",
-                    "company_email",
-                    "company_phone",
-                    "company_form",
-                    "best_email",
-                    "best_phone",
-                    "best_form",
-                    "job_title",
-                    "location",
-                    "workplace_type",
-                    "category",
-                    "source",
-                    "source_url",
-                    "intent_label",
-                    "published_at",
-                    "qualification_score",
-                    "rank",
-                    "explanation",
-                ],
+                fieldnames=LEAD_FIELDS,
             )
             leads_writer.writeheader()
             leads_writer.writerows(

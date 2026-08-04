@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test test-unit test-integration test-security benchmark contracts config-validate migration-check infra-check security-test dod-report handover clean help
+.PHONY: install lint typecheck test test-unit test-integration test-security benchmark contracts config-validate migration-check infra-check security-test dod-report handover workbook clean help
 
 VENV := .venv
 PYTHON := $(VENV)/bin/python
@@ -65,6 +65,9 @@ security-test: test-security
 
 handover: install ## Regenerate, validate and bundle all release artifacts
 	$(PYTHON) scripts/build_handover_bundle.py
+
+workbook: install ## Build the three-sheet workbook from local CSV exports
+	$(PYTHON) scripts/build_leads_workbook.py
 
 clean: ## Remove build artifacts and venv
 	rm -rf $(VENV) .mypy_cache .ruff_cache __pycache__ .pytest_cache
