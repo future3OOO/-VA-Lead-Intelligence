@@ -163,11 +163,13 @@ _GENERIC_NAME_WORDS = {
 }
 
 _PAGE_LABELS = {
+    "additional information",
     "aml compliance",
     "asset registers",
     "blackshaw manuka",
     "belimba park",
     "bookings my account sign",
+    "book appointment",
     "brisbane northside",
     "broome wa",
     "business advice",
@@ -194,6 +196,7 @@ _PAGE_LABELS = {
     "home claims",
     "kimberley address",
     "investment management",
+    "licensing information",
     "land size",
     "nni life",
     "new loan",
@@ -201,7 +204,9 @@ _PAGE_LABELS = {
     "open homes",
     "opening hours",
     "our mission",
+    "our partners",
     "our practice",
+    "our story",
     "plan conveyancing",
     "privacy policy",
     "phone lines open now",
@@ -213,8 +218,12 @@ _PAGE_LABELS = {
     "recent sales",
     "rental appraisal",
     "request measurement",
+    "resources currency converter",
+    "resources faqs blog guides",
     "routine inspections",
     "sensitive information",
+    "search login",
+    "search properties",
     "solar vents",
     "sam white loan market",
     "stamp duty calculator",
@@ -222,8 +231,10 @@ _PAGE_LABELS = {
     "this week",
     "wellness officers",
     "water filter cartridge replacement",
+    "view all our partnerships",
     "what we do",
     "we cover people",
+    "ask your question",
 }
 
 
@@ -407,7 +418,12 @@ def _parse_named_contact_display(value: str) -> dict[str, str] | None:
     title = m.group(2).strip() if m.group(2) else ""
     payload = (m.group(3) or m.group(4)).strip()
     if not title:
-        appended_title = re.match(r"^(.+?)\s+(Marketing Assistant)$", name, re.I)
+        appended_title = re.match(
+            r"^(.+?)\s+(Marketing Assistant|Commercial Sales|Sales Administration|"
+            r"Sales Associate|Sales)$",
+            name,
+            re.I,
+        )
         if appended_title:
             name = appended_title.group(1).strip()
             title = appended_title.group(2).title()

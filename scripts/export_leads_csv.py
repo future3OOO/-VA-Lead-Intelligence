@@ -5,8 +5,10 @@ import argparse
 import asyncio
 import csv
 import re
+import shutil
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -16,7 +18,7 @@ from db.models.company import Company
 from db.models.contact_route import ContactRoute
 from db.models.source_hit import SourceHit
 from db.session import AsyncSessionLocal
-from services.source_engine.contact_selection import list_named_contact_routes
+from services.source_engine.contact_selection import list_named_contacts
 from services.source_engine.contact_selection import select_company_routes as _best_company_contact
 from services.source_engine.contact_selection import select_contact_routes as _best_contact
 from services.source_engine.contact_selection import select_lead_person as _lead_named_contact
@@ -49,8 +51,10 @@ def _csv_safe(value: object, *, phone_number: bool = False) -> object:
     """Keep externally sourced text inert when a CSV is opened in a spreadsheet."""
     if isinstance(value, str):
         value = " ".join(value.split())
-        if phone_number and value.startswith("+") and extract_phone(value) == value:
-            return value
+        if phone_number and value.startswith("+"):
+            phones = [part.strip() for part in value.split(";")]
+            if all(extract_phone(phone) == phone for phone in phones):
+                return value
         if value.startswith(("=", "+", "-", "@")):
             return f"'{value}"
     return value
@@ -688,7 +692,17 @@ async def main() -> None:
     parser.add_argument(
         "--named-contacts-path",
         default="",
-        help="Optional normalized CSV containing every validated person-linked route",
+        help="Optional readable CSV containing one row per validated named person",
+    )
+    parser.add_argument(
+        "--leads-alias-path",
+        default="",
+        help="Optional byte-identical copy of the complete lead export",
+    )
+    parser.add_argument(
+        "--companies-alias-path",
+        default="",
+        help="Optional byte-identical copy of the complete company export",
     )
     parser.add_argument(
         "--region",
@@ -708,6 +722,8 @@ async def main() -> None:
     leads_path = args.leads_path
     companies_path = args.companies_path
     named_contacts_path = args.named_contacts_path
+    leads_alias_path = args.leads_alias_path
+    companies_alias_path = args.companies_alias_path
     region_filter = args.region
     min_rank = args.min_rank
 
@@ -746,49 +762,55 @@ async def main() -> None:
                 "primary_domain",
                 "named_contact_name",
                 "named_contact_title",
-                "contact_type",
-                "contact_value",
+                "named_contact_emails",
+                "named_contact_phones",
+                "named_contact_linkedin_urls",
             ]
             named_contact_count = 0
             with open(named_contacts_path, "w", newline="", encoding="utf-8") as f:
                 named_writer = csv.DictWriter(
                     f,
                     fieldnames=named_contact_fields,
-                    lineterminator="\n",
+                    lineterminator="\r\n",
                 )
                 named_writer.writeheader()
                 for named_company in company_rows:
-                    for route in list_named_contact_routes(
+                    for contact in list_named_contacts(
                         contact_by_company.get(named_company.id, []),
                         named_company.canonical_name,
                     ):
-                        contact_type = route["contact_type"]
                         named_row = {
                             "company_id": named_company.id,
                             "company_name": named_company.canonical_name,
                             "primary_domain": named_company.primary_domain or "",
-                            "named_contact_name": route["name"],
-                            "named_contact_title": route["title"],
-                            "contact_type": contact_type,
-                            "contact_value": route["contact_value"],
+                            "named_contact_name": contact["name"],
+                            "named_contact_title": contact["title"],
+                            "named_contact_emails": "; ".join(
+                                str(_csv_safe(value)) for value in contact["emails"]
+                            ),
+                            "named_contact_phones": "; ".join(
+                                str(_csv_safe(value, phone_number=True))
+                                for value in contact["phones"]
+                            ),
+                            "named_contact_linkedin_urls": "; ".join(
+                                str(_csv_safe(value)) for value in contact["linkedins"]
+                            ),
                         }
                         named_writer.writerow(
                             {
                                 field: _csv_safe(
                                     value,
-                                    phone_number=(
-                                        field == "contact_value" and contact_type == "phone"
-                                    ),
+                                    phone_number=field == "named_contact_phones",
                                 )
                                 for field, value in named_row.items()
                             }
                         )
                         named_contact_count += 1
-            print(f"Exported {named_contact_count} named contact routes to {named_contacts_path}")
+            print(f"Exported {named_contact_count} named contacts to {named_contacts_path}")
 
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f, lineterminator="\n")
+            writer = csv.writer(f, lineterminator="\r\n")
             company_fields = [
                 "company_id",
                 "company_name",
@@ -994,7 +1016,7 @@ async def main() -> None:
         with open(leads_path, "w", newline="", encoding="utf-8") as f:
             leads_writer = csv.DictWriter(
                 f,
-                lineterminator="\n",
+                lineterminator="\r\n",
                 fieldnames=[
                     "company_name",
                     "primary_domain",
@@ -1033,6 +1055,13 @@ async def main() -> None:
                 }
                 for row in lead_rows
             )
+
+        for source_path, alias_path in (
+            (leads_path, leads_alias_path),
+            (companies_path, companies_alias_path),
+        ):
+            if alias_path and Path(source_path).resolve() != Path(alias_path).resolve():
+                shutil.copyfile(source_path, alias_path)
 
         print(f"Exported {len(lead_rows)} leads to {leads_path}")
         print(f"Exported {len(company_rows)} companies to {companies_path}")

@@ -686,11 +686,12 @@ def test_targeted_contact_does_not_borrow_another_advisers_details() -> None:
     assert lead_contact["phone"] == "+64 21 555 0101"
 
 
-def test_list_named_contact_routes_preserves_every_person_route() -> None:
+def test_list_named_contacts_preserves_every_person_route_in_separate_fields() -> None:
     routes = [
         {"type": "generic_email", "value": "office@example.org"},
         {"type": "business_phone", "value": "+64 9 555 0100"},
         {"type": "named_contact", "value": "Alice Morgan (Property Manager)"},
+        {"type": "named_contact", "value": "Name Only (Property Manager)"},
         {
             "type": "named_work_email_approved",
             "value": "Alice Morgan (Property Manager) <alice.morgan@example.org>",
@@ -729,43 +730,72 @@ def test_list_named_contact_routes_preserves_every_person_route() -> None:
         },
     ]
 
-    assert contact_selection.list_named_contact_routes(routes, "Example Realty") == [
+    assert contact_selection.list_named_contacts(routes, "Example Realty") == [
         {
             "name": "Alice Morgan",
             "title": "Property Manager",
-            "contact_type": "email",
-            "contact_value": "a.morgan@example.org",
-        },
-        {
-            "name": "Alice Morgan",
-            "title": "Property Manager",
-            "contact_type": "email",
-            "contact_value": "alice.morgan@example.org",
-        },
-        {
-            "name": "Alice Morgan",
-            "title": "Property Manager",
-            "contact_type": "phone",
-            "contact_value": "+64 21 555 0101",
-        },
-        {
-            "name": "Alice Morgan",
-            "title": "Property Manager",
-            "contact_type": "linkedin",
-            "contact_value": "https://www.linkedin.com/in/alice-morgan",
+            "emails": ("a.morgan@example.org", "alice.morgan@example.org"),
+            "phones": ("+64 21 555 0101",),
+            "linkedins": ("https://www.linkedin.com/in/alice-morgan",),
         },
         {
             "name": "Bob Taylor",
             "title": "Director",
-            "contact_type": "email",
-            "contact_value": "bob@example.org",
+            "emails": ("bob@example.org",),
+            "phones": (),
+            "linkedins": ("https://www.linkedin.com/in/bob-taylor",),
         },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("display", "expected_name", "expected_title"),
+    [
+        ("Eboni Hemsley Sales <eboni@example.org>", "Eboni Hemsley", "Sales"),
+        (
+            "Alicia Parlby Commercial Sales <alicia@example.org>",
+            "Alicia Parlby",
+            "Commercial Sales",
+        ),
+        (
+            "Liv Middleton Sales Associate <liv@example.org>",
+            "Liv Middleton",
+            "Sales Associate",
+        ),
+        (
+            "Nakita Cahir Sales Administration <nakita@example.org>",
+            "Nakita Cahir",
+            "Sales Administration",
+        ),
+    ],
+)
+def test_parse_named_contact_separates_reproduced_appended_titles(
+    display: str, expected_name: str, expected_title: str
+) -> None:
+    assert parse_named_contact(display) == {
+        "name": expected_name,
+        "title": expected_title,
+        "value": display.rsplit("<", 1)[1][:-1],
+    }
+
+
+def test_named_contact_projection_removes_name_repeated_in_title() -> None:
+    assert contact_selection.list_named_contacts(
+        [
+            {
+                "type": "named_work_email_approved",
+                "value": "Tony Bove (DIRECTOR tony) <tony@example.org>",
+            }
+        ],
+        "AAA Above Group",
+    ) == [
         {
-            "name": "Bob Taylor",
+            "name": "Tony Bove",
             "title": "Director",
-            "contact_type": "linkedin",
-            "contact_value": "https://www.linkedin.com/in/bob-taylor",
-        },
+            "emails": ("tony@example.org",),
+            "phones": (),
+            "linkedins": (),
+        }
     ]
 
 

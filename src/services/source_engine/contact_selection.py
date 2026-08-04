@@ -75,17 +75,40 @@ _TITLE_BOILERPLATE = re.compile(
     r"\b(Read Bio|Read More|Connect|LinkedIn|Facebook|Instagram|Twitter|TikTok|YouTube)\b",
     re.I,
 )
+_TITLE_ROLE_WORDS = {
+    "adviser",
+    "advisor",
+    "agent",
+    "assistant",
+    "broker",
+    "consultant",
+    "director",
+    "executive",
+    "finance",
+    "financial",
+    "manager",
+    "marketing",
+    "principal",
+    "property",
+    "sales",
+}
 
 
-def _clean_title_text(title: str) -> str:
+def _clean_title_text(title: str, name: str = "") -> str:
     title = _TITLE_BOILERPLATE.sub("", title)
     title = title.replace("|", " ").replace("  ", " ")
+    for token in _name_key(name):
+        if token in _TITLE_ROLE_WORDS:
+            continue
+        title = re.sub(rf"\b{re.escape(token)}\b", "", title, flags=re.I)
     title = re.sub(r"\s+", " ", title).strip(" -")
+    if len(title) > 4 and title.isupper():
+        title = title.title()
     return title
 
 
 def _validated_person(name: str, title: str, company_name: str = "") -> tuple[str, str] | None:
-    title = _clean_title_text(title)
+    title = _clean_title_text(title, name)
     if title and (len(title) > 60 or len(title.split()) > 8):
         title = ""
     display = f"{name} ({title})" if title else name
@@ -224,30 +247,30 @@ def _collect_named_people(
     return candidates, generic_emails
 
 
-def list_named_contact_routes(
-    routes: list[dict[str, str]], company_name: str = ""
-) -> list[dict[str, str]]:
-    """Return every validated person-linked email, phone, and LinkedIn route."""
+class NamedContact(TypedDict):
+    name: str
+    title: str
+    emails: tuple[str, ...]
+    phones: tuple[str, ...]
+    linkedins: tuple[str, ...]
+
+
+def list_named_contacts(routes: list[dict[str, str]], company_name: str = "") -> list[NamedContact]:
+    """Return one readable row per person without losing validated routes."""
     candidates, _ = _collect_named_people(routes, company_name)
-    results: list[dict[str, str]] = []
-    for candidate in sorted(
-        candidates.values(), key=lambda item: (item["name"].lower(), item["title"].lower())
-    ):
-        for contact_type, values in (
-            ("email", candidate["emails"]),
-            ("phone", candidate["phones"]),
-            ("linkedin", candidate["linkedins"]),
-        ):
-            for value in sorted(values, key=str.lower):
-                results.append(
-                    {
-                        "name": candidate["name"],
-                        "title": candidate["title"],
-                        "contact_type": contact_type,
-                        "contact_value": value,
-                    }
-                )
-    return results
+    return [
+        {
+            "name": candidate["name"],
+            "title": candidate["title"],
+            "emails": tuple(sorted(candidate["emails"], key=str.lower)),
+            "phones": tuple(sorted(candidate["phones"], key=str.lower)),
+            "linkedins": tuple(sorted(candidate["linkedins"], key=str.lower)),
+        }
+        for candidate in sorted(
+            candidates.values(), key=lambda item: (item["name"].lower(), item["title"].lower())
+        )
+        if candidate["emails"] or candidate["phones"] or candidate["linkedins"]
+    ]
 
 
 def select_named_person(
@@ -422,7 +445,7 @@ def select_lead_person(
 
 
 __all__ = [
-    "list_named_contact_routes",
+    "list_named_contacts",
     "select_company_routes",
     "select_contact_routes",
     "select_lead_person",
