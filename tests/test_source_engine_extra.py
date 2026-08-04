@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import os
+import socket
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -12,6 +16,7 @@ import httpx
 import pytest
 from bs4 import BeautifulSoup
 
+from services.source_engine.adapters.base import _resolve_public_ips, _SafeAsyncHTTPTransport
 from services.source_engine.adapters.company_web import CompanyWebAdapter
 from services.source_engine.adapters.finance_directory import FinanceDirectoryAdapter
 from services.source_engine.adapters.nz_finance_advisers import NzFinanceAdvisersAdapter
@@ -174,6 +179,182 @@ async def test_team_pages_compacts_completed_page_state(
     assert raw["title"] == "Acme Team"
     assert raw["company_name"] == "Acme Services"
     assert adapter.normalize(uuid4(), raw)["body_excerpt"] == "Acme Team Acme Services Email us"
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_fetches_each_profile_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pagination overlap must not trigger duplicate adviser profile requests."""
+    adapter = NzFinanceAdvisersAdapter(_make_adapter_config("nz_finance_advisers", "web"))
+    fetched: list[str] = []
+
+    async def discover(_max_pages: int) -> list[str]:
+        return ["https://example.org/adviser/alice", "https://example.org/adviser/bob"] * 2
+
+    async def fetch_profile(url: str) -> dict[str, str]:
+        fetched.append(url)
+        return {"profile_url": url}
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_fetch_profile", fetch_profile)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert fetched == [
+        "https://example.org/adviser/alice",
+        "https://example.org/adviser/bob",
+    ]
+    assert [result["profile_url"] for result in results] == fetched
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_rejects_empty_directory_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = NzFinanceAdvisersAdapter(_make_adapter_config("nz_finance_advisers", "web"))
+
+    async def discover(_max_pages: int) -> list[str]:
+        return []
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    try:
+        with pytest.raises(httpx.HTTPError, match="no adviser profiles"):
+            await adapter.fetch(uuid4(), {})
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_processes_profiles_with_bounded_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("nz_finance_advisers", "web")
+    config.rate_limit = {"max_total_concurrency": 3}
+    adapter = NzFinanceAdvisersAdapter(config)
+    active = 0
+    peak = 0
+
+    async def discover(_max_pages: int) -> list[str]:
+        return [f"https://example.org/adviser/{index}" for index in range(6)]
+
+    async def fetch_profile(url: str) -> dict[str, str]:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"profile_url": url}
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_fetch_profile", fetch_profile)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert peak == 3
+    assert len(results) == 6
+
+
+@pytest.mark.asyncio
+async def test_nz_finance_advisers_fetches_shared_provider_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("nz_finance_advisers", "web")
+    config.rate_limit = {"max_total_concurrency": 2}
+    adapter = NzFinanceAdvisersAdapter(config)
+    provider_url = "https://financeadvisers.co.nz/provider/example-advice"
+    provider_fetches = 0
+
+    async def discover(_max_pages: int) -> list[str]:
+        return [
+            "https://financeadvisers.co.nz/adviser/alice",
+            "https://financeadvisers.co.nz/adviser/bob",
+        ]
+
+    async def robots_allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def get(url: str) -> str:
+        nonlocal provider_fetches
+        if "/provider/" in url:
+            provider_fetches += 1
+            await asyncio.sleep(0.01)
+            return (
+                '<script type="application/ld+json">'
+                '{"@type":"Organization","name":"Example Advice",'
+                '"url":"https://example.org","telephone":"+64 9 555 0100"}'
+                "</script>"
+            )
+        name = "Alice Morgan" if url.endswith("alice") else "Bob Taylor"
+        return (
+            '<script type="application/ld+json">'
+            f'{{"@type":"Person","name":"{name}","jobTitle":"Financial Adviser",'
+            f'"worksFor":{{"name":"Example Advice","url":"{provider_url}"}}}}'
+            "</script>"
+        )
+
+    monkeypatch.setattr(adapter, "_discover_profile_urls", discover)
+    monkeypatch.setattr(adapter, "_robots_allowed", robots_allowed)
+    monkeypatch.setattr(adapter, "_get", get)
+
+    results = await adapter.fetch(uuid4(), {})
+
+    assert provider_fetches == 1
+    assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_rejects_partial_query_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed Overpass slice must fail the source run instead of truncating coverage."""
+    config = _make_adapter_config("openstreetmap", "public_api")
+    config.adapter_config = {
+        "areas": ["Australia"],
+        "tags": [
+            {"key": "office", "value": "accountant"},
+            {"key": "office", "value": "lawyer"},
+        ],
+    }
+    adapter = OpenStreetMapAdapter(config)
+    responses: list[dict[str, list[object]] | None] = [{"elements": []}, None]
+
+    async def execute(_query: str) -> dict[str, list[object]] | None:
+        return responses.pop(0)
+
+    monkeypatch.setattr(adapter, "_execute_query", execute)
+    try:
+        with pytest.raises(httpx.HTTPError, match="incomplete"):
+            await adapter.fetch(uuid4(), {})
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openstreetmap_retries_endpoints_once_after_transient_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = OpenStreetMapAdapter(_make_adapter_config("openstreetmap", "public_api"))
+    responses = [503, 503, 200]
+    requests = 0
+
+    async def post(url: str, **_kwargs: object) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        status = responses.pop(0)
+        return httpx.Response(
+            status,
+            json={"elements": []} if status == 200 else None,
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(adapter, "_http_post", post)
+    try:
+        assert await adapter._execute_query("[out:json];") == {"elements": []}
+    finally:
+        await adapter.aclose()
+
+    assert requests == 3
 
 
 def test_filter_hit_fields_preserves_classification_and_workplace_data() -> None:
@@ -477,6 +658,67 @@ def test_generic_property_lead_prefers_relevant_published_role() -> None:
     )
 
 
+def test_generic_lead_prefers_reachable_person_over_unreachable_role_match() -> None:
+    """A usable direct route is more valuable than a title-only person match."""
+    routes = [
+        {"type": "named_contact", "value": "Alice Morgan (Property Manager)"},
+        {
+            "type": "named_work_email_approved",
+            "value": "Zoe Taylor (Director) <zoe.taylor@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "Zoe Taylor (Director) <+61 3 9000 0000>",
+        },
+    ]
+
+    selected = _lead_named_contact(
+        "Property Manager / Real Estate Office",
+        [],
+        routes,
+        "Example Realty",
+    )
+
+    assert selected["name"] == "Zoe Taylor"
+    assert selected["email"] == "zoe.taylor@example.org"
+    assert selected["phone"] == "+61 3 9000 0000"
+
+
+def test_generic_lead_prefers_richer_direct_routes_before_role_title() -> None:
+    """Email and phone coverage must not be discarded for a role-only preference."""
+    routes = [
+        {
+            "type": "social_profile_review_only",
+            "value": (
+                "Andrew Hopkins (Finance Broker) - https://www.linkedin.com/in/andrew-hopkins"
+            ),
+        },
+        {
+            "type": "named_work_email_approved",
+            "value": "David Manou (Managing Director) <david@example.org>",
+        },
+        {
+            "type": "business_phone",
+            "value": "David Manou (Managing Director) <+61 4 1234 5678>",
+        },
+        {
+            "type": "social_profile_review_only",
+            "value": "David Manou (Managing Director) - https://www.linkedin.com/in/david-manou",
+        },
+    ]
+
+    selected = _lead_named_contact(
+        "Finance Directory listing for Accelerate Group",
+        [],
+        routes,
+        "Accelerate Group",
+    )
+
+    assert selected["name"] == "David Manou"
+    assert selected["email"] == "david@example.org"
+    assert selected["phone"] == "+61 4 1234 5678"
+
+
 @pytest.mark.parametrize(
     ("lead_title", "contact_title"),
     [
@@ -614,7 +856,7 @@ def test_targeted_contact_domains_partition_into_three_stable_shards() -> None:
 async def test_targeted_contact_backfill_runs_three_shards_per_phase(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Three shards run concurrently while team and company crawl phases stay ordered."""
+    """Deep crawl runs first and the guessed-path crawler handles unresolved domains."""
     module = _load_targeted_contact_script()
     active = 0
     peak = 0
@@ -656,7 +898,13 @@ async def test_targeted_contact_backfill_runs_three_shards_per_phase(
 
             return Record()
 
-    async def domains(_workspace_id: object, _max_domains: object) -> list[str]:
+    async def domains(
+        _workspace_id: object,
+        _max_domains: object,
+        exclude_completed_source: str = "",
+    ) -> list[str]:
+        if exclude_completed_source == "company_web":
+            return [f"{letter}.example" for letter in "def"]
         return [f"{letter}.example" for letter in "abcdef"]
 
     monkeypatch.setattr(module, "AsyncSessionLocal", Session)
@@ -666,14 +914,18 @@ async def test_targeted_contact_backfill_runs_three_shards_per_phase(
     result = await module.run_targeted_contact_backfill(uuid4(), uuid4(), shard_count=3)
 
     assert peak == 3
-    assert [source for source, _domains in calls] == ["team_pages"] * 3 + ["company_web"] * 3
-    expected = {
+    assert [source for source, _domains in calls] == ["company_web"] * 3 + ["team_pages"] * 3
+    company_expected = {
         ("a.example", "d.example"),
         ("b.example", "e.example"),
         ("c.example", "f.example"),
     }
-    assert {domains for source, domains in calls if source == "team_pages"} == expected
-    assert {domains for source, domains in calls if source == "company_web"} == expected
+    assert {domains for source, domains in calls if source == "company_web"} == company_expected
+    assert {domains for source, domains in calls if source == "team_pages"} == {
+        ("d.example",),
+        ("e.example",),
+        ("f.example",),
+    }
     assert result["shard_count"] == 3
 
 
@@ -709,7 +961,7 @@ async def test_targeted_contact_backfill_fails_when_a_shard_fails(
     monkeypatch.setattr(module, "SourceRunner", Runner)
     monkeypatch.setattr(module, "get_missing_contact_domains", domains)
 
-    with pytest.raises(RuntimeError, match="team_pages shard 0 failed"):
+    with pytest.raises(RuntimeError, match="company_web shard 0 failed"):
         await module.run_targeted_contact_backfill(uuid4(), uuid4(), shard_count=3)
 
 
@@ -787,7 +1039,10 @@ async def test_missing_contact_query_scopes_each_route_to_workspace(
 
         async def execute(self, statement: object, params: dict[str, object]) -> Rows:
             statements.append(str(statement))
-            assert params == {"workspace_id": workspace_id}
+            assert params == {
+                "workspace_id": workspace_id,
+                "exclude_completed_source": "",
+            }
             return Rows()
 
     monkeypatch.setattr(module, "AsyncSessionLocal", Session)
@@ -796,6 +1051,7 @@ async def test_missing_contact_query_scopes_each_route_to_workspace(
     assert len(statements) == 1
     for alias in ("named", "email", "phone", "social"):
         assert f"{alias}.workspace_id = :workspace_id" in statements[0]
+    assert "completed.workspace_id = :workspace_id" in statements[0]
 
 
 def test_named_email_is_preferred_over_generic_email() -> None:
@@ -1076,6 +1332,34 @@ def test_team_page_extracts_person_from_nested_jsonld_graph() -> None:
             "Mia Williams (Senior Property Manager) - https://www.linkedin.com/in/mia-williams",
         ),
         ("named_contact", "Mia Williams (Senior Property Manager)"),
+    }
+
+
+def test_team_page_trusts_email_published_on_jsonld_person() -> None:
+    """A schema.org Person email remains targeted even when it uses a known alias."""
+    soup = BeautifulSoup(
+        """
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Person",
+          "name": "Elizabeth Morgan",
+          "jobTitle": "Property Manager",
+          "email": "liz@example.org"
+        }
+        </script>
+        """,
+        "html.parser",
+    )
+
+    routes = _extract_from_soup(soup, "https://example.org/our-team", "example.org")
+
+    assert {(route["type"], route["value"]) for route in routes} == {
+        (
+            "named_work_email_approved",
+            "Elizabeth Morgan (Property Manager) <liz@example.org>",
+        ),
+        ("named_contact", "Elizabeth Morgan (Property Manager)"),
     }
 
 
@@ -1615,6 +1899,336 @@ async def test_http_request_rejects_redirect_outside_expected_host(
         await adapter.aclose()
 
     assert requested_hosts == ["branch.example.org"]
+
+
+@pytest.mark.asyncio
+async def test_robots_lookup_failure_does_not_block_source_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable robots file is not evidence that the source disallows crawling."""
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+
+    async def unavailable(_url: str, **_kwargs: object) -> httpx.Response:
+        raise httpx.ConnectError("robots unavailable")
+
+    monkeypatch.setattr(adapter, "_http_get", unavailable)
+    try:
+        assert await adapter._robots_allowed("https://example.org/team") is True
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_http_request_uses_the_adapter_client_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = FinanceDirectoryAdapter(
+        _make_adapter_config("finance_directory", "scoped_public_web_crawl")
+    )
+    request_kwargs: dict[str, object] = {}
+
+    async def request(_method: str, url: str, **kwargs: object) -> httpx.Response:
+        request_kwargs.update(kwargs)
+        return httpx.Response(200, request=httpx.Request("GET", url))
+
+    async def safe_url(_url: str) -> bool:
+        return True
+
+    assert adapter.client is not None
+    monkeypatch.setattr(adapter.client, "request", request)
+    monkeypatch.setattr(adapter, "_is_safe_url", safe_url)
+    try:
+        await adapter._http_get("https://example.org/team")
+    finally:
+        await adapter.aclose()
+
+    assert "timeout" not in request_kwargs
+
+
+@pytest.mark.asyncio
+async def test_company_web_bounds_time_spent_on_one_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("company_web", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.01
+    adapter = CompanyWebAdapter(config)
+
+    async def slow_sitemap(_domain: str) -> list[str]:
+        await asyncio.sleep(10)
+        return []
+
+    async def empty_page(_url: str, _domain: str) -> None:
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", slow_sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", empty_page)
+    try:
+        assert (
+            await asyncio.wait_for(
+                adapter.fetch(uuid4(), {"domains": ["example.org"]}), timeout=0.1
+            )
+            == []
+        )
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_company_web_crawls_homepage_before_sitemap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = CompanyWebAdapter(_make_adapter_config("company_web", "scoped_public_web_crawl"))
+    actions: list[str] = []
+
+    async def sitemap(_domain: str) -> list[str]:
+        actions.append("sitemap")
+        return []
+
+    async def page(_url: str, _domain: str) -> None:
+        actions.append("page")
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", page)
+    try:
+        assert await adapter.fetch(uuid4(), {"domains": ["example.org"]}) == []
+    finally:
+        await adapter.aclose()
+
+    assert actions == ["page", "sitemap"]
+
+
+@pytest.mark.asyncio
+async def test_company_web_preserves_routes_collected_before_domain_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("company_web", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.02
+    adapter = CompanyWebAdapter(config)
+
+    async def sitemap(_domain: str) -> list[str]:
+        return ["https://example.org/team"]
+
+    async def page(url: str, _domain: str) -> tuple[str, BeautifulSoup] | None:
+        if url == "https://example.org":
+            return (
+                url,
+                BeautifulSoup(
+                    '<a href="/team">Team</a><a href="mailto:hello@example.org">Email</a>',
+                    "html.parser",
+                ),
+            )
+        await asyncio.sleep(10)
+        return None
+
+    monkeypatch.setattr(adapter, "_sitemap_urls", sitemap)
+    monkeypatch.setattr(adapter, "_fetch_page", page)
+    try:
+        results = await asyncio.wait_for(
+            adapter.fetch(uuid4(), {"domains": ["example.org"]}), timeout=0.1
+        )
+    finally:
+        await adapter.aclose()
+
+    assert len(results) == 1
+    assert any(route["type"] == "generic_email" for route in results[0]["contact_routes"])
+
+
+@pytest.mark.asyncio
+async def test_team_pages_bounds_time_spent_on_one_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("team_pages", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.01
+    adapter = TeamPagesAdapter(config)
+
+    async def allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def slow_get(_url: str, **_kwargs: object) -> httpx.Response:
+        await asyncio.sleep(10)
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(adapter, "_robots_allowed", allowed)
+    monkeypatch.setattr(adapter, "_http_get", slow_get)
+    try:
+        assert (
+            await asyncio.wait_for(
+                adapter.fetch(
+                    uuid4(),
+                    {"domains": ["example.org"], "paths": ["/team"]},
+                ),
+                timeout=0.1,
+            )
+            == []
+        )
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.asyncio
+async def test_team_pages_preserves_routes_collected_before_domain_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_adapter_config("team_pages", "scoped_public_web_crawl")
+    config.adapter_config["domain_timeout_seconds"] = 0.02
+    adapter = TeamPagesAdapter(config)
+
+    async def allowed(_url: str, _user_agent: str = "VALeadBot/1.0") -> bool:
+        return True
+
+    async def get(url: str, **_kwargs: object) -> httpx.Response:
+        if url.endswith("/team"):
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/html"},
+                text='<a href="mailto:hello@example.org">Email</a>',
+                request=httpx.Request("GET", url),
+            )
+        await asyncio.sleep(10)
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(adapter, "_robots_allowed", allowed)
+    monkeypatch.setattr(adapter, "_http_get", get)
+    try:
+        results = await asyncio.wait_for(
+            adapter.fetch(
+                uuid4(),
+                {
+                    "domains": ["example.org"],
+                    "paths": ["/team", "/slow"],
+                },
+            ),
+            timeout=0.1,
+        )
+    finally:
+        await adapter.aclose()
+
+    assert len(results) == 1
+    assert any(route["type"] == "generic_email" for route in results[0]["contact_routes"])
+
+
+@pytest.mark.asyncio
+async def test_safe_transport_reuses_the_pinned_ip_per_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A crawl resolves each host once instead of repeating DNS for every page."""
+    resolutions: list[str] = []
+    connected_hosts: list[str] = []
+
+    async def resolve(host: str) -> list[str]:
+        resolutions.append(host)
+        return ["203.0.113.10"]
+
+    async def send(
+        _transport: httpx.AsyncHTTPTransport,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        connected_hosts.append(request.url.host)
+        return httpx.Response(200, request=request)
+
+    monkeypatch.setattr("services.source_engine.adapters.base._resolve_public_ips", resolve)
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
+    transport = _SafeAsyncHTTPTransport()
+    try:
+        await transport.handle_async_request(httpx.Request("GET", "https://example.org/team"))
+        await transport.handle_async_request(httpx.Request("GET", "https://example.org/contact"))
+    finally:
+        await transport.aclose()
+
+    assert resolutions == ["example.org"]
+    assert connected_hosts == ["203.0.113.10", "203.0.113.10"]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_retries_a_transient_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+    monkeypatch.delenv("RES_OPTIONS", raising=False)
+
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise socket.gaierror(-3, "temporary failure")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    assert await _resolve_public_ips("example.org") == ["93.184.216.34"]
+    assert attempts == 2
+    assert os.environ["RES_OPTIONS"] == "timeout:1 attempts:1"
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_falls_back_after_system_resolver_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(*_args: object) -> list[tuple[object, ...]]:
+        raise socket.gaierror(-3, "temporary failure")
+
+    def public_dns(host: str) -> list[str]:
+        assert host == "example.org"
+        return ["93.184.216.34"]
+
+    async def no_delay(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(socket, "getaddrinfo", unavailable)
+    monkeypatch.setattr(
+        "services.source_engine.adapters.base._resolve_with_public_dns",
+        public_dns,
+        raising=False,
+    )
+    monkeypatch.setattr(asyncio, "sleep", no_delay)
+
+    assert await _resolve_public_ips("example.org") == ["93.184.216.34"]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_prefers_ipv4_when_both_families_are_public(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        return [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2606:2800:220:1::", 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    assert await _resolve_public_ips("example.org") == [
+        "93.184.216.34",
+        "2606:2800:220:1::",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_dns_resolution_bounds_concurrent_system_lookups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def getaddrinfo(*_args: object) -> list[tuple[object, ...]]:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.02)
+        with lock:
+            active -= 1
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+    await asyncio.gather(*(_resolve_public_ips(f"host-{index}.example") for index in range(20)))
+
+    assert peak <= 4
 
 
 @pytest.mark.asyncio

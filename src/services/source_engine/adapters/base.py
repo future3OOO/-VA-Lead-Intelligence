@@ -7,7 +7,9 @@ import ipaddress
 import os
 import re
 import socket
+import threading
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any, TypeVar
@@ -15,6 +17,7 @@ from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 from uuid import UUID
 
+import dns.resolver
 import httpx
 
 from services.source_engine.checkpoint import CheckpointStore
@@ -24,6 +27,32 @@ from services.source_engine.rate_limit import RateLimiter
 
 _T = TypeVar("_T")
 _R = TypeVar("_R")
+_DNS_LOOKUP_LIMIT = threading.BoundedSemaphore(4)
+
+
+def _getaddrinfo_limited(host: str) -> list[tuple[Any, ...]]:
+    os.environ.setdefault("RES_OPTIONS", "timeout:1 attempts:1")
+    with _DNS_LOOKUP_LIMIT:
+        return socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+
+
+def _resolve_with_public_dns(host: str) -> list[str]:
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = ["1.1.1.1", "8.8.8.8"]
+    resolver.timeout = 1.0
+    resolver.lifetime = 2.0
+    with _DNS_LOOKUP_LIMIT:
+        for record_type in ("A", "AAAA"):
+            try:
+                return [str(answer) for answer in resolver.resolve(host, record_type)]
+            except (
+                dns.resolver.LifetimeTimeout,
+                dns.resolver.NoAnswer,
+                dns.resolver.NoNameservers,
+                dns.resolver.NXDOMAIN,
+            ):
+                continue
+    return []
 
 
 def _is_safe_domain(domain: str) -> bool:
@@ -55,19 +84,28 @@ async def _resolve_public_ips(host: str) -> list[str]:
 
     Raises httpx.HTTPError if the host cannot be resolved or has no public IP.
     """
-    try:
-        infos = await asyncio.to_thread(
-            socket.getaddrinfo, host, None, socket.AF_UNSPEC, socket.SOCK_STREAM
-        )
-    except socket.gaierror as exc:
-        raise httpx.HTTPError(f"DNS resolution failed for {host}: {exc}") from exc
-    if not infos:
+    last_error: socket.gaierror | None = None
+    infos: list[tuple[Any, ...]] = []
+    for attempt in range(3):
+        try:
+            infos = await asyncio.to_thread(_getaddrinfo_limited, host)
+            break
+        except socket.gaierror as exc:
+            last_error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.25 * (attempt + 1))
+    raw_ips = [sockaddr[0] for _family, _socktype, _proto, _canonname, sockaddr in infos]
+    if not raw_ips and last_error:
+        raw_ips = await asyncio.to_thread(_resolve_with_public_dns, host)
+        if not raw_ips:
+            raise httpx.HTTPError(f"DNS resolution failed for {host}: {last_error}") from last_error
+    if not raw_ips:
         raise httpx.HTTPError(f"No DNS records for {host}")
 
     ips: list[str] = []
-    for _family, _socktype, _proto, _canonname, sockaddr in infos:
+    for address in raw_ips:
         try:
-            ip = ipaddress.ip_address(sockaddr[0])
+            ip = ipaddress.ip_address(address)
         except ValueError:
             continue
         if not ip.is_global:
@@ -75,6 +113,7 @@ async def _resolve_public_ips(host: str) -> list[str]:
         ips.append(str(ip))
     if not ips:
         raise httpx.HTTPError(f"No public IP for {host}")
+    ips.sort(key=lambda value: ipaddress.ip_address(value).version)
     return ips
 
 
@@ -90,12 +129,31 @@ async def _is_safe_host(host: str) -> bool:
 class _SafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
     """httpx transport that pins each connection to a validated public IP.
 
-    DNS resolution is performed immediately before the TCP connect, the Host
-    header and TLS SNI are preserved from the original hostname, and the
-    connection is made directly to the validated IP. This closes the DNS
-    rebinding window where a hostname resolves to a public address at validation
-    time and a private address at connect time.
+    Each hostname is resolved and validated once per transport lifetime. The
+    Host header and TLS SNI are preserved while connections use that pinned IP,
+    preventing a second DNS lookup from rebinding the request to a private
+    address.
     """
+
+    def __init__(self, *, limits: httpx.Limits | None = None, retries: int = 0) -> None:
+        if limits is None:
+            super().__init__(retries=retries)
+        else:
+            super().__init__(limits=limits, retries=retries)
+        self._pinned_ips: dict[str, str] = {}
+        self._pin_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    async def _pinned_ip(self, host: str) -> str:
+        cached = self._pinned_ips.get(host)
+        if cached:
+            return cached
+        async with self._pin_locks[host]:
+            cached = self._pinned_ips.get(host)
+            if cached:
+                return cached
+            ip = (await _resolve_public_ips(host))[0]
+            self._pinned_ips[host] = ip
+            return ip
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         original_url = request.url
@@ -105,8 +163,7 @@ class _SafeAsyncHTTPTransport(httpx.AsyncHTTPTransport):
             raise httpx.HTTPError(f"Unsafe host requested: {host}")
 
         # Resolve and validate public IP(s) immediately before connecting.
-        ips = await _resolve_public_ips(host)
-        ip = ips[0]
+        ip = await self._pinned_ip(host)
         if isinstance(ipaddress.ip_address(ip), ipaddress.IPv6Address):
             ip = f"[{ip}]"
 
@@ -180,6 +237,24 @@ class BaseSourceAdapter(ABC):
                 return await worker(item)
 
         return list(await asyncio.gather(*(run(item) for item in items)))
+
+    async def _run_before_deadline(
+        self,
+        deadline: float,
+        subject: str,
+        operation: Callable[[], Awaitable[_R]],
+    ) -> tuple[bool, _R | None]:
+        """Run one crawl operation within a shared item deadline."""
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            self.metrics.record_error("domain_timeout")
+            return False, None
+        try:
+            return True, await asyncio.wait_for(operation(), timeout=remaining)
+        except TimeoutError:
+            self.metrics.record_error("domain_timeout")
+            print(f"[{self.source_key}] timed out: {subject}", flush=True)
+            return False, None
 
     @abstractmethod
     async def fetch(self, workspace_id: UUID, query: dict[str, Any]) -> list[dict[str, Any]]:
@@ -270,9 +345,10 @@ class BaseSourceAdapter(ABC):
                 timeout=5.0,
                 headers={"User-Agent": user_agent},
             )
+            response.raise_for_status()
             rp.parse(response.text.splitlines())
         except Exception:
-            pass
+            rp.parse(["User-agent: *", "Allow: /"])
         self._robots_cache[robots_url] = rp
         return rp.can_fetch(user_agent, url)
 
@@ -306,8 +382,6 @@ class BaseSourceAdapter(ABC):
         if expected_host is not None and not isinstance(expected_host, str):
             raise TypeError("expected_host must be a string")
         kwargs.pop("follow_redirects", None)
-        if "timeout" not in kwargs:
-            kwargs["timeout"] = 30.0
         client = self.client
         normalized_expected = (
             re.sub(r"^www\.", "", expected_host.lower()) if expected_host else None

@@ -9,8 +9,9 @@ rather than from active job posts.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
-from typing import Any, cast
+from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -264,38 +265,39 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
     async def _execute_query(self, query: str) -> dict[str, Any] | None:
         """Post a query to the configured Overpass endpoints with retries."""
         last_error: Exception | None = None
-        for endpoint in self._ENDPOINTS:
-            try:
-                response = await self._http_post(
-                    endpoint,
-                    content=query,
-                    headers={"Content-Type": "text/plain"},
-                )
-            except Exception as exc:
-                last_error = exc
-                continue
-            if response.status_code in (429, 503, 504):
-                # Rate limited or overloaded; try another endpoint.
-                last_error = httpx.HTTPStatusError(
-                    f"Overpass {endpoint} returned {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-                continue
-            if response.status_code >= 400:
-                last_error = httpx.HTTPStatusError(
-                    f"Overpass {endpoint} returned {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
-                # 4xx is a client/query problem; do not retry other endpoints.
+        client_error = False
+        for attempt in range(2):
+            for endpoint in self._ENDPOINTS:
+                try:
+                    response = await self._http_post(
+                        endpoint,
+                        content=query,
+                        headers={"Content-Type": "text/plain"},
+                    )
+                except Exception as exc:
+                    last_error = exc
+                    continue
+                if response.status_code >= 400:
+                    last_error = httpx.HTTPStatusError(
+                        f"Overpass {endpoint} returned {response.status_code}",
+                        request=response.request,
+                        response=response,
+                    )
+                    if response.status_code in (429, 503, 504):
+                        continue
+                    client_error = True
+                    break
+                try:
+                    data = response.json()
+                    if isinstance(data, dict):
+                        return {str(key): value for key, value in data.items()}
+                    last_error = ValueError("Overpass response is not a JSON object")
+                except Exception as exc:
+                    last_error = exc
+            if client_error:
                 break
-            try:
-                data: dict[str, Any] = cast(dict[str, Any], response.json())
-                return data
-            except Exception as exc:
-                last_error = exc
-                continue
+            if attempt == 0:
+                await asyncio.sleep(1.0)
         if last_error:
             self.metrics.record_error("fetch")
         return None
@@ -448,7 +450,9 @@ class OpenStreetMapAdapter(BaseSourceAdapter):
                         break
 
                 if data is None:
-                    continue
+                    raise httpx.HTTPError(
+                        f"openstreetmap incomplete: query failed for {area} {key}={value}"
+                    )
 
                 for element in data.get("elements", []):
                     element_id = f"{element.get('type')}/{element.get('id')}"

@@ -24,9 +24,11 @@ def partition_domains(domains: list[str], shard_count: int) -> list[list[str]]:
 
 
 async def get_missing_contact_domains(
-    workspace_id: UUID, max_domains: int | None = None
+    workspace_id: UUID,
+    max_domains: int | None = None,
+    exclude_completed_source: str = "",
 ) -> list[str]:
-    """Return one stable domain snapshot missing any person-specific contact lane."""
+    """Return a stable domain snapshot missing a person-contact lane."""
     if max_domains is not None and max_domains < 0:
         raise ValueError("max_domains must be zero or greater")
     async with AsyncSessionLocal() as session:
@@ -72,10 +74,22 @@ async def get_missing_contact_domains(
                       AND c.primary_domain NOT LIKE '%linkedin.com%'
                       AND c.primary_domain NOT LIKE '%twitter.com%'
                       AND c.primary_domain NOT LIKE '%instagram.com%'
+                      AND (
+                        :exclude_completed_source = ''
+                        OR NOT EXISTS (
+                          SELECT 1 FROM source_hit completed
+                          WHERE completed.company_id = c.id
+                            AND completed.workspace_id = :workspace_id
+                            AND completed.source_key = :exclude_completed_source
+                        )
+                      )
                     ORDER BY c.primary_domain
                     """
                 ),
-                {"workspace_id": workspace_id},
+                {
+                    "workspace_id": workspace_id,
+                    "exclude_completed_source": exclude_completed_source,
+                },
             )
         ).all()
     domains = [str(row[0]) for row in rows]
@@ -137,20 +151,24 @@ async def run_targeted_contact_backfill(
     """Run team-page then deeper company-web backfills across concurrent shards."""
     if shard_count < 1:
         raise ValueError("shard_count must be at least 1")
-    team_domains = await get_missing_contact_domains(workspace_id, max_domains)
-    team_results = await _run_source_shards(
-        workspace_id,
-        campaign_id,
-        "team_pages",
-        team_domains,
-        shard_count,
-    )
     company_domains = await get_missing_contact_domains(workspace_id, max_domains)
     company_results = await _run_source_shards(
         workspace_id,
         campaign_id,
         "company_web",
         company_domains,
+        shard_count,
+    )
+    team_domains = await get_missing_contact_domains(
+        workspace_id,
+        max_domains,
+        exclude_completed_source="company_web",
+    )
+    team_results = await _run_source_shards(
+        workspace_id,
+        campaign_id,
+        "team_pages",
+        team_domains,
         shard_count,
     )
     return {

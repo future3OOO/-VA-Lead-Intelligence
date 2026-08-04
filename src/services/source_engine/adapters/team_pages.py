@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 from urllib.parse import urljoin, urlparse
 from uuid import UUID
@@ -271,6 +272,7 @@ class _PersonResult:
         phone: str = "",
         linkedin: str = "",
         structured: bool = False,
+        email_is_person_specific: bool = False,
     ) -> None:
         self.name = _title_case_name(name)
         self.title = _clean_title(title)
@@ -278,6 +280,7 @@ class _PersonResult:
         self.phone = phone.strip()
         self.linkedin = linkedin.strip()
         self.structured = structured
+        self.email_is_person_specific = email_is_person_specific
 
     def _is_generic_name(self) -> bool:
         """Return True if the extracted 'name' is a department/role, not a person."""
@@ -287,7 +290,11 @@ class _PersonResult:
         """Return ContactRoute-compatible route dicts."""
         routes: list[dict[str, Any]] = []
         is_person = not self._is_generic_name()
-        named_email = bool(self.email and is_person and email_matches_person(self.name, self.email))
+        named_email = bool(
+            self.email
+            and is_person
+            and (self.email_is_person_specific or email_matches_person(self.name, self.email))
+        )
         # A telephone link inside the same structured person card is explicit
         # person evidence, even when the page does not publish an email or
         # LinkedIn profile.
@@ -497,7 +504,15 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
             for sa in same_as:
                 if isinstance(sa, str):
                     linkedin = extract_linkedin_profile_url(sa) or linkedin
-            p = _PersonResult(name=name, title=title, email=email, phone=phone, linkedin=linkedin)
+            p = _PersonResult(
+                name=name,
+                title=title,
+                email=email,
+                phone=phone,
+                linkedin=linkedin,
+                structured=True,
+                email_is_person_specific=True,
+            )
             if email:
                 people[email] = p
             elif linkedin:
@@ -541,6 +556,8 @@ def _extract_from_soup(soup: BeautifulSoup, base_url: str, domain: str) -> list[
                 email=email,
                 phone=phone,
                 linkedin=linkedin,
+                structured=True,
+                email_is_person_specific=True,
             )
 
     # 3. Ordinary staff/profile cards with an explicit name and job title.
@@ -748,12 +765,27 @@ class TeamPagesAdapter(BaseSourceAdapter):
         first_body_excerpt = ""
         first_company_name = ""
         pages_crawled = 0
+        domain_timeout = float(self.config.adapter_config.get("domain_timeout_seconds", 30))
+        deadline = asyncio.get_running_loop().time() + domain_timeout
         for path in paths[:max_pages]:
             url = urljoin(base_url, path)
-            if not await self._robots_allowed(url):
+            completed, allowed = await self._run_before_deadline(
+                deadline,
+                domain,
+                partial(self._robots_allowed, url),
+            )
+            if not completed:
+                break
+            if not allowed:
                 continue
+            completed, response = await self._run_before_deadline(
+                deadline,
+                domain,
+                partial(self._http_get, url, expected_host=domain),
+            )
+            if not completed or response is None:
+                break
             try:
-                response = await self._http_get(url, expected_host=domain)
                 response.raise_for_status()
                 content_type = response.headers.get("content-type", "").lower()
                 if "text/html" not in content_type:

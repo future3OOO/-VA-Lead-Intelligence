@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from services.source_engine.config import SourceRegistryLoader
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -18,6 +20,21 @@ def test_validate_configs() -> None:
         capture_output=True,
     )
     assert "All configuration files valid" in result.stdout
+
+
+def test_directory_sources_use_three_bounded_request_lanes() -> None:
+    registry = SourceRegistryLoader().load()
+    for source_key in ("finance_directory", "nz_finance_advisers"):
+        rate_limit = registry[source_key].rate_limit
+        assert rate_limit["requests_per_second"] == 3
+        assert rate_limit["max_concurrency_per_host"] == 3
+        assert rate_limit["max_total_concurrency"] == 3
+
+
+def test_web_contact_shards_limit_total_domain_concurrency() -> None:
+    registry = SourceRegistryLoader().load()
+    for source_key in ("team_pages", "company_web"):
+        assert registry[source_key].rate_limit["max_total_concurrency"] == 10
 
 
 def test_validate_source_registry_rejects_unknown_allowed_fields() -> None:

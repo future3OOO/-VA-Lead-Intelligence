@@ -12,6 +12,7 @@ import asyncio
 import xml.etree.ElementTree as ET
 from collections import deque
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 from urllib.parse import urljoin, urlparse
 from uuid import UUID
@@ -124,22 +125,35 @@ class CompanyWebAdapter(BaseSourceAdapter):
         visited: set[str] = set()
         routes: list[dict[str, Any]] = []
         discovered: set[str] = set()
-
-        sitemap_urls = await self._sitemap_urls(domain)
-        sitemap_urls = [u for u in sitemap_urls if self._same_domain(u, domain)][:50]
-
-        queue: deque[tuple[str, int]] = deque()
-        for u in sitemap_urls:
-            if u not in visited:
-                queue.append((u, 0))
-                visited.add(u)
-        queue.append((f"https://{domain}", 0))
+        homepage = f"https://{domain}"
+        queue: deque[tuple[str, int]] = deque([(homepage, 0)])
+        visited.add(homepage)
+        sitemap_loaded = False
 
         pages_crawled = 0
         max_pages = self.config.adapter_config.get("max_pages_per_domain", 20)
         max_depth = self.config.adapter_config.get("max_depth", 2)
+        domain_timeout = float(self.config.adapter_config.get("domain_timeout_seconds", 30))
+        deadline = asyncio.get_running_loop().time() + domain_timeout
 
-        while queue and pages_crawled < max_pages:
+        while pages_crawled < max_pages:
+            if not queue:
+                if sitemap_loaded:
+                    break
+                sitemap_loaded = True
+                completed, sitemap_urls = await self._run_before_deadline(
+                    deadline,
+                    domain,
+                    lambda: self._sitemap_urls(domain),
+                )
+                if not completed or sitemap_urls is None:
+                    break
+                for sitemap_url in sitemap_urls[:50]:
+                    if self._same_domain(sitemap_url, domain) and sitemap_url not in visited:
+                        queue.append((sitemap_url, 0))
+                        visited.add(sitemap_url)
+                if not queue:
+                    break
             # Prioritise likely contact/team pages first.
             queue = deque(
                 sorted(
@@ -147,7 +161,13 @@ class CompanyWebAdapter(BaseSourceAdapter):
                 )
             )
             url, depth = queue.popleft()
-            result = await self._fetch_page(url, domain)
+            completed, result = await self._run_before_deadline(
+                deadline,
+                domain,
+                partial(self._fetch_page, url, domain),
+            )
+            if not completed:
+                break
             if not result:
                 continue
             final_url, soup = result

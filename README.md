@@ -241,16 +241,16 @@ Source keys available:
 ### Backfill targeted contacts from company websites
 
 After the main sources have run, enrich companies that still lack a named person, direct email,
-direct phone, or LinkedIn profile. The command snapshots eligible domains, runs `team_pages`
-across three disjoint shards in parallel, then repeats the snapshot for the deeper `company_web`
-fallback. Omit `--max-domains` to process every eligible domain:
+direct phone, or LinkedIn profile. The command snapshots eligible domains, runs `company_web`
+across three disjoint shards in parallel, then runs `team_pages` only for domains where the first
+pass found no contact routes. Each domain has a 30-second crawl budget; routes found before that
+deadline are retained. Omit `--max-domains` to process every eligible domain:
 
 ```bash
 .venv/bin/python scripts/extract_targeted_contacts.py \
   --workspace-id "$WORKSPACE_ID" \
   --campaign-id "$CAMPAIGN_ID" \
-  --shards 3 \
-  --max-domains 1000
+  --shards 3
 ```
 
 Each shard has its own database session and source-run record. The command exits non-zero if any

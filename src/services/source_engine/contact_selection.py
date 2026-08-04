@@ -327,11 +327,11 @@ def select_named_person(
             0,
         )
 
-    def _score(c: dict[str, str]) -> int:
+    def _score(c: dict[str, str]) -> tuple[bool, int, int]:
         contactability = (
             bool(c.get("email")) * 3 + bool(c.get("phone")) * 2 + bool(c.get("linkedin"))
         )
-        return _role_score(c.get("title", "")) * 10 + contactability
+        return bool(contactability), contactability, _role_score(c.get("title", ""))
 
     best = max(
         matching,
