@@ -251,7 +251,7 @@ class BaseSourceAdapter(ABC):
             return False, None
         try:
             return True, await asyncio.wait_for(operation(), timeout=remaining)
-        except TimeoutError:
+        except asyncio.TimeoutError:
             self.metrics.record_error("domain_timeout")
             print(f"[{self.source_key}] timed out: {subject}", flush=True)
             return False, None
