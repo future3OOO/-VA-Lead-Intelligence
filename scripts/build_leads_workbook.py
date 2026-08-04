@@ -89,7 +89,6 @@ def _add_sheet(workbook: Workbook, spec: SheetSpec) -> None:
         sheet.append(row)
 
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = sheet.dimensions
     sheet.row_dimensions[1].height = 18
     for cell in sheet[1]:
         cell.fill = HEADER_FILL

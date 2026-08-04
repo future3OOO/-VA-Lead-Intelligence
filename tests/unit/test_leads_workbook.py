@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -129,16 +130,27 @@ def test_workbook_cli_preserves_all_three_export_tables(tmp_path: Path) -> None:
         assert [cell.value for cell in sheet[1]] == fields
         assert [cell.value for cell in sheet[2]] == [row[field] for field in fields]
         assert sheet.freeze_panes == "A2"
-        assert sheet.auto_filter.ref == sheet.dimensions
+        assert sheet.auto_filter.ref is None
         assert sheet.row_dimensions[1].height == 18
         assert all(not cell.alignment.wrap_text for cell in sheet[1])
         assert all(not cell.alignment.wrap_text for cell in sheet[2])
-        assert sheet.tables[table_name].ref == sheet.dimensions
+        table = sheet.tables[table_name]
+        assert table.ref == sheet.dimensions
+        assert table.autoFilter.ref == sheet.dimensions
         assert sheet.tables[table_name].tableStyleInfo is None
         contact_column = next(
             index for index, field in enumerate(fields, start=1) if "phone" in field
         )
         assert sheet.cell(row=2, column=contact_column).number_format == "@"
+
+    with zipfile.ZipFile(workbook_path) as package:
+        workbook_xml = package.read("xl/workbook.xml")
+        assert b"_FilterDatabase" not in workbook_xml
+        for index in range(1, 4):
+            worksheet_xml = package.read(f"xl/worksheets/sheet{index}.xml")
+            table_xml = package.read(f"xl/tables/table{index}.xml")
+            assert b"<autoFilter" not in worksheet_xml
+            assert b"<autoFilter" in table_xml
 
 
 def test_workbook_cli_rejects_an_unexpected_csv_contract(tmp_path: Path) -> None:
