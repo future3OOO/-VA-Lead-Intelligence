@@ -14,7 +14,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.table import Table
 
-from services.source_engine.enricher import extract_email
+from services.source_engine.enricher import email_matches_person, extract_email
 
 
 class SheetSpec(NamedTuple):
@@ -47,7 +47,7 @@ WORKBOOK_FIELDS = {
         "rank",
         "qualification_score",
         "job_title",
-        "contact_role",
+        "outreach_type",
         "contact_name",
         "contact_title",
         "contact_emails",
@@ -67,6 +67,7 @@ WORKBOOK_FIELDS = {
         "intent_label",
         "published_at",
         "explanation",
+        "outreach_target_id",
         "lead_id",
         "company_id",
         "contact_id",
@@ -121,7 +122,7 @@ DISPLAY_HEADERS = {
     "company_name": "Company",
     "primary_domain": "Domain",
     "job_title": "Lead title",
-    "contact_role": "Contact role",
+    "outreach_type": "Outreach type",
     "contact_name": "Contact name",
     "contact_title": "Contact title",
     "contact_emails": "Person email(s)",
@@ -132,7 +133,7 @@ DISPLAY_HEADERS = {
     "category": "Category",
     "location": "Location",
     "workplace_type": "Workplace type",
-    "company_email": "Company email",
+    "company_email": "Unattributed email",
     "company_phone": "Company phone",
     "company_form": "Company contact form",
     "best_email": "Best email",
@@ -143,6 +144,7 @@ DISPLAY_HEADERS = {
     "intent_label": "Intent",
     "published_at": "Published",
     "explanation": "Explanation",
+    "outreach_target_id": "Outreach target ID",
     "lead_id": "Lead ID",
     "company_id": "Company ID",
     "contact_id": "Contact ID",
@@ -163,6 +165,7 @@ DISPLAY_HEADERS = {
     "named_contact_linkedin": "Named contact LinkedIn",
 }
 HIDDEN_FIELDS = {
+    "outreach_target_id",
     "lead_id",
     "company_id",
     "contact_id",
@@ -217,7 +220,7 @@ WIDE_COLUMNS = {
     "contact_emails": 34,
     "contact_phones": 25,
     "contact_linkedin_urls": 40,
-    "contact_role": 14,
+    "outreach_type": 18,
     "coordinates": 24,
     "named_contact_name": 24,
     "named_contact_title": 25,
@@ -247,19 +250,58 @@ def _has_exported_email(value: str) -> bool:
 def _operational_leads(
     leads: list[dict[str, str]], contacts: list[dict[str, str]]
 ) -> list[dict[str, str]]:
-    """Build the ranked, email-ready outreach view without changing contact ownership."""
+    """Build one row per actionable outreach target without changing route ownership."""
     contacts_by_id = {contact["contact_id"]: contact for contact in contacts}
+    contacts_by_company: dict[str, list[dict[str, str]]] = {}
+    for contact in contacts:
+        contacts_by_company.setdefault(contact["company_id"], []).append(contact)
+    rank_order = {"high": 0, "medium": 1}
+    ranked_leads = sorted(
+        (lead for lead in leads if lead["rank"].casefold() in rank_order),
+        key=lambda lead: (
+            rank_order[lead["rank"].casefold()],
+            lead["lead_id"],
+        ),
+    )
+    company_leads: dict[str, dict[str, str]] = {}
+    for lead in ranked_leads:
+        company_leads.setdefault(lead["company_id"], lead)
+
+    attributed_emails: dict[tuple[str, str], str] = {}
+    promoted_emails: dict[str, set[str]] = {}
+    for lead in ranked_leads:
+        email = lead["company_email"].casefold()
+        if not _has_exported_email(email):
+            continue
+        matches = [
+            contact
+            for contact in contacts_by_company.get(lead["company_id"], [])
+            if email_matches_person(contact["contact_name"], email)
+        ]
+        if len(matches) == 1:
+            contact_id = matches[0]["contact_id"]
+            attributed_emails[(lead["company_id"], email)] = contact_id
+            promoted_emails.setdefault(contact_id, set()).add(email)
+
+    def projected_contact(contact: dict[str, str]) -> dict[str, str]:
+        promoted = promoted_emails.get(contact.get("contact_id", ""), set())
+        if not promoted:
+            return contact
+        emails = {
+            value.strip().casefold()
+            for value in contact["contact_emails"].split(";")
+            if value.strip()
+        } | promoted
+        return {**contact, "contact_emails": "; ".join(sorted(emails))}
 
     rows: list[dict[str, str]] = []
-    for lead in leads:
-        if lead["rank"].casefold() not in {"high", "medium"}:
-            continue
-        contact = contacts_by_id.get(lead["primary_contact_id"], {})
-        if not _has_exported_email(contact.get("contact_emails", "")):
-            contact = {}
-        if not contact and not _has_exported_email(lead["company_email"]):
-            continue
-        row = dict(lead)
+    represented_contacts: set[str] = set()
+    represented_emails: set[tuple[str, str]] = set()
+
+    def append_row(
+        lead: dict[str, str], contact: dict[str, str], role: str, target_id: str
+    ) -> None:
+        row = {field: lead.get(field, "") for field in LEAD_FIELDS}
         row.update(
             {
                 field: contact.get(field, "")
@@ -273,8 +315,9 @@ def _operational_leads(
                 )
             }
         )
-        row["contact_role"] = "Primary" if contact else "Company only"
-        raw_location = lead["location"]
+        row["outreach_type"] = role
+        row["outreach_target_id"] = target_id
+        raw_location = lead.get("location", "")
         coordinates = COORDINATES_RE.fullmatch(raw_location)
         row["coordinates"] = raw_location.removeprefix("'") if coordinates else ""
         country = coordinates.group("country") if coordinates else ""
@@ -288,13 +331,73 @@ def _operational_leads(
             else raw_location
         )
         rows.append(row)
-    rank_order = {"high": 0, "medium": 1}
+
+    for lead in ranked_leads:
+        contact = projected_contact(contacts_by_id.get(lead["primary_contact_id"], {}))
+        person_is_actionable = _has_exported_email(contact.get("contact_emails", "")) or bool(
+            contact.get("contact_linkedin_urls", "").strip()
+        )
+        company_email = lead["company_email"].casefold()
+        company_email_key = (lead["company_id"], company_email)
+        email_owner = attributed_emails.get(company_email_key)
+        company_email_is_actionable = _has_exported_email(company_email) and not email_owner
+        if email_owner:
+            lead = {**lead, "company_email": ""}
+        if person_is_actionable:
+            target_id = contact["contact_id"]
+            if target_id in represented_contacts:
+                continue
+            represented_contacts.add(target_id)
+            if company_email_is_actionable:
+                if company_email_key in represented_emails:
+                    lead = {**lead, "company_email": ""}
+                else:
+                    represented_emails.add(company_email_key)
+            append_row(lead, contact, "Primary", target_id)
+            continue
+        if company_email_is_actionable and company_email_key not in represented_emails:
+            represented_emails.add(company_email_key)
+            append_row(
+                lead,
+                {},
+                "Unattributed email",
+                f"email:{lead['company_id']}:{company_email}",
+            )
+
+    for raw_contact in contacts:
+        contact = projected_contact(raw_contact)
+        contact_id = contact["contact_id"]
+        if contact_id in represented_contacts:
+            continue
+        has_email = _has_exported_email(contact["contact_emails"])
+        has_linkedin = bool(contact["contact_linkedin_urls"].strip())
+        representative = company_leads.get(contact["company_id"])
+        if not has_linkedin and (not has_email or representative is None):
+            continue
+        represented_contacts.add(contact_id)
+        append_row(
+            {**representative, "company_email": ""}
+            if representative
+            else {
+                "company_id": contact["company_id"],
+                "company_name": contact["company_name"],
+                "primary_domain": contact["primary_domain"],
+            },
+            contact,
+            "Additional",
+            contact_id,
+        )
+
     rows.sort(
         key=lambda row: (
-            rank_order[row["rank"].casefold()],
-            not _has_exported_email(row["contact_emails"]),
+            0
+            if _has_exported_email(row["contact_emails"])
+            else 1
+            if _has_exported_email(row["company_email"])
+            else 2,
+            rank_order.get(row["rank"].casefold(), 2),
             row["company_name"].casefold(),
-            row["lead_id"],
+            row["outreach_target_id"],
         )
     )
     return rows

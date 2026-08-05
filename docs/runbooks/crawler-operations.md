@@ -93,12 +93,11 @@ mkdir -p exports
 The output is
 `exports/anz_full_leads_with_targeted_contacts.xlsx`. It contains `Leads`,
 `Primary Contacts`, `Contacts`, and `Companies` sheets sourced directly from
-the four canonical CSV files. `Leads` contains only High/Medium email-ready
-outreach rows, with at most one row per canonical lead. A named row requires
-the selected primary person's valid email; otherwise one company-only row may
-use the explicit generic company email. Other people at the company, including
-people with email, remain in `Contacts` and do not repeat the lead. `Primary
-Contacts` stays one row per exported lead. Raw join
+the four canonical CSV files. `Leads` contains one row per actionable outreach
+target: validated people with email or LinkedIn, plus distinct unattributed
+emails from High/Medium leads. A contact is never multiplied by the number of
+lead records at its company. Contact-only LinkedIn rows may have blank
+lead-specific fields. `Primary Contacts` stays one row per exported lead. Raw join
 IDs and mapped coordinates are retained in hidden columns at the far right.
 Generated CSV and XLSX files remain local under `exports/`; they are ignored by
 Git.
@@ -192,11 +191,12 @@ cmp exports/anz_all_companies.csv \
 
 Open the complete lead, Primary Contacts, and Contacts files. Spot-check:
 
-- every workbook Leads row is High or Medium and has either a person email or a generic company email
-- a generic company-email fallback is shown as `Company only`, never attributed to a named person
-- phone-only and LinkedIn-only people omitted from Leads remain present in Contacts
-- every nonblank Lead ID in workbook Leads is unique
-- every named Leads row uses the canonical primary contact ID
+- every workbook Leads row has a person email, an unattributed email, or a person LinkedIn profile
+- every unique LinkedIn URL in Contacts is present in Leads
+- each outreach target ID is unique; contacts are not repeated for every company lead
+- an exact, unique name-matched address is in the person lane and absent from the unattributed lane
+- unmatched addresses remain labelled `Unattributed email`, never assigned to a named person
+- contact-only rows have blank lead fields; nonblank Lead IDs identify the representative canonical lead
 - named emails, phones, and LinkedIn URLs belong to the displayed person
 - generic office routes stay in company fields
 - phone and email columns contain clean values rather than page text

@@ -111,16 +111,18 @@ contact lanes. The workbook never removes or rewrites rows in this CSV.
 
 For normal review, run `scripts/build_leads_workbook.py` after the CSV export
 and open `anz_full_leads_with_targeted_contacts.xlsx`. `Leads` is the
-email-outreach view: it contains only High/Medium rows with a valid email. A
-lead appears at most once. A named row requires the selected primary person's
-own email. If that person has no valid email but the lead has an explicit
-generic company email, the workbook emits one `Company only` row without
-attaching that address to a person. A lead with no qualifying email may be
-absent without being deleted from the canonical CSV. Other email-bearing people
-at the company remain in `Contacts`; they do not create repeated Leads rows.
+deduplicated outreach-target view. It shows validated people with an email or
+published LinkedIn profile once by contact ID, plus one row per distinct
+unattributed email from a High/Medium lead. Email targets sort before
+LinkedIn-only targets. Selected-primary identity and LinkedIn data remain
+visible when the available email is unattributed. An unattributed address is
+shown in its own column; it moves to a person's email column only when it
+exactly and uniquely matches that validated person's name. A contact without a
+ranked lead may therefore have blank lead-specific fields. The canonical lead
+CSV remains the complete one-row-per-lead export.
 Use `Primary Contacts`
 for exactly one selected person per lead, `Contacts` for all validated people
-including phone-only and LinkedIn-only records, and `Companies` for the company
+including phone-only and name-only records, and `Companies` for the company
 directory. Technical IDs and raw mapped coordinates are retained in hidden
 columns at the far right. The
 workbook and CSVs are local generated artifacts under `exports/`; none are

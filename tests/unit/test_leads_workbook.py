@@ -187,11 +187,11 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
         "Rank",
         "Score",
         "Lead title",
-        "Contact role",
+        "Outreach type",
         "Contact name",
         "Contact title",
         "Person email(s)",
-        "Company email",
+        "Unattributed email",
         "Person phone(s)",
         "Company phone",
         "Person LinkedIn profile(s)",
@@ -438,7 +438,7 @@ def test_workbook_cli_accepts_a_preserved_unresolved_lead(tmp_path: Path) -> Non
     assert workbook["Leads"].max_row == 1
 
 
-def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
+def test_workbook_leads_is_a_deduplicated_outreach_target_view(
     tmp_path: Path,
 ) -> None:
     leads_path = tmp_path / "leads.csv"
@@ -493,6 +493,16 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "qualification_score": "80",
             "rank": "High",
         },
+        {
+            "lead_id": "lead-direct-second",
+            "company_id": "company-direct",
+            "primary_contact_id": "contact-direct",
+            "company_name": "Direct High Ltd",
+            "primary_domain": "direct-high.example.org",
+            "job_title": "Administration support",
+            "qualification_score": "75",
+            "rank": "High",
+        },
     ]
     primary_contacts = [
         {
@@ -505,7 +515,14 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
         }
         for lead, name in zip(
             leads,
-            ("Lola Low", "Pete Phone", "Dana Medium", "Gina Generic", "Alice Morgan"),
+            (
+                "Lola Low",
+                "Pete Phone",
+                "Dana Medium",
+                "Gina Generic",
+                "Alice Morgan",
+                "Alice Morgan",
+            ),
             strict=True,
         )
     ]
@@ -546,6 +563,10 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "company_name": "Generic High Ltd",
             "contact_name": "Gina Generic",
             "contact_phones": "+64 21 555 0104",
+            "contact_linkedin_urls": (
+                "https://www.linkedin.com/in/gina-generic; "
+                "https://www.linkedin.com/in/gina-generic-adviser"
+            ),
         },
         {
             "contact_id": "contact-generic-other",
@@ -561,10 +582,25 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "contact_name": "Alice Morgan",
             "contact_emails": ("alice@direct-high.example.org; alice.alt@direct-high.example.org"),
         },
+        {
+            "contact_id": "contact-orphan",
+            "company_id": "company-orphan",
+            "company_name": "Orphan Profiles Ltd",
+            "primary_domain": "orphan.example.org",
+            "contact_name": "Olivia Orphan",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/olivia-orphan",
+        },
     ]
-    companies = [
-        {"company_id": lead["company_id"], "company_name": lead["company_name"]} for lead in leads
-    ]
+    companies = list(
+        {
+            lead["company_id"]: {
+                "company_id": lead["company_id"],
+                "company_name": lead["company_name"],
+            }
+            for lead in leads
+        }.values()
+    )
+    companies.append({"company_id": "company-orphan", "company_name": "Orphan Profiles Ltd"})
     for path, fields, rows in (
         (leads_path, LEAD_FIELDS, leads),
         (primary_contacts_path, PRIMARY_CONTACT_FIELDS, primary_contacts),
@@ -607,26 +643,26 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
         "Rank",
         "Score",
         "Lead title",
-        "Contact role",
+        "Outreach type",
         "Contact name",
         "Contact title",
         "Person email(s)",
-        "Company email",
+        "Unattributed email",
         "Person phone(s)",
         "Company phone",
         "Person LinkedIn profile(s)",
     ]
-    assert sheet.max_row == 4
+    assert sheet.max_row == 7
     assert [
         (
             sheet.cell(row=row, column=headers.index("Rank") + 1).value,
             sheet.cell(row=row, column=1).value,
-            sheet.cell(row=row, column=headers.index("Contact role") + 1).value,
+            sheet.cell(row=row, column=headers.index("Outreach type") + 1).value,
             sheet.cell(row=row, column=headers.index("Contact name") + 1).value,
             sheet.cell(row=row, column=headers.index("Person email(s)") + 1).value,
-            sheet.cell(row=row, column=headers.index("Company email") + 1).value,
+            sheet.cell(row=row, column=headers.index("Unattributed email") + 1).value,
         )
-        for row in range(2, 5)
+        for row in range(2, 8)
     ] == [
         (
             "High",
@@ -638,11 +674,19 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
         ),
         (
             "High",
+            "Direct High Ltd",
+            "Additional",
+            "Bob Taylor",
+            "bob@direct-high.example.org",
+            None,
+        ),
+        (
+            "High",
             "Generic High Ltd",
-            "Company only",
+            "Additional",
+            "Otto Other",
+            "otto@generic-high.example.org",
             None,
-            None,
-            "office@generic-high.example.org",
         ),
         (
             "Medium",
@@ -652,12 +696,28 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "dana@medium-direct.example.org",
             None,
         ),
+        (
+            "High",
+            "Generic High Ltd",
+            "Primary",
+            "Gina Generic",
+            None,
+            "office@generic-high.example.org",
+        ),
+        (
+            None,
+            "Orphan Profiles Ltd",
+            "Additional",
+            "Olivia Orphan",
+            None,
+            None,
+        ),
     ]
     location_column = headers.index("Location") + 1
     assert sheet.cell(row=2, column=location_column).value == "New Zealand"
-    assert workbook["Primary Contacts"].max_row == 6
-    assert workbook["Contacts"].max_row == 8
-    assert workbook["Companies"].max_row == 6
+    assert workbook["Primary Contacts"].max_row == 7
+    assert workbook["Contacts"].max_row == 9
+    assert workbook["Companies"].max_row == 7
     contact_rows = list(workbook["Contacts"].iter_rows(min_row=2, values_only=True))
     contact_headers = [cell.value for cell in workbook["Contacts"][1]]
     contact_people = {
@@ -671,17 +731,117 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
         ("Bob Taylor", "bob@direct-high.example.org"),
         ("Otto Other", "otto@generic-high.example.org"),
     } <= contact_people
-    lead_ids = [
-        sheet.cell(row=row, column=headers.index("Lead ID") + 1).value
-        for row in range(2, sheet.max_row + 1)
-    ]
-    assert len(lead_ids) == len(set(lead_ids))
     lead_contact_names = {
         sheet.cell(row=row, column=headers.index("Contact name") + 1).value
         for row in range(2, sheet.max_row + 1)
     }
-    assert {"Bob Taylor", "Otto Other"}.isdisjoint(lead_contact_names)
+    assert {"Alice Morgan", "Bob Taylor", "Otto Other"} <= lead_contact_names
+    assert [
+        sheet.cell(row=row, column=headers.index("Contact name") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    ].count("Alice Morgan") == 1
+    expected_linkedin = sorted(
+        url.strip()
+        for contact in contacts
+        for url in contact.get("contact_linkedin_urls", "").split(";")
+        if url.strip()
+    )
+    displayed_linkedin = sorted(
+        url.strip()
+        for row in range(2, sheet.max_row + 1)
+        for url in str(
+            sheet.cell(row=row, column=headers.index("Person LinkedIn profile(s)") + 1).value or ""
+        ).split(";")
+        if url.strip()
+    )
+    assert displayed_linkedin == expected_linkedin
+    orphan_row = next(
+        row
+        for row in range(2, sheet.max_row + 1)
+        if sheet.cell(row=row, column=headers.index("Contact name") + 1).value == "Olivia Orphan"
+    )
+    assert sheet.cell(row=orphan_row, column=headers.index("Lead ID") + 1).value is None
     for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
         column = headers.index(field) + 1
         letter = sheet.cell(row=1, column=column).column_letter
         assert sheet.column_dimensions[letter].hidden
+
+
+def test_workbook_assigns_an_exact_name_matched_email_to_the_person(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    _write_csv(
+        leads_path,
+        LEAD_FIELDS,
+        {
+            "lead_id": "lead-alice",
+            "company_id": "company-alice",
+            "primary_contact_id": "contact-alice",
+            "company_name": "Alice Advisory",
+            "company_email": "alice.morgan@alice.example.org",
+            "qualification_score": "90",
+            "rank": "High",
+        },
+    )
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {
+            "lead_id": "lead-alice",
+            "company_id": "company-alice",
+            "primary_contact_id": "contact-alice",
+            "company_name": "Alice Advisory",
+            "primary_contact_status": "available",
+            "primary_contact_name": "Alice Morgan",
+        },
+    )
+    _write_csv(
+        contacts_path,
+        CONTACT_FIELDS,
+        {
+            "contact_id": "contact-alice",
+            "company_id": "company-alice",
+            "company_name": "Alice Advisory",
+            "contact_name": "Alice Morgan",
+        },
+    )
+    _write_csv(
+        companies_path,
+        COMPANY_FIELDS,
+        {"company_id": "company-alice", "company_name": "Alice Advisory"},
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    sheet = load_workbook(workbook_path, read_only=True)["Leads"]
+    headers = [cell.value for cell in sheet[1]]
+    row = {
+        header: sheet.cell(row=2, column=index + 1).value for index, header in enumerate(headers)
+    }
+    assert row["Outreach type"] == "Primary"
+    assert row["Contact name"] == "Alice Morgan"
+    assert row["Person email(s)"] == "alice.morgan@alice.example.org"
+    assert row["Unattributed email"] is None
