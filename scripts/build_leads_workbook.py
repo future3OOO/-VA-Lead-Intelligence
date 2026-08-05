@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import csv
 import re
-from collections import defaultdict
 from pathlib import Path
 from typing import NamedTuple
 
@@ -249,68 +248,46 @@ def _operational_leads(
     leads: list[dict[str, str]], contacts: list[dict[str, str]]
 ) -> list[dict[str, str]]:
     """Build the ranked, email-ready outreach view without changing contact ownership."""
-    contacts_by_company: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for contact in contacts:
-        if contact["company_id"]:
-            contacts_by_company[contact["company_id"]].append(contact)
+    contacts_by_id = {contact["contact_id"]: contact for contact in contacts}
 
     rows: list[dict[str, str]] = []
     for lead in leads:
         if lead["rank"].casefold() not in {"high", "medium"}:
             continue
-        company_contacts = contacts_by_company.get(lead["company_id"], [])
-        company_contacts = sorted(
-            company_contacts,
-            key=lambda contact: (
-                contact["contact_id"] != lead["primary_contact_id"],
-                contact["contact_name"].casefold(),
-                contact["contact_id"],
-            ),
-        )
-        email_contacts = [
-            contact
-            for contact in company_contacts
-            if _has_exported_email(contact["contact_emails"])
-        ]
-        if not email_contacts and not _has_exported_email(lead["company_email"]):
+        contact = contacts_by_id.get(lead["primary_contact_id"], {})
+        if not _has_exported_email(contact.get("contact_emails", "")):
+            contact = {}
+        if not contact and not _has_exported_email(lead["company_email"]):
             continue
-        for contact in email_contacts or [{}]:
-            row = dict(lead)
-            row.update(
-                {
-                    field: contact.get(field, "")
-                    for field in (
-                        "contact_id",
-                        "contact_name",
-                        "contact_title",
-                        "contact_emails",
-                        "contact_phones",
-                        "contact_linkedin_urls",
-                    )
-                }
-            )
-            contact_id = row["contact_id"]
-            row["contact_role"] = (
-                "Primary"
-                if contact_id and contact_id == lead["primary_contact_id"]
-                else "Additional"
-                if contact_id
-                else "Company only"
-            )
-            raw_location = lead["location"]
-            coordinates = COORDINATES_RE.fullmatch(raw_location)
-            row["coordinates"] = raw_location.removeprefix("'") if coordinates else ""
-            country = coordinates.group("country") if coordinates else ""
-            row["location"] = (
-                "New Zealand"
-                if country and country.casefold() in {"new zealand", "nz"}
-                else "Australia"
-                if country
-                else "Mapped location"
-                if coordinates
-                else raw_location
-            )
-            rows.append(row)
+        row = dict(lead)
+        row.update(
+            {
+                field: contact.get(field, "")
+                for field in (
+                    "contact_id",
+                    "contact_name",
+                    "contact_title",
+                    "contact_emails",
+                    "contact_phones",
+                    "contact_linkedin_urls",
+                )
+            }
+        )
+        row["contact_role"] = "Primary" if contact else "Company only"
+        raw_location = lead["location"]
+        coordinates = COORDINATES_RE.fullmatch(raw_location)
+        row["coordinates"] = raw_location.removeprefix("'") if coordinates else ""
+        country = coordinates.group("country") if coordinates else ""
+        row["location"] = (
+            "New Zealand"
+            if country and country.casefold() in {"new zealand", "nz"}
+            else "Australia"
+            if country
+            else "Mapped location"
+            if coordinates
+            else raw_location
+        )
+        rows.append(row)
     rank_order = {"high": 0, "medium": 1}
     rows.sort(
         key=lambda row: (
@@ -318,7 +295,6 @@ def _operational_leads(
             not _has_exported_email(row["contact_emails"]),
             row["company_name"].casefold(),
             row["lead_id"],
-            row["contact_id"],
         )
     )
     return rows

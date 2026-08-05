@@ -101,7 +101,7 @@ The final files are written under `exports/`:
 | `anz_contacts.csv` | One row per validated person discovered in company or source-hit routes, with every associated email, phone, and LinkedIn URL |
 | `anz_all_companies.csv` | One row per company with the best collected routes |
 | `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
-| `anz_full_leads_with_targeted_contacts.xlsx` | Four-sheet prospecting workbook; Leads is the High/Medium email-ready outreach view, while the other sheets retain the normalized directories |
+| `anz_full_leads_with_targeted_contacts.xlsx` | Four-sheet prospecting workbook; Leads contains at most one email-ready row per canonical High/Medium lead, while the other sheets retain the normalized directories |
 
 Everything under `exports/` is a generated local artifact. CSV and XLSX output
 files are intentionally ignored by Git and must not be committed or pushed.
@@ -280,7 +280,7 @@ This writes
 
 | Sheet | Contents |
 |---|---|
-| `Leads` | Email-ready High/Medium outreach rows. A named row appears only when that person has a valid email; otherwise one company-only row appears when a generic company email is available |
+| `Leads` | At most one email-ready row per canonical High/Medium lead: the selected primary person when that person has a valid email, otherwise one company-only row when a generic company email is available |
 | `Primary Contacts` | Exactly one row per lead with its selected person or an explicit unavailable status |
 | `Contacts` | Complete person directory, including phone-only, LinkedIn-only, and name-only contacts omitted from the email outreach view |
 | `Companies` | One row per company with its best company routes and selected named-contact routes |
@@ -291,8 +291,10 @@ compact non-wrapped rows. The visible columns are human-first. Technical IDs
 and raw mapped coordinates remain in hidden columns at the far right, and
 single LinkedIn/form/source URLs are clickable. The workbook joins existing
 lead and contact rows only; it does not re-score or re-match them. It filters
-only the `Leads` sheet; it never rewrites the four input CSVs. Use `Leads` for
-email outreach, `Contacts` for every validated person and route, and
+only the `Leads` sheet; it never rewrites the four input CSVs. Other people at
+the same company, including people with email, remain in `Contacts` and do not
+create repeated `Leads` rows. Use `Leads` for email outreach, `Contacts` for
+every validated person and route, and
 `anz_remote_leads_with_contacts.csv` for the complete exported lead list. Missing,
 unreadable, malformed, or relationally inconsistent inputs make it exit with
 status 2 without replacing the workbook. An older workbook may still exist and

@@ -515,6 +515,7 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "company_id": "company-direct",
             "company_name": "Direct High Ltd",
             "contact_name": "Bob Taylor",
+            "contact_emails": "bob@direct-high.example.org",
             "contact_phones": "+64 21 555 0102",
             "contact_linkedin_urls": "https://www.linkedin.com/in/bob-taylor",
         },
@@ -545,6 +546,13 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
             "company_name": "Generic High Ltd",
             "contact_name": "Gina Generic",
             "contact_phones": "+64 21 555 0104",
+        },
+        {
+            "contact_id": "contact-generic-other",
+            "company_id": "company-generic",
+            "company_name": "Generic High Ltd",
+            "contact_name": "Otto Other",
+            "contact_emails": "otto@generic-high.example.org",
         },
         {
             "contact_id": "contact-direct",
@@ -648,9 +656,31 @@ def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
     location_column = headers.index("Location") + 1
     assert sheet.cell(row=2, column=location_column).value == "New Zealand"
     assert workbook["Primary Contacts"].max_row == 6
-    assert workbook["Contacts"].max_row == 7
+    assert workbook["Contacts"].max_row == 8
     assert workbook["Companies"].max_row == 6
-    assert "Bob Taylor" in {cell.value for cell in workbook["Contacts"]["C"] if cell.row > 1}
+    contact_rows = list(workbook["Contacts"].iter_rows(min_row=2, values_only=True))
+    contact_headers = [cell.value for cell in workbook["Contacts"][1]]
+    contact_people = {
+        (
+            row[contact_headers.index("Contact name")],
+            row[contact_headers.index("Person email(s)")],
+        )
+        for row in contact_rows
+    }
+    assert {
+        ("Bob Taylor", "bob@direct-high.example.org"),
+        ("Otto Other", "otto@generic-high.example.org"),
+    } <= contact_people
+    lead_ids = [
+        sheet.cell(row=row, column=headers.index("Lead ID") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    ]
+    assert len(lead_ids) == len(set(lead_ids))
+    lead_contact_names = {
+        sheet.cell(row=row, column=headers.index("Contact name") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    }
+    assert {"Bob Taylor", "Otto Other"}.isdisjoint(lead_contact_names)
     for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
         column = headers.index(field) + 1
         letter = sheet.cell(row=1, column=column).column_letter
