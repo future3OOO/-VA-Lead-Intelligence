@@ -107,16 +107,20 @@ validated name/title was published; otherwise they contain every associated
 route for that person.
 Use `anz_remote_leads_with_targeted_contacts.csv` when you need the normalized
 one-row-per-lead export. It contains the selected person and generic-company
-contact lanes; use the workbook Leads sheet when you want every person linked
-to each lead's company visible without performing ID joins yourself.
+contact lanes. The workbook never removes or rewrites rows in this CSV.
 
 For normal review, run `scripts/build_leads_workbook.py` after the CSV export
 and open `anz_full_leads_with_targeted_contacts.xlsx`. `Leads` is the
-human-facing prospecting view: it repeats a lead once per company contact so
-each person's email, phone, and LinkedIn profile stays on the same row. `Primary
-Contacts` remains exactly one selected person per lead, while `Contacts` and
-`Companies` remain the complete normalized directories. Technical IDs and raw
-mapped coordinates are retained in hidden columns at the far right. The
+email-outreach view: it contains only High/Medium rows with a valid email. A
+named row requires that person's own email. If no person email is available
+but the lead has an explicit generic company email, the workbook emits one
+`Company only` row without attaching that address to a person. One lead may
+repeat for multiple email-bearing people; a lead with no qualifying email may
+be absent without being deleted from the canonical CSV. Use `Primary Contacts`
+for exactly one selected person per lead, `Contacts` for all validated people
+including phone-only and LinkedIn-only records, and `Companies` for the company
+directory. Technical IDs and raw mapped coordinates are retained in hidden
+columns at the far right. The
 workbook and CSVs are local generated artifacts under `exports/`; none are
 committed to the repository.
 

@@ -15,6 +15,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.table import Table
 
+from services.source_engine.enricher import extract_email
+
 
 class SheetSpec(NamedTuple):
     name: str
@@ -43,24 +45,24 @@ WORKBOOK_FIELDS = {
     "Leads": [
         "company_name",
         "primary_domain",
+        "rank",
+        "qualification_score",
         "job_title",
         "contact_role",
         "contact_name",
         "contact_title",
         "contact_emails",
-        "contact_phones",
-        "contact_linkedin_urls",
-        "rank",
-        "qualification_score",
-        "category",
-        "location",
-        "workplace_type",
         "company_email",
+        "contact_phones",
         "company_phone",
+        "contact_linkedin_urls",
         "company_form",
         "best_email",
         "best_phone",
         "best_form",
+        "category",
+        "location",
+        "workplace_type",
         "source",
         "source_url",
         "intent_label",
@@ -123,9 +125,9 @@ DISPLAY_HEADERS = {
     "contact_role": "Contact role",
     "contact_name": "Contact name",
     "contact_title": "Contact title",
-    "contact_emails": "Email(s)",
-    "contact_phones": "Phone(s)",
-    "contact_linkedin_urls": "LinkedIn profile(s)",
+    "contact_emails": "Person email(s)",
+    "contact_phones": "Person phone(s)",
+    "contact_linkedin_urls": "Person LinkedIn profile(s)",
     "rank": "Rank",
     "qualification_score": "Score",
     "category": "Category",
@@ -236,10 +238,17 @@ WIDE_COLUMNS = {
 }
 
 
+def _has_exported_email(value: str) -> bool:
+    emails = [candidate.strip() for candidate in value.split(";") if candidate.strip()]
+    return bool(emails) and all(
+        extract_email(candidate) == candidate.casefold() for candidate in emails
+    )
+
+
 def _operational_leads(
     leads: list[dict[str, str]], contacts: list[dict[str, str]]
 ) -> list[dict[str, str]]:
-    """Flatten each lead to readable person rows without changing contact ownership."""
+    """Build the ranked, email-ready outreach view without changing contact ownership."""
     contacts_by_company: dict[str, list[dict[str, str]]] = defaultdict(list)
     for contact in contacts:
         if contact["company_id"]:
@@ -247,6 +256,8 @@ def _operational_leads(
 
     rows: list[dict[str, str]] = []
     for lead in leads:
+        if lead["rank"].casefold() not in {"high", "medium"}:
+            continue
         company_contacts = contacts_by_company.get(lead["company_id"], [])
         company_contacts = sorted(
             company_contacts,
@@ -256,7 +267,14 @@ def _operational_leads(
                 contact["contact_id"],
             ),
         )
-        for contact in company_contacts or [{}]:
+        email_contacts = [
+            contact
+            for contact in company_contacts
+            if _has_exported_email(contact["contact_emails"])
+        ]
+        if not email_contacts and not _has_exported_email(lead["company_email"]):
+            continue
+        for contact in email_contacts or [{}]:
             row = dict(lead)
             row.update(
                 {
@@ -293,6 +311,16 @@ def _operational_leads(
                 else raw_location
             )
             rows.append(row)
+    rank_order = {"high": 0, "medium": 1}
+    rows.sort(
+        key=lambda row: (
+            rank_order[row["rank"].casefold()],
+            not _has_exported_email(row["contact_emails"]),
+            row["company_name"].casefold(),
+            row["lead_id"],
+            row["contact_id"],
+        )
+    )
     return rows
 
 

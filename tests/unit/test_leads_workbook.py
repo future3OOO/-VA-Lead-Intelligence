@@ -120,6 +120,7 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
         lead_id="lead-1",
         company_id="company-1",
         primary_contact_id="contact-1",
+        rank="High",
     )
     primary_contact_row.update(
         lead_id="lead-1",
@@ -180,18 +181,27 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
         assert table.autoFilter.ref == sheet.dimensions
         assert sheet.tables[table_name].tableStyleInfo is None
 
-    assert [cell.value for cell in workbook["Leads"][1]][:9] == [
+    assert [cell.value for cell in workbook["Leads"][1]][:13] == [
         "Company",
         "Domain",
+        "Rank",
+        "Score",
         "Lead title",
         "Contact role",
         "Contact name",
         "Contact title",
-        "Email(s)",
-        "Phone(s)",
-        "LinkedIn profile(s)",
+        "Person email(s)",
+        "Company email",
+        "Person phone(s)",
+        "Company phone",
+        "Person LinkedIn profile(s)",
     ]
-    assert workbook["Leads"]["E2"].value == contact_row["contact_name"]
+    leads_sheet = workbook["Leads"]
+    leads_headers = [cell.value for cell in leads_sheet[1]]
+    assert (
+        leads_sheet.cell(row=2, column=leads_headers.index("Contact name") + 1).value
+        == contact_row["contact_name"]
+    )
     assert workbook["Primary Contacts"]["E2"].value == primary_contact_row["primary_contact_name"]
     assert workbook["Contacts"]["C2"].value == contact_row["contact_name"]
     assert workbook["Companies"]["A2"].value == company_row["company_name"]
@@ -420,17 +430,15 @@ def test_workbook_cli_accepts_a_preserved_unresolved_lead(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     workbook = load_workbook(workbook_path, read_only=True)
-    lead_headers = [cell.value for cell in workbook["Leads"][1]]
     primary_headers = [cell.value for cell in workbook["Primary Contacts"][1]]
-    assert workbook["Leads"][2][lead_headers.index("Lead ID")].value == "lead-1"
     assert (
         workbook["Primary Contacts"][2][primary_headers.index("Contact status")].value
         == "unavailable"
     )
-    assert workbook["Leads"].max_row == 2
+    assert workbook["Leads"].max_row == 1
 
 
-def test_workbook_leads_exposes_every_company_contact_without_visible_mapping_ids(
+def test_workbook_leads_is_an_email_ready_ranked_outreach_view(
     tmp_path: Path,
 ) -> None:
     leads_path = tmp_path / "leads.csv"
@@ -438,59 +446,127 @@ def test_workbook_leads_exposes_every_company_contact_without_visible_mapping_id
     contacts_path = tmp_path / "contacts.csv"
     companies_path = tmp_path / "companies.csv"
     workbook_path = tmp_path / "leads.xlsx"
-    _write_csv(
-        leads_path,
-        LEAD_FIELDS,
+    leads = [
         {
-            "lead_id": "lead-1",
-            "company_id": "company-1",
-            "primary_contact_id": "contact-1",
-            "company_name": "Alpha Realty",
-            "primary_domain": "alpha.example.org",
+            "lead_id": "lead-low",
+            "company_id": "company-low",
+            "primary_contact_id": "contact-low",
+            "company_name": "Low Rank Ltd",
+            "qualification_score": "50",
+            "rank": "Low",
+        },
+        {
+            "lead_id": "lead-phone",
+            "company_id": "company-phone",
+            "primary_contact_id": "contact-phone",
+            "company_name": "Phone Only Ltd",
+            "company_email": "Contact us at info@phone-only.example.org",
+            "qualification_score": "95",
+            "rank": "High",
+        },
+        {
+            "lead_id": "lead-medium",
+            "company_id": "company-medium",
+            "primary_contact_id": "contact-medium",
+            "company_name": "Medium Direct Ltd",
+            "qualification_score": "70",
+            "rank": "Medium",
+        },
+        {
+            "lead_id": "lead-generic",
+            "company_id": "company-generic",
+            "primary_contact_id": "contact-generic",
+            "company_name": "Generic High Ltd",
+            "company_email": "office@generic-high.example.org",
+            "qualification_score": "90",
+            "rank": "High",
+        },
+        {
+            "lead_id": "lead-direct",
+            "company_id": "company-direct",
+            "primary_contact_id": "contact-direct",
+            "company_name": "Direct High Ltd",
+            "primary_domain": "direct-high.example.org",
             "primary_contact_name": "Alice Morgan",
             "job_title": "Property management support",
             "location": "'-43.5321, 172.6362, New Zealand",
+            "qualification_score": "80",
+            "rank": "High",
         },
-    )
-    _write_csv(
-        primary_contacts_path,
-        PRIMARY_CONTACT_FIELDS,
+    ]
+    primary_contacts = [
         {
-            "lead_id": "lead-1",
-            "company_id": "company-1",
-            "primary_contact_id": "contact-1",
-            "company_name": "Alpha Realty",
+            "lead_id": lead["lead_id"],
+            "company_id": lead["company_id"],
+            "primary_contact_id": lead["primary_contact_id"],
+            "company_name": lead["company_name"],
             "primary_contact_status": "available",
-            "primary_contact_name": "Alice Morgan",
-        },
-    )
-    with contacts_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CONTACT_FIELDS)
-        writer.writeheader()
-        writer.writerows(
-            [
-                {
-                    "contact_id": "contact-1",
-                    "company_id": "company-1",
-                    "company_name": "Alpha Realty",
-                    "contact_name": "Alice Morgan",
-                    "contact_emails": "alice@alpha.example.org",
-                },
-                {
-                    "contact_id": "contact-2",
-                    "company_id": "company-1",
-                    "company_name": "Alpha Realty",
-                    "contact_name": "Bob Taylor",
-                    "contact_phones": "+64 21 555 0102",
-                    "contact_linkedin_urls": "https://www.linkedin.com/in/bob-taylor",
-                },
-            ]
+            "primary_contact_name": name,
+        }
+        for lead, name in zip(
+            leads,
+            ("Lola Low", "Pete Phone", "Dana Medium", "Gina Generic", "Alice Morgan"),
+            strict=True,
         )
-    _write_csv(
-        companies_path,
-        COMPANY_FIELDS,
-        {"company_id": "company-1", "company_name": "Alpha Realty"},
-    )
+    ]
+    contacts = [
+        {
+            "contact_id": "contact-direct-other",
+            "company_id": "company-direct",
+            "company_name": "Direct High Ltd",
+            "contact_name": "Bob Taylor",
+            "contact_phones": "+64 21 555 0102",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/bob-taylor",
+        },
+        {
+            "contact_id": "contact-low",
+            "company_id": "company-low",
+            "company_name": "Low Rank Ltd",
+            "contact_name": "Lola Low",
+            "contact_emails": "lola@low-rank.example.org",
+        },
+        {
+            "contact_id": "contact-phone",
+            "company_id": "company-phone",
+            "company_name": "Phone Only Ltd",
+            "contact_name": "Pete Phone",
+            "contact_phones": "+64 21 555 0103",
+        },
+        {
+            "contact_id": "contact-medium",
+            "company_id": "company-medium",
+            "company_name": "Medium Direct Ltd",
+            "contact_name": "Dana Medium",
+            "contact_emails": "dana@medium-direct.example.org",
+        },
+        {
+            "contact_id": "contact-generic",
+            "company_id": "company-generic",
+            "company_name": "Generic High Ltd",
+            "contact_name": "Gina Generic",
+            "contact_phones": "+64 21 555 0104",
+        },
+        {
+            "contact_id": "contact-direct",
+            "company_id": "company-direct",
+            "company_name": "Direct High Ltd",
+            "contact_name": "Alice Morgan",
+            "contact_emails": ("alice@direct-high.example.org; alice.alt@direct-high.example.org"),
+        },
+    ]
+    companies = [
+        {"company_id": lead["company_id"], "company_name": lead["company_name"]} for lead in leads
+    ]
+    for path, fields, rows in (
+        (leads_path, LEAD_FIELDS, leads),
+        (primary_contacts_path, PRIMARY_CONTACT_FIELDS, primary_contacts),
+        (contacts_path, CONTACT_FIELDS, contacts),
+        (companies_path, COMPANY_FIELDS, companies),
+    ):
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
 
     result = subprocess.run(
         [
@@ -517,32 +593,64 @@ def test_workbook_leads_exposes_every_company_contact_without_visible_mapping_id
     workbook = load_workbook(workbook_path, read_only=False, data_only=False)
     sheet = workbook["Leads"]
     headers = [cell.value for cell in sheet[1]]
-    assert headers[:9] == [
+    assert headers[:13] == [
         "Company",
         "Domain",
+        "Rank",
+        "Score",
         "Lead title",
         "Contact role",
         "Contact name",
         "Contact title",
-        "Email(s)",
-        "Phone(s)",
-        "LinkedIn profile(s)",
+        "Person email(s)",
+        "Company email",
+        "Person phone(s)",
+        "Company phone",
+        "Person LinkedIn profile(s)",
     ]
-    assert sheet.max_row == 3
-    assert [sheet.cell(row=row, column=5).value for row in (2, 3)] == [
-        "Alice Morgan",
-        "Bob Taylor",
+    assert sheet.max_row == 4
+    assert [
+        (
+            sheet.cell(row=row, column=headers.index("Rank") + 1).value,
+            sheet.cell(row=row, column=1).value,
+            sheet.cell(row=row, column=headers.index("Contact role") + 1).value,
+            sheet.cell(row=row, column=headers.index("Contact name") + 1).value,
+            sheet.cell(row=row, column=headers.index("Person email(s)") + 1).value,
+            sheet.cell(row=row, column=headers.index("Company email") + 1).value,
+        )
+        for row in range(2, 5)
+    ] == [
+        (
+            "High",
+            "Direct High Ltd",
+            "Primary",
+            "Alice Morgan",
+            "alice@direct-high.example.org; alice.alt@direct-high.example.org",
+            None,
+        ),
+        (
+            "High",
+            "Generic High Ltd",
+            "Company only",
+            None,
+            None,
+            "office@generic-high.example.org",
+        ),
+        (
+            "Medium",
+            "Medium Direct Ltd",
+            "Primary",
+            "Dana Medium",
+            "dana@medium-direct.example.org",
+            None,
+        ),
     ]
-    assert [sheet.cell(row=row, column=4).value for row in (2, 3)] == [
-        "Primary",
-        "Additional",
-    ]
-    linkedin_cell = sheet.cell(row=3, column=9)
-    assert linkedin_cell.value == "https://www.linkedin.com/in/bob-taylor"
-    assert linkedin_cell.hyperlink is not None
-    assert linkedin_cell.hyperlink.target == linkedin_cell.value
     location_column = headers.index("Location") + 1
     assert sheet.cell(row=2, column=location_column).value == "New Zealand"
+    assert workbook["Primary Contacts"].max_row == 6
+    assert workbook["Contacts"].max_row == 7
+    assert workbook["Companies"].max_row == 6
+    assert "Bob Taylor" in {cell.value for cell in workbook["Contacts"]["C"] if cell.row > 1}
     for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
         column = headers.index(field) + 1
         letter = sheet.cell(row=1, column=column).column_letter
