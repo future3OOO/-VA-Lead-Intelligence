@@ -123,9 +123,9 @@ Person fields are kept separate from generic office details:
 
 Multiple values for one person in the Contacts export are deduplicated and
 separated with semicolons. Phone numbers retain their international `+` prefix.
-A person may appear without an identifier when only a validated name/title was
-published; Contacts is intentionally a superset of the people chosen as lead
-primaries.
+A person may appear with no email, phone, or LinkedIn route when only a
+validated name/title was published; Contacts is intentionally a superset of the
+people chosen as lead primaries.
 
 ## Run the full configured scrape
 

@@ -102,9 +102,9 @@ re-scrape.
 Use `anz_primary_contacts.csv` when you want exactly one selected person per
 lead. Use `anz_contacts.csv` for every validated person discovered in company
 or source-hit routes, including people not selected as a lead's primary
-contact. Identifier fields remain blank when only a validated name/title was
-published; otherwise they contain every associated email, phone, and LinkedIn
-route.
+contact. The email, phone, and LinkedIn columns remain blank when only a
+validated name/title was published; otherwise they contain every associated
+route for that person.
 Use `anz_remote_leads_with_targeted_contacts.csv` when you need the normalized
 one-row-per-lead export. It contains the selected person and generic-company
 contact lanes; use the workbook Leads sheet when you want every person linked

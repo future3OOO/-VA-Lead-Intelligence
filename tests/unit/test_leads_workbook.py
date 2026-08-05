@@ -199,6 +199,16 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
         for cell in sheet[1]:
             if cell.value in {"Lead ID", "Company ID", "Contact ID", "Primary contact ID"}:
                 assert sheet.column_dimensions[cell.column_letter].hidden
+    primary_sheet = workbook["Primary Contacts"]
+    for header in (
+        "Selected primary name",
+        "Selected primary title",
+        "Selected primary email",
+        "Selected primary phone",
+        "Selected primary LinkedIn",
+    ):
+        cell = next(cell for cell in primary_sheet[1] if cell.value == header)
+        assert not primary_sheet.column_dimensions[cell.column_letter].hidden
     workbook_values = {
         str(cell.value)
         for sheet in workbook.worksheets

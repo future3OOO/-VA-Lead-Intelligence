@@ -1011,6 +1011,7 @@ async def main() -> None:
             if company and person_key:
                 primary_contact_id = _contact_id(company.id, person_key)
                 _merge_contact_record(contacts_by_key, company, named)
+            primary_contact = named if primary_contact_id else {}
             existing = lead_candidates.get((company_key, title_key))
             tie_key = (
                 hit.published_at.isoformat() if hit.published_at else "",
@@ -1043,11 +1044,11 @@ async def main() -> None:
                 "best_email": best_routes.get("best_email", ""),
                 "best_phone": best_routes.get("best_phone", ""),
                 "best_form": best_routes.get("best_form", ""),
-                "primary_contact_name": named.get("name", ""),
-                "primary_contact_title": named.get("title", ""),
-                "primary_contact_email": named.get("email", ""),
-                "primary_contact_phone": named.get("phone", ""),
-                "primary_contact_linkedin": named.get("linkedin", ""),
+                "primary_contact_name": primary_contact.get("name", ""),
+                "primary_contact_title": primary_contact.get("title", ""),
+                "primary_contact_email": primary_contact.get("email", ""),
+                "primary_contact_phone": primary_contact.get("phone", ""),
+                "primary_contact_linkedin": primary_contact.get("linkedin", ""),
                 "company_email": company_contacts.get("best_email", ""),
                 "company_phone": company_contacts.get("best_phone", ""),
                 "company_form": company_contacts.get("best_form", ""),

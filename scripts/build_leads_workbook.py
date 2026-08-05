@@ -166,9 +166,9 @@ HIDDEN_FIELDS = {
     "company_id",
     "contact_id",
     "primary_contact_id",
-    *PRIMARY_PERSON_FIELDS,
     "coordinates",
 }
+SHEET_HIDDEN_FIELDS = {"Leads": HIDDEN_FIELDS | set(PRIMARY_PERSON_FIELDS)}
 HYPERLINK_FIELDS = {
     "primary_contact_linkedin",
     "contact_linkedin_urls",
@@ -373,6 +373,7 @@ def _validate_relations(rows_by_sheet: dict[str, list[dict[str, str]]]) -> None:
 def _add_sheet(workbook: Workbook, spec: SheetSpec, rows: list[dict[str, str]]) -> None:
     sheet = workbook.create_sheet(spec.name)
     fields = WORKBOOK_FIELDS[spec.name]
+    hidden_fields = SHEET_HIDDEN_FIELDS.get(spec.name, HIDDEN_FIELDS)
     sheet.append([DISPLAY_HEADERS.get(field, field.replace("_", " ").title()) for field in fields])
     for row in rows:
         sheet.append([row[field] for field in fields])
@@ -387,7 +388,7 @@ def _add_sheet(workbook: Workbook, spec: SheetSpec, rows: list[dict[str, str]]) 
     for column, field in enumerate(fields, start=1):
         letter = sheet.cell(row=1, column=column).column_letter
         sheet.column_dimensions[letter].width = WIDE_COLUMNS.get(field, 18)
-        sheet.column_dimensions[letter].hidden = field in HIDDEN_FIELDS
+        sheet.column_dimensions[letter].hidden = field in hidden_fields
         for cell in sheet.iter_cols(min_col=column, max_col=column, min_row=2):
             for value_cell in cell:
                 value_cell.alignment = BODY_ALIGNMENT

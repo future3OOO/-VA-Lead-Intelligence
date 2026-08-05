@@ -200,7 +200,12 @@ async def test_export_writes_relational_leads_primary_contacts_and_people(
             location_raw="Auckland, New Zealand",
             workplace_type="inferred_remote_friendly",
             intent_label="company_existence_only",
-            contact_routes_raw=[],
+            contact_routes_raw=[
+                {
+                    "type": "business_phone",
+                    "value": "Erin Blake (Office Manager) <+64 21 555 0166>",
+                }
+            ],
             content_hash=uuid4().hex,
             access_policy_version="source-policy-v1",
         )
@@ -370,17 +375,20 @@ async def test_export_writes_relational_leads_primary_contacts_and_people(
     assert primary_rows[0]["primary_contact_id"] == lead_rows[0]["primary_contact_id"]
     assert primary_rows[0]["primary_contact_status"] == "available"
     assert primary_rows[0]["primary_contact_name"] == "Alice Morgan"
-    assert primary_rows[1]["company_name"] == "Gamma Realty"
-    assert primary_rows[1]["primary_contact_status"] == "unavailable"
-    assert primary_rows[1]["primary_contact_id"] == ""
-    assert primary_rows[1]["primary_contact_name"] == ""
+    gamma_primary = next(row for row in primary_rows if row["company_name"] == "Gamma Realty")
+    assert gamma_primary["primary_contact_status"] == "unavailable"
+    assert gamma_primary["primary_contact_id"] == ""
+    assert gamma_primary["primary_contact_name"] == ""
     unresolved_lead = next(row for row in lead_rows if row["company_name"] == "Unresolved Services")
     unresolved_primary = next(
         row for row in primary_rows if row["company_name"] == "Unresolved Services"
     )
     assert unresolved_lead["company_id"] == unresolved_lead["primary_contact_id"] == ""
+    assert unresolved_lead["primary_contact_name"] == ""
+    assert unresolved_lead["best_phone"] == "+64 21 555 0166"
     assert unresolved_primary["company_id"] == unresolved_primary["primary_contact_id"] == ""
     assert unresolved_primary["primary_contact_status"] == "unavailable"
+    assert unresolved_primary["primary_contact_name"] == ""
     assert [row["lead_id"] for row in primary_rows] == [row["lead_id"] for row in lead_rows]
     assert [row["company_id"] for row in primary_rows] == [row["company_id"] for row in lead_rows]
     with contacts_path.open(newline="", encoding="utf-8") as handle:
