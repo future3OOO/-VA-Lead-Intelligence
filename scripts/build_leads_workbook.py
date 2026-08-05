@@ -405,14 +405,17 @@ def _operational_leads(
 
 def _read_rows(path: Path, expected_fields: list[str]) -> list[dict[str, str]]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames is None:
-            raise ValueError(f"{path} is empty")
-        if reader.fieldnames != expected_fields:
-            raise ValueError(
-                f"{path} has unexpected columns; expected {', '.join(expected_fields)}"
-            )
-        rows = list(reader)
+        try:
+            reader = csv.DictReader(handle, strict=True)
+            if reader.fieldnames is None:
+                raise ValueError(f"{path} is empty")
+            if reader.fieldnames != expected_fields:
+                raise ValueError(
+                    f"{path} has unexpected columns; expected {', '.join(expected_fields)}"
+                )
+            rows = list(reader)
+        except csv.Error as exc:
+            raise ValueError(f"{path} contains malformed CSV: {exc}") from exc
         if any(None in row or any(value is None for value in row.values()) for row in rows):
             raise ValueError(f"{path} contains a row with an unexpected number of values")
         return rows

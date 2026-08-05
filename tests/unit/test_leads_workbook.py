@@ -289,6 +289,44 @@ def test_workbook_cli_rejects_an_unexpected_csv_contract(
     assert not workbook_path.exists()
 
 
+def test_workbook_cli_rejects_malformed_csv_quoting(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    malformed_row = ",".join([""] * (len(LEAD_FIELDS) - 1) + ['"unterminated'])
+    leads_path.write_text(f"{','.join(LEAD_FIELDS)}\n{malformed_row}", encoding="utf-8")
+    _write_csv(primary_contacts_path, PRIMARY_CONTACT_FIELDS, None)
+    _write_csv(contacts_path, CONTACT_FIELDS, None)
+    _write_csv(companies_path, COMPANY_FIELDS, None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "malformed CSV" in result.stderr
+    assert not workbook_path.exists()
+
+
 def test_workbook_cli_rejects_mixed_exports_with_broken_relations(tmp_path: Path) -> None:
     leads_path = tmp_path / "leads.csv"
     primary_contacts_path = tmp_path / "primary_contacts.csv"
