@@ -7,10 +7,11 @@ import csv
 import re
 import shutil
 from collections import defaultdict
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 
@@ -32,13 +33,16 @@ EXPORT_SOURCES = {
 }
 
 LEAD_FIELDS = [
+    "lead_id",
+    "company_id",
+    "primary_contact_id",
     "company_name",
     "primary_domain",
-    "named_contact_name",
-    "named_contact_title",
-    "named_contact_email",
-    "named_contact_phone",
-    "named_contact_linkedin",
+    "primary_contact_name",
+    "primary_contact_title",
+    "primary_contact_email",
+    "primary_contact_phone",
+    "primary_contact_linkedin",
     "company_email",
     "company_phone",
     "company_form",
@@ -58,15 +62,33 @@ LEAD_FIELDS = [
     "explanation",
 ]
 
-NAMED_CONTACT_FIELDS = [
+PRIMARY_CONTACT_FIELDS = [
+    "lead_id",
+    "company_id",
+    "primary_contact_id",
+    "company_name",
+    "primary_domain",
+    "job_title",
+    "primary_contact_status",
+    "primary_contact_name",
+    "primary_contact_title",
+    "primary_contact_email",
+    "primary_contact_phone",
+    "primary_contact_linkedin",
+    "source",
+    "source_url",
+]
+
+CONTACT_FIELDS = [
+    "contact_id",
     "company_id",
     "company_name",
     "primary_domain",
-    "named_contact_name",
-    "named_contact_title",
-    "named_contact_emails",
-    "named_contact_phones",
-    "named_contact_linkedin_urls",
+    "contact_name",
+    "contact_title",
+    "contact_emails",
+    "contact_phones",
+    "contact_linkedin_urls",
 ]
 
 COMPANY_FIELDS = [
@@ -112,6 +134,47 @@ def _csv_safe(value: object, *, phone_number: bool = False) -> object:
         if value.startswith(("=", "+", "-", "@")):
             return f"'{value}"
     return value
+
+
+def _csv_value(field: str, value: object) -> object:
+    value = "; ".join(sorted(value, key=str.lower)) if isinstance(value, set) else value
+    return _csv_safe(value, phone_number=field.endswith(("phone", "phones")))
+
+
+def _contact_id(company_id: UUID, person_key: str) -> UUID:
+    return uuid5(UUID("02779786-bdba-4c41-9c01-b1a0fa0685d2"), f"{company_id}:{person_key}")
+
+
+def _merge_contact_record(
+    records: dict[tuple[UUID, str], dict[str, Any]],
+    company: Company,
+    contact: Mapping[str, Any],
+) -> None:
+    person_key = contact["key"]
+    record = records.setdefault(
+        (company.id, person_key),
+        {
+            "contact_id": _contact_id(company.id, person_key),
+            "company_id": company.id,
+            "company_name": company.canonical_name,
+            "primary_domain": company.primary_domain or "",
+            "contact_name": contact["name"],
+            "contact_title": contact["title"],
+            "contact_emails": set(),
+            "contact_phones": set(),
+            "contact_linkedin_urls": set(),
+        },
+    )
+    if not record["contact_title"] and contact["title"]:
+        record["contact_title"] = contact["title"]
+    # Person-list projections use plural tuples; selected-lead projections use singular values.
+    for field, plural, singular in (
+        ("contact_emails", "emails", "email"),
+        ("contact_phones", "phones", "phone"),
+        ("contact_linkedin_urls", "linkedins", "linkedin"),
+    ):
+        values = contact.get(plural, (contact.get(singular, ""),))
+        record[field].update(value for value in values if value)
 
 
 def _is_remote_friendly(title: str, body: str, location: str, workplace_type: str = "") -> bool:
@@ -743,11 +806,8 @@ async def main() -> None:
     parser.add_argument("--workspace-id", type=UUID, required=True)
     parser.add_argument("--leads-path", default="/tmp/small_business_leads_with_contacts.csv")
     parser.add_argument("--companies-path", default="/tmp/all_companies.csv")
-    parser.add_argument(
-        "--named-contacts-path",
-        default="",
-        help="Optional readable CSV containing one row per validated named person",
-    )
+    parser.add_argument("--primary-contacts-path", default="")
+    parser.add_argument("--contacts-path", default="")
     parser.add_argument(
         "--leads-alias-path",
         default="",
@@ -775,7 +835,8 @@ async def main() -> None:
     workspace_id = args.workspace_id
     leads_path = args.leads_path
     companies_path = args.companies_path
-    named_contacts_path = args.named_contacts_path
+    primary_contacts_path = args.primary_contacts_path
+    contacts_path = args.contacts_path
     leads_alias_path = args.leads_alias_path
     companies_alias_path = args.companies_alias_path
     region_filter = args.region
@@ -809,48 +870,21 @@ async def main() -> None:
         ).all()
         companies_by_id = {c.id: c for c in company_rows}
 
-        if named_contacts_path:
-            named_contact_count = 0
-            with open(named_contacts_path, "w", newline="", encoding="utf-8") as f:
-                named_writer = csv.DictWriter(
-                    f,
-                    fieldnames=NAMED_CONTACT_FIELDS,
-                    lineterminator="\r\n",
-                )
-                named_writer.writeheader()
-                for named_company in company_rows:
-                    for contact in list_named_contacts(
-                        contact_by_company.get(named_company.id, []),
-                        named_company.canonical_name,
-                    ):
-                        named_row = {
-                            "company_id": named_company.id,
-                            "company_name": named_company.canonical_name,
-                            "primary_domain": named_company.primary_domain or "",
-                            "named_contact_name": contact["name"],
-                            "named_contact_title": contact["title"],
-                            "named_contact_emails": "; ".join(
-                                str(_csv_safe(value)) for value in contact["emails"]
-                            ),
-                            "named_contact_phones": "; ".join(
-                                str(_csv_safe(value, phone_number=True))
-                                for value in contact["phones"]
-                            ),
-                            "named_contact_linkedin_urls": "; ".join(
-                                str(_csv_safe(value)) for value in contact["linkedins"]
-                            ),
-                        }
-                        named_writer.writerow(
-                            {
-                                field: _csv_safe(
-                                    value,
-                                    phone_number=field == "named_contact_phones",
-                                )
-                                for field, value in named_row.items()
-                            }
-                        )
-                        named_contact_count += 1
-            print(f"Exported {named_contact_count} named contacts to {named_contacts_path}")
+        source_hits = (
+            await session.scalars(
+                select(SourceHit)
+                .where(SourceHit.workspace_id == workspace_id)
+                .order_by(SourceHit.id)
+            )
+        ).all()
+
+        contacts_by_key: dict[tuple[UUID, str], dict[str, Any]] = {}
+        for contact_company in company_rows:
+            for contact in list_named_contacts(
+                contact_by_company.get(contact_company.id, []),
+                contact_company.canonical_name,
+            ):
+                _merge_contact_record(contacts_by_key, contact_company, contact)
 
         # Write all companies
         with open(companies_path, "w", newline="", encoding="utf-8") as f:
@@ -895,19 +929,19 @@ async def main() -> None:
         # Build leads. Each (company, title) is deduplicated to the strongest
         # scoring hit and franchises are capped per company record (domain) so
         # distinct branches keep their own contacts.
-        source_hits = (
-            await session.scalars(
-                select(SourceHit)
-                .where(
-                    SourceHit.workspace_id == workspace_id,
-                    SourceHit.source_key.in_(EXPORT_SOURCES),
-                )
-                .order_by(SourceHit.id)
-            )
-        ).all()
-
         lead_candidates: dict[tuple[Any, str], dict[str, Any]] = {}
         for hit in source_hits:
+            company = companies_by_id.get(hit.company_id) if hit.company_id else None
+            hit_routes = [
+                {"type": str(route.get("type", "")), "value": str(route.get("value", ""))}
+                for route in (hit.contact_routes_raw or [])
+                if isinstance(route, dict) and route.get("type") and route.get("value")
+            ]
+            if company:
+                for contact in list_named_contacts(hit_routes, company.canonical_name):
+                    _merge_contact_record(contacts_by_key, company, contact)
+            if hit.source_key not in EXPORT_SOURCES:
+                continue
             title = hit.title or ""
             company_name = hit.company_name_raw or ""
             location = hit.location_raw or ""
@@ -921,18 +955,12 @@ async def main() -> None:
             if region_filter == "anz" and not ANZ_REGION_RE.search(text):
                 continue
 
-            company = companies_by_id.get(hit.company_id) if hit.company_id else None
             domain = (
                 (company.primary_domain or hit.company_domain_raw or "")
                 if company
                 else (hit.company_domain_raw or "")
             )
             company_routes = contact_by_company.get(company.id, []) if company else []
-            hit_routes = [
-                {"type": str(route.get("type", "")), "value": str(route.get("value", ""))}
-                for route in (hit.contact_routes_raw or [])
-                if isinstance(route, dict) and route.get("type") and route.get("value")
-            ]
             named = _lead_named_contact(
                 title,
                 hit_routes,
@@ -978,6 +1006,11 @@ async def main() -> None:
             )
             company_key = company.id if company else (domain or company_name)
             title_key = title.lower().strip()
+            primary_contact_id: UUID | str = ""
+            person_key = named.get("key", "")
+            if company and person_key:
+                primary_contact_id = _contact_id(company.id, person_key)
+                _merge_contact_record(contacts_by_key, company, named)
             existing = lead_candidates.get((company_key, title_key))
             tie_key = (
                 hit.published_at.isoformat() if hit.published_at else "",
@@ -991,6 +1024,9 @@ async def main() -> None:
                 continue
 
             lead_candidates[(company_key, title_key)] = {
+                "lead_id": hit.id,
+                "company_id": company.id if company else "",
+                "primary_contact_id": primary_contact_id,
                 "company_name": company_name,
                 "primary_domain": domain,
                 "job_title": title,
@@ -1007,11 +1043,11 @@ async def main() -> None:
                 "best_email": best_routes.get("best_email", ""),
                 "best_phone": best_routes.get("best_phone", ""),
                 "best_form": best_routes.get("best_form", ""),
-                "named_contact_name": named.get("name", ""),
-                "named_contact_title": named.get("title", ""),
-                "named_contact_email": named.get("email", ""),
-                "named_contact_phone": named.get("phone", ""),
-                "named_contact_linkedin": named.get("linkedin", ""),
+                "primary_contact_name": named.get("name", ""),
+                "primary_contact_title": named.get("title", ""),
+                "primary_contact_email": named.get("email", ""),
+                "primary_contact_phone": named.get("phone", ""),
+                "primary_contact_linkedin": named.get("linkedin", ""),
                 "company_email": company_contacts.get("best_email", ""),
                 "company_phone": company_contacts.get("best_phone", ""),
                 "company_form": company_contacts.get("best_form", ""),
@@ -1050,15 +1086,53 @@ async def main() -> None:
             )
             leads_writer.writeheader()
             leads_writer.writerows(
-                {
-                    key: _csv_safe(
-                        value,
-                        phone_number=key in {"best_phone", "named_contact_phone", "company_phone"},
-                    )
-                    for key, value in row.items()
-                }
-                for row in lead_rows
+                {key: _csv_value(key, value) for key, value in row.items()} for row in lead_rows
             )
+
+        if primary_contacts_path:
+            with open(primary_contacts_path, "w", newline="", encoding="utf-8") as f:
+                primary_writer = csv.DictWriter(
+                    f,
+                    fieldnames=PRIMARY_CONTACT_FIELDS,
+                    lineterminator="\r\n",
+                )
+                primary_writer.writeheader()
+                primary_writer.writerows(
+                    {
+                        field: _csv_value(
+                            field,
+                            ("available" if row["primary_contact_id"] else "unavailable")
+                            if field == "primary_contact_status"
+                            else row[field],
+                        )
+                        for field in PRIMARY_CONTACT_FIELDS
+                    }
+                    for row in lead_rows
+                )
+            print(f"Exported {len(lead_rows)} primary contacts to {primary_contacts_path}")
+
+        if contacts_path:
+            contact_records = sorted(
+                contacts_by_key.values(),
+                key=lambda row: (
+                    str(row["company_name"]).lower(),
+                    str(row["company_id"]),
+                    str(row["contact_name"]).lower(),
+                    str(row["contact_title"]).lower(),
+                ),
+            )
+            with open(contacts_path, "w", newline="", encoding="utf-8") as f:
+                contacts_writer = csv.DictWriter(
+                    f,
+                    fieldnames=CONTACT_FIELDS,
+                    lineterminator="\r\n",
+                )
+                contacts_writer.writeheader()
+                contacts_writer.writerows(
+                    {field: _csv_value(field, row[field]) for field in CONTACT_FIELDS}
+                    for row in contact_records
+                )
+            print(f"Exported {len(contact_records)} contacts to {contacts_path}")
 
         for source_path, alias_path in (
             (leads_path, leads_alias_path),

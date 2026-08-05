@@ -87,19 +87,38 @@ routes:
 
 | Column group | Meaning |
 |---|---|
-| `named_contact_*` | Name, title, email, phone, and LinkedIn explicitly associated with the selected person |
+| `lead_id`, `company_id`, `primary_contact_id` | References for joining the four outputs from the same database/export state |
+| `primary_contact_*` | Name, title, email, phone, and LinkedIn explicitly associated with the selected person |
 | `company_*` | Generic office email, phone, or contact form |
 | `best_*` | Named route first, then the company route as a fallback |
 
-Use `anz_named_contacts.csv` when you want one readable row per validated
-person. Use `anz_remote_leads_with_targeted_contacts.csv` when you want every
-ranked lead with both targeted and generic contact lanes.
+Join Leads to Primary Contacts on `lead_id`, join either file to Contacts where
+`primary_contact_id = contact_id`, and join any nonblank `company_id` to
+Companies. A lead that could not be resolved to a company is retained with
+blank company/contact references. `lead_id` is the winning source-hit ID for
+the current database/export state, so do not assume it survives a clean
+re-scrape.
+
+Use `anz_primary_contacts.csv` when you want exactly one selected person per
+lead. Use `anz_contacts.csv` for every validated person discovered in company
+or source-hit routes, including people not selected as a lead's primary
+contact. Identifier fields remain blank when only a validated name/title was
+published; otherwise they contain every associated email, phone, and LinkedIn
+route.
+Use `anz_remote_leads_with_targeted_contacts.csv` when you want every ranked
+lead with both selected-person and generic-company contact lanes.
 
 For normal review, run `scripts/build_leads_workbook.py` after the CSV export
-and open `anz_full_leads_with_targeted_contacts.xlsx`. Its `Leads`,
-`Named Contacts`, and `Companies` sheets preserve the same data in compact,
-filtered views. The workbook and CSVs are local generated artifacts under
-`exports/`; none are committed to the repository.
+and open `anz_full_leads_with_targeted_contacts.xlsx`. Its `Leads`, `Primary
+Contacts`, `Contacts`, and `Companies` sheets preserve the same data in compact,
+filtered relational views. The workbook and CSVs are local generated artifacts
+under `exports/`; none are committed to the repository.
+
+The workbook builder validates all four CSV contracts and their ID consistency.
+Missing, unreadable, malformed, or relationally inconsistent inputs make it
+exit with status 2 without replacing the workbook. An older workbook may still
+exist and must not be treated as current; rerun the complete export rather than
+editing generated CSVs.
 
 ## Expanding the scope
 

@@ -810,6 +810,7 @@ def test_targeted_contact_does_not_borrow_another_advisers_details() -> None:
     company = _best_company_contact(routes)
 
     assert targeted == {
+        "key": "adviser one",
         "name": "Adviser One",
         "title": "Financial Adviser",
         "email": "adviser.one@example.org",
@@ -878,6 +879,7 @@ def test_list_named_contacts_preserves_every_person_route_in_separate_fields() -
 
     assert contact_selection.list_named_contacts(routes, "Example Realty") == [
         {
+            "key": "alice morgan",
             "name": "Alice Morgan",
             "title": "Property Manager",
             "emails": ("a.morgan@example.org", "alice.morgan@example.org"),
@@ -885,11 +887,20 @@ def test_list_named_contacts_preserves_every_person_route_in_separate_fields() -
             "linkedins": ("https://www.linkedin.com/in/alice-morgan",),
         },
         {
+            "key": "bob taylor",
             "name": "Bob Taylor",
             "title": "Director",
             "emails": ("bob@example.org",),
             "phones": (),
             "linkedins": ("https://www.linkedin.com/in/bob-taylor",),
+        },
+        {
+            "key": "name only",
+            "name": "Name Only",
+            "title": "Property Manager",
+            "emails": (),
+            "phones": (),
+            "linkedins": (),
         },
     ]
 
@@ -936,6 +947,7 @@ def test_named_contact_projection_removes_name_repeated_in_title() -> None:
         "AAA Above Group",
     ) == [
         {
+            "key": "tony bove",
             "name": "Tony Bove",
             "title": "Director",
             "emails": ("tony@example.org",),
@@ -1120,6 +1132,7 @@ def test_targeted_contact_accepts_company_route_that_exactly_matches_name() -> N
     best = _best_named_contact(routes, "Our Adviser Limited", target_name="Aimee Trott")
     assert best["name"] == "Aimee Louise Trott"
     assert best["email"] == "aimee.trott@ouradviser.co.nz"
+    assert best["key"] == "aimee louise trott"
     assert (
         _best_company_contact(
             routes,
