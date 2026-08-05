@@ -105,14 +105,20 @@ or source-hit routes, including people not selected as a lead's primary
 contact. Identifier fields remain blank when only a validated name/title was
 published; otherwise they contain every associated email, phone, and LinkedIn
 route.
-Use `anz_remote_leads_with_targeted_contacts.csv` when you want every ranked
-lead with both selected-person and generic-company contact lanes.
+Use `anz_remote_leads_with_targeted_contacts.csv` when you need the normalized
+one-row-per-lead export. It contains the selected person and generic-company
+contact lanes; use the workbook Leads sheet when you want every person linked
+to each lead's company visible without performing ID joins yourself.
 
 For normal review, run `scripts/build_leads_workbook.py` after the CSV export
-and open `anz_full_leads_with_targeted_contacts.xlsx`. Its `Leads`, `Primary
-Contacts`, `Contacts`, and `Companies` sheets preserve the same data in compact,
-filtered relational views. The workbook and CSVs are local generated artifacts
-under `exports/`; none are committed to the repository.
+and open `anz_full_leads_with_targeted_contacts.xlsx`. `Leads` is the
+human-facing prospecting view: it repeats a lead once per company contact so
+each person's email, phone, and LinkedIn profile stays on the same row. `Primary
+Contacts` remains exactly one selected person per lead, while `Contacts` and
+`Companies` remain the complete normalized directories. Technical IDs and raw
+mapped coordinates are retained in hidden columns at the far right. The
+workbook and CSVs are local generated artifacts under `exports/`; none are
+committed to the repository.
 
 The workbook builder validates all four CSV contracts and their ID consistency.
 Missing, unreadable, malformed, or relationally inconsistent inputs make it

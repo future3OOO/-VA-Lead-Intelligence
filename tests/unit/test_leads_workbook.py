@@ -160,22 +160,16 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
     assert workbook.sheetnames == ["Leads", "Primary Contacts", "Contacts", "Companies"]
 
     expected = [
-        ("Leads", LEAD_FIELDS, lead_row, "LeadsTable"),
-        (
-            "Primary Contacts",
-            PRIMARY_CONTACT_FIELDS,
-            primary_contact_row,
-            "PrimaryContactsTable",
-        ),
-        ("Contacts", CONTACT_FIELDS, contact_row, "ContactsTable"),
-        ("Companies", COMPANY_FIELDS, company_row, "CompaniesTable"),
+        ("Leads", "LeadsTable"),
+        ("Primary Contacts", "PrimaryContactsTable"),
+        ("Contacts", "ContactsTable"),
+        ("Companies", "CompaniesTable"),
     ]
-    for sheet_name, fields, row, table_name in expected:
+    for sheet_name, table_name in expected:
         sheet = workbook[sheet_name]
+        headers = [cell.value for cell in sheet[1]]
+        assert len(headers) == len(set(headers))
         assert sheet.max_row == 2
-        assert sheet.max_column == len(fields)
-        assert [cell.value for cell in sheet[1]] == fields
-        assert [cell.value for cell in sheet[2]] == [row[field] for field in fields]
         assert sheet.freeze_panes == "A2"
         assert sheet.auto_filter.ref is None
         assert sheet.row_dimensions[1].height == 18
@@ -185,11 +179,35 @@ def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path
         assert table.ref == sheet.dimensions
         assert table.autoFilter.ref == sheet.dimensions
         assert sheet.tables[table_name].tableStyleInfo is None
-        for column, field in enumerate(fields, start=1):
-            if field.endswith("_id") or any(
-                token in field for token in ("email", "phone", "linkedin")
-            ):
-                assert sheet.cell(row=2, column=column).number_format == "@"
+
+    assert [cell.value for cell in workbook["Leads"][1]][:9] == [
+        "Company",
+        "Domain",
+        "Lead title",
+        "Contact role",
+        "Contact name",
+        "Contact title",
+        "Email(s)",
+        "Phone(s)",
+        "LinkedIn profile(s)",
+    ]
+    assert workbook["Leads"]["E2"].value == contact_row["contact_name"]
+    assert workbook["Primary Contacts"]["E2"].value == primary_contact_row["primary_contact_name"]
+    assert workbook["Contacts"]["C2"].value == contact_row["contact_name"]
+    assert workbook["Companies"]["A2"].value == company_row["company_name"]
+    for sheet in workbook.worksheets:
+        for cell in sheet[1]:
+            if cell.value in {"Lead ID", "Company ID", "Contact ID", "Primary contact ID"}:
+                assert sheet.column_dimensions[cell.column_letter].hidden
+    workbook_values = {
+        str(cell.value)
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows(min_row=2)
+        for cell in row
+        if cell.value is not None
+    }
+    for source_row in (lead_row, primary_contact_row, contact_row, company_row):
+        assert {str(value) for value in source_row.values() if value} <= workbook_values
 
     with zipfile.ZipFile(workbook_path) as package:
         workbook_xml = package.read("xl/workbook.xml")
@@ -392,5 +410,130 @@ def test_workbook_cli_accepts_a_preserved_unresolved_lead(tmp_path: Path) -> Non
 
     assert result.returncode == 0, result.stderr
     workbook = load_workbook(workbook_path, read_only=True)
-    assert workbook["Leads"][2][0].value == "lead-1"
-    assert workbook["Primary Contacts"][2][6].value == "unavailable"
+    lead_headers = [cell.value for cell in workbook["Leads"][1]]
+    primary_headers = [cell.value for cell in workbook["Primary Contacts"][1]]
+    assert workbook["Leads"][2][lead_headers.index("Lead ID")].value == "lead-1"
+    assert (
+        workbook["Primary Contacts"][2][primary_headers.index("Contact status")].value
+        == "unavailable"
+    )
+    assert workbook["Leads"].max_row == 2
+
+
+def test_workbook_leads_exposes_every_company_contact_without_visible_mapping_ids(
+    tmp_path: Path,
+) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    _write_csv(
+        leads_path,
+        LEAD_FIELDS,
+        {
+            "lead_id": "lead-1",
+            "company_id": "company-1",
+            "primary_contact_id": "contact-1",
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "primary_contact_name": "Alice Morgan",
+            "job_title": "Property management support",
+            "location": "'-43.5321, 172.6362, New Zealand",
+        },
+    )
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {
+            "lead_id": "lead-1",
+            "company_id": "company-1",
+            "primary_contact_id": "contact-1",
+            "company_name": "Alpha Realty",
+            "primary_contact_status": "available",
+            "primary_contact_name": "Alice Morgan",
+        },
+    )
+    with contacts_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CONTACT_FIELDS)
+        writer.writeheader()
+        writer.writerows(
+            [
+                {
+                    "contact_id": "contact-1",
+                    "company_id": "company-1",
+                    "company_name": "Alpha Realty",
+                    "contact_name": "Alice Morgan",
+                    "contact_emails": "alice@alpha.example.org",
+                },
+                {
+                    "contact_id": "contact-2",
+                    "company_id": "company-1",
+                    "company_name": "Alpha Realty",
+                    "contact_name": "Bob Taylor",
+                    "contact_phones": "+64 21 555 0102",
+                    "contact_linkedin_urls": "https://www.linkedin.com/in/bob-taylor",
+                },
+            ]
+        )
+    _write_csv(
+        companies_path,
+        COMPANY_FIELDS,
+        {"company_id": "company-1", "company_name": "Alpha Realty"},
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    workbook = load_workbook(workbook_path, read_only=False, data_only=False)
+    sheet = workbook["Leads"]
+    headers = [cell.value for cell in sheet[1]]
+    assert headers[:9] == [
+        "Company",
+        "Domain",
+        "Lead title",
+        "Contact role",
+        "Contact name",
+        "Contact title",
+        "Email(s)",
+        "Phone(s)",
+        "LinkedIn profile(s)",
+    ]
+    assert sheet.max_row == 3
+    assert [sheet.cell(row=row, column=5).value for row in (2, 3)] == [
+        "Alice Morgan",
+        "Bob Taylor",
+    ]
+    assert [sheet.cell(row=row, column=4).value for row in (2, 3)] == [
+        "Primary",
+        "Additional",
+    ]
+    linkedin_cell = sheet.cell(row=3, column=9)
+    assert linkedin_cell.value == "https://www.linkedin.com/in/bob-taylor"
+    assert linkedin_cell.hyperlink is not None
+    assert linkedin_cell.hyperlink.target == linkedin_cell.value
+    location_column = headers.index("Location") + 1
+    assert sheet.cell(row=2, column=location_column).value == "New Zealand"
+    for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
+        column = headers.index(field) + 1
+        letter = sheet.cell(row=1, column=column).column_letter
+        assert sheet.column_dimensions[letter].hidden

@@ -101,7 +101,7 @@ The final files are written under `exports/`:
 | `anz_contacts.csv` | One row per validated person discovered in company or source-hit routes, with every associated email, phone, and LinkedIn URL |
 | `anz_all_companies.csv` | One row per company with the best collected routes |
 | `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
-| `anz_full_leads_with_targeted_contacts.xlsx` | Four sheets: Leads, Primary Contacts, Contacts, and Companies |
+| `anz_full_leads_with_targeted_contacts.xlsx` | Four-sheet prospecting workbook; Leads has one readable row per lead/contact association |
 
 Everything under `exports/` is a generated local artifact. CSV and XLSX output
 files are intentionally ignored by Git and must not be committed or pushed.
@@ -280,18 +280,21 @@ This writes
 
 | Sheet | Contents |
 |---|---|
-| `Leads` | One row per ranked lead, including current-export relationship IDs, selected-person fields, and generic-company contact fields |
+| `Leads` | Prospecting view with one row per lead/contact association, so every company-linked email, phone, and LinkedIn profile is directly visible; leads repeat when a company has multiple people |
 | `Primary Contacts` | Exactly one row per lead with its selected person or an explicit unavailable status |
 | `Contacts` | One row per validated person found in company or source-hit routes, including people not chosen as lead primaries, with all associated identifiers |
 | `Companies` | One row per company with its best company routes and selected named-contact routes |
 
 The builder validates the exact CSV headers and ID consistency before writing,
-freezes the header row, enables filters, keeps contact values as text, uses
-compact non-wrapped rows, and does not re-score, re-match, or otherwise change
-export data. Missing, unreadable, malformed, or relationally inconsistent
-inputs make it exit with status 2 without replacing the workbook. An older
-workbook may still exist and must not be treated as current. Rerun the complete
-export instead of repairing CSV headers or references manually.
+freezes the header row, enables filters, keeps contact values as text, and uses
+compact non-wrapped rows. The visible columns are human-first. Technical IDs
+and raw mapped coordinates remain in hidden columns at the far right, and
+single LinkedIn/form/source URLs are clickable. The workbook joins existing
+lead and contact rows only; it does not re-score or re-match them. Missing,
+unreadable, malformed, or relationally inconsistent inputs make it exit with
+status 2 without replacing the workbook. An older workbook may still exist and
+must not be treated as current. Rerun the complete export instead of repairing
+CSV headers or references manually.
 
 ## Safe reruns and partial runs
 

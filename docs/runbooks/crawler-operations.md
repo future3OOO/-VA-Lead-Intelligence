@@ -93,8 +93,12 @@ mkdir -p exports
 The output is
 `exports/anz_full_leads_with_targeted_contacts.xlsx`. It contains `Leads`,
 `Primary Contacts`, `Contacts`, and `Companies` sheets sourced directly from
-the four canonical CSV files. Generated CSV and XLSX files remain local under
-`exports/`; they are ignored by Git.
+the four canonical CSV files. `Leads` expands each normalized lead to one row
+per company contact so person-specific email, phone, and LinkedIn values are
+immediately extractable. `Primary Contacts` stays one row per lead. Raw join
+IDs and mapped coordinates are retained in hidden columns at the far right.
+Generated CSV and XLSX files remain local under `exports/`; they are ignored by
+Git.
 
 The builder exits with status 2 without replacing the workbook if any CSV is
 missing, unreadable, malformed, or does not join consistently by ID. An older
