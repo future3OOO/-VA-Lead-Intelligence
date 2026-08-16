@@ -6,16 +6,20 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 LEAD_FIELDS = [
+    "lead_id",
+    "company_id",
+    "primary_contact_id",
     "company_name",
     "primary_domain",
-    "named_contact_name",
-    "named_contact_title",
-    "named_contact_email",
-    "named_contact_phone",
-    "named_contact_linkedin",
+    "primary_contact_name",
+    "primary_contact_title",
+    "primary_contact_email",
+    "primary_contact_phone",
+    "primary_contact_linkedin",
     "company_email",
     "company_phone",
     "company_form",
@@ -35,15 +39,33 @@ LEAD_FIELDS = [
     "explanation",
 ]
 
-NAMED_CONTACT_FIELDS = [
+PRIMARY_CONTACT_FIELDS = [
+    "lead_id",
+    "company_id",
+    "primary_contact_id",
+    "company_name",
+    "primary_domain",
+    "job_title",
+    "primary_contact_status",
+    "primary_contact_name",
+    "primary_contact_title",
+    "primary_contact_email",
+    "primary_contact_phone",
+    "primary_contact_linkedin",
+    "source",
+    "source_url",
+]
+
+CONTACT_FIELDS = [
+    "contact_id",
     "company_id",
     "company_name",
     "primary_domain",
-    "named_contact_name",
-    "named_contact_title",
-    "named_contact_emails",
-    "named_contact_phones",
-    "named_contact_linkedin_urls",
+    "contact_name",
+    "contact_title",
+    "contact_emails",
+    "contact_phones",
+    "contact_linkedin_urls",
 ]
 
 COMPANY_FIELDS = [
@@ -63,11 +85,12 @@ COMPANY_FIELDS = [
 ]
 
 
-def _write_csv(path: Path, fields: list[str], row: dict[str, str]) -> None:
+def _write_csv(path: Path, fields: list[str], row: dict[str, str] | None) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
-        writer.writerow(row)
+        if row is not None:
+            writer.writerow(row)
 
 
 def _distinct_row(fields: list[str], prefix: str) -> dict[str, str]:
@@ -82,17 +105,34 @@ def _distinct_row(fields: list[str], prefix: str) -> dict[str, str]:
     return row
 
 
-def test_workbook_cli_preserves_all_three_export_tables(tmp_path: Path) -> None:
+def test_workbook_cli_preserves_all_four_relational_export_tables(tmp_path: Path) -> None:
     leads_path = tmp_path / "leads.csv"
-    contacts_path = tmp_path / "named_contacts.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
     companies_path = tmp_path / "companies.csv"
     workbook_path = tmp_path / "leads.xlsx"
 
     lead_row = _distinct_row(LEAD_FIELDS, "lead")
-    contact_row = _distinct_row(NAMED_CONTACT_FIELDS, "contact")
+    primary_contact_row = _distinct_row(PRIMARY_CONTACT_FIELDS, "primary")
+    contact_row = _distinct_row(CONTACT_FIELDS, "contact")
     company_row = _distinct_row(COMPANY_FIELDS, "company")
+    lead_row.update(
+        lead_id="lead-1",
+        company_id="company-1",
+        primary_contact_id="contact-1",
+        rank="High",
+    )
+    primary_contact_row.update(
+        lead_id="lead-1",
+        company_id="company-1",
+        primary_contact_id="contact-1",
+        primary_contact_status="available",
+    )
+    contact_row.update(contact_id="contact-1", company_id="company-1")
+    company_row["company_id"] = "company-1"
     _write_csv(leads_path, LEAD_FIELDS, lead_row)
-    _write_csv(contacts_path, NAMED_CONTACT_FIELDS, contact_row)
+    _write_csv(primary_contacts_path, PRIMARY_CONTACT_FIELDS, primary_contact_row)
+    _write_csv(contacts_path, CONTACT_FIELDS, contact_row)
     _write_csv(companies_path, COMPANY_FIELDS, company_row)
 
     result = subprocess.run(
@@ -101,7 +141,9 @@ def test_workbook_cli_preserves_all_three_export_tables(tmp_path: Path) -> None:
             "scripts/build_leads_workbook.py",
             "--leads",
             str(leads_path),
-            "--named-contacts",
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
             str(contacts_path),
             "--companies",
             str(companies_path),
@@ -116,19 +158,19 @@ def test_workbook_cli_preserves_all_three_export_tables(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     workbook = load_workbook(workbook_path, read_only=False, data_only=False)
-    assert workbook.sheetnames == ["Leads", "Named Contacts", "Companies"]
+    assert workbook.sheetnames == ["Leads", "Primary Contacts", "Contacts", "Companies"]
 
     expected = [
-        ("Leads", LEAD_FIELDS, lead_row, "LeadsTable"),
-        ("Named Contacts", NAMED_CONTACT_FIELDS, contact_row, "NamedContactsTable"),
-        ("Companies", COMPANY_FIELDS, company_row, "CompaniesTable"),
+        ("Leads", "LeadsTable"),
+        ("Primary Contacts", "PrimaryContactsTable"),
+        ("Contacts", "ContactsTable"),
+        ("Companies", "CompaniesTable"),
     ]
-    for sheet_name, fields, row, table_name in expected:
+    for sheet_name, table_name in expected:
         sheet = workbook[sheet_name]
+        headers = [cell.value for cell in sheet[1]]
+        assert len(headers) == len(set(headers))
         assert sheet.max_row == 2
-        assert sheet.max_column == len(fields)
-        assert [cell.value for cell in sheet[1]] == fields
-        assert [cell.value for cell in sheet[2]] == [row[field] for field in fields]
         assert sheet.freeze_panes == "A2"
         assert sheet.auto_filter.ref is None
         assert sheet.row_dimensions[1].height == 18
@@ -138,29 +180,88 @@ def test_workbook_cli_preserves_all_three_export_tables(tmp_path: Path) -> None:
         assert table.ref == sheet.dimensions
         assert table.autoFilter.ref == sheet.dimensions
         assert sheet.tables[table_name].tableStyleInfo is None
-        contact_column = next(
-            index for index, field in enumerate(fields, start=1) if "phone" in field
-        )
-        assert sheet.cell(row=2, column=contact_column).number_format == "@"
+
+    assert [cell.value for cell in workbook["Leads"][1]][:13] == [
+        "Company",
+        "Domain",
+        "Rank",
+        "Score",
+        "Lead title",
+        "Outreach type",
+        "Contact name",
+        "Contact title",
+        "Person email(s)",
+        "Unattributed email",
+        "Person phone(s)",
+        "Company phone",
+        "Person LinkedIn profile(s)",
+    ]
+    leads_sheet = workbook["Leads"]
+    leads_headers = [cell.value for cell in leads_sheet[1]]
+    assert (
+        leads_sheet.cell(row=2, column=leads_headers.index("Contact name") + 1).value
+        == contact_row["contact_name"]
+    )
+    assert workbook["Primary Contacts"]["E2"].value == primary_contact_row["primary_contact_name"]
+    assert workbook["Contacts"]["C2"].value == contact_row["contact_name"]
+    assert workbook["Companies"]["A2"].value == company_row["company_name"]
+    for sheet in workbook.worksheets:
+        for cell in sheet[1]:
+            if cell.value in {"Lead ID", "Company ID", "Contact ID", "Primary contact ID"}:
+                assert sheet.column_dimensions[cell.column_letter].hidden
+    primary_sheet = workbook["Primary Contacts"]
+    for header in (
+        "Selected primary name",
+        "Selected primary title",
+        "Selected primary email",
+        "Selected primary phone",
+        "Selected primary LinkedIn",
+    ):
+        cell = next(cell for cell in primary_sheet[1] if cell.value == header)
+        assert not primary_sheet.column_dimensions[cell.column_letter].hidden
+    workbook_values = {
+        str(cell.value)
+        for sheet in workbook.worksheets
+        for row in sheet.iter_rows(min_row=2)
+        for cell in row
+        if cell.value is not None
+    }
+    for source_row in (lead_row, primary_contact_row, contact_row, company_row):
+        assert {str(value) for value in source_row.values() if value} <= workbook_values
 
     with zipfile.ZipFile(workbook_path) as package:
         workbook_xml = package.read("xl/workbook.xml")
         assert b"_FilterDatabase" not in workbook_xml
-        for index in range(1, 4):
+        for index in range(1, 5):
             worksheet_xml = package.read(f"xl/worksheets/sheet{index}.xml")
             table_xml = package.read(f"xl/tables/table{index}.xml")
             assert b"<autoFilter" not in worksheet_xml
             assert b"<autoFilter" in table_xml
 
 
-def test_workbook_cli_rejects_an_unexpected_csv_contract(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "invalid_input",
+    ["leads", "primary_contacts", "contacts", "companies"],
+)
+def test_workbook_cli_rejects_an_unexpected_csv_contract(
+    tmp_path: Path, invalid_input: str
+) -> None:
     leads_path = tmp_path / "leads.csv"
-    contacts_path = tmp_path / "named_contacts.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
     companies_path = tmp_path / "companies.csv"
     workbook_path = tmp_path / "leads.xlsx"
-    _write_csv(leads_path, ["wrong_column"], {"wrong_column": "value"})
-    _write_csv(contacts_path, NAMED_CONTACT_FIELDS, {})
+    _write_csv(leads_path, LEAD_FIELDS, {})
+    _write_csv(primary_contacts_path, PRIMARY_CONTACT_FIELDS, {})
+    _write_csv(contacts_path, CONTACT_FIELDS, {})
     _write_csv(companies_path, COMPANY_FIELDS, {})
+    paths = {
+        "leads": leads_path,
+        "primary_contacts": primary_contacts_path,
+        "contacts": contacts_path,
+        "companies": companies_path,
+    }
+    _write_csv(paths[invalid_input], ["wrong_column"], {"wrong_column": "value"})
 
     result = subprocess.run(
         [
@@ -168,7 +269,9 @@ def test_workbook_cli_rejects_an_unexpected_csv_contract(tmp_path: Path) -> None
             "scripts/build_leads_workbook.py",
             "--leads",
             str(leads_path),
-            "--named-contacts",
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
             str(contacts_path),
             "--companies",
             str(companies_path),
@@ -184,3 +287,616 @@ def test_workbook_cli_rejects_an_unexpected_csv_contract(tmp_path: Path) -> None
     assert result.returncode == 2
     assert "unexpected columns" in result.stderr
     assert not workbook_path.exists()
+
+
+def test_workbook_cli_rejects_malformed_csv_quoting(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    malformed_row = ",".join([""] * (len(LEAD_FIELDS) - 1) + ['"unterminated'])
+    leads_path.write_text(f"{','.join(LEAD_FIELDS)}\n{malformed_row}", encoding="utf-8")
+    _write_csv(primary_contacts_path, PRIMARY_CONTACT_FIELDS, None)
+    _write_csv(contacts_path, CONTACT_FIELDS, None)
+    _write_csv(companies_path, COMPANY_FIELDS, None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "malformed CSV" in result.stderr
+    assert not workbook_path.exists()
+
+
+def test_workbook_cli_rejects_mixed_exports_with_broken_relations(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+
+    _write_csv(
+        leads_path,
+        LEAD_FIELDS,
+        {"lead_id": "lead-1", "company_id": "company-1", "primary_contact_id": "contact-1"},
+    )
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {"lead_id": "lead-1", "company_id": "company-1", "primary_contact_id": "contact-2"},
+    )
+    _write_csv(
+        contacts_path,
+        CONTACT_FIELDS,
+        {"contact_id": "contact-1", "company_id": "company-1"},
+    )
+    _write_csv(companies_path, COMPANY_FIELDS, {"company_id": "company-1"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "lead and primary contact references differ" in result.stderr
+    assert not workbook_path.exists()
+
+
+def test_workbook_cli_rejects_an_inconsistent_primary_status(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    _write_csv(leads_path, LEAD_FIELDS, {"lead_id": "lead-1", "company_id": "company-1"})
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {
+            "lead_id": "lead-1",
+            "company_id": "company-1",
+            "primary_contact_status": "available",
+        },
+    )
+    _write_csv(
+        contacts_path,
+        CONTACT_FIELDS,
+        {"contact_id": "contact-other", "company_id": "company-1", "contact_name": "Other"},
+    )
+    _write_csv(companies_path, COMPANY_FIELDS, {"company_id": "company-1"})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "available without a contact ID and name" in result.stderr
+    assert not workbook_path.exists()
+
+
+def test_workbook_cli_accepts_a_preserved_unresolved_lead(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    _write_csv(leads_path, LEAD_FIELDS, {"lead_id": "lead-1", "company_name": "Unresolved"})
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {
+            "lead_id": "lead-1",
+            "company_name": "Unresolved",
+            "primary_contact_status": "unavailable",
+        },
+    )
+    _write_csv(contacts_path, CONTACT_FIELDS, None)
+    _write_csv(companies_path, COMPANY_FIELDS, None)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    workbook = load_workbook(workbook_path, read_only=True)
+    primary_headers = [cell.value for cell in workbook["Primary Contacts"][1]]
+    assert (
+        workbook["Primary Contacts"][2][primary_headers.index("Contact status")].value
+        == "unavailable"
+    )
+    assert workbook["Leads"].max_row == 1
+
+
+def test_workbook_leads_is_a_deduplicated_outreach_target_view(
+    tmp_path: Path,
+) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    leads = [
+        {
+            "lead_id": "lead-low",
+            "company_id": "company-low",
+            "primary_contact_id": "contact-low",
+            "company_name": "Low Rank Ltd",
+            "qualification_score": "50",
+            "rank": "Low",
+        },
+        {
+            "lead_id": "lead-phone",
+            "company_id": "company-phone",
+            "primary_contact_id": "contact-phone",
+            "company_name": "Phone Only Ltd",
+            "company_email": "Contact us at info@phone-only.example.org",
+            "qualification_score": "95",
+            "rank": "High",
+        },
+        {
+            "lead_id": "lead-medium",
+            "company_id": "company-medium",
+            "primary_contact_id": "contact-medium",
+            "company_name": "Medium Direct Ltd",
+            "qualification_score": "70",
+            "rank": "Medium",
+        },
+        {
+            "lead_id": "lead-generic",
+            "company_id": "company-generic",
+            "primary_contact_id": "contact-generic",
+            "company_name": "Generic High Ltd",
+            "company_email": "office@generic-high.example.org",
+            "qualification_score": "90",
+            "rank": "High",
+        },
+        {
+            "lead_id": "lead-direct",
+            "company_id": "company-direct",
+            "primary_contact_id": "contact-direct",
+            "company_name": "Direct High Ltd",
+            "primary_domain": "direct-high.example.org",
+            "primary_contact_name": "Alice Morgan",
+            "job_title": "Property management support",
+            "location": "'-43.5321, 172.6362, New Zealand",
+            "qualification_score": "80",
+            "rank": "High",
+        },
+        {
+            "lead_id": "lead-direct-second",
+            "company_id": "company-direct",
+            "primary_contact_id": "contact-direct",
+            "company_name": "Direct High Ltd",
+            "primary_domain": "direct-high.example.org",
+            "job_title": "Administration support",
+            "qualification_score": "75",
+            "rank": "High",
+        },
+    ]
+    primary_contacts = [
+        {
+            "lead_id": lead["lead_id"],
+            "company_id": lead["company_id"],
+            "primary_contact_id": lead["primary_contact_id"],
+            "company_name": lead["company_name"],
+            "primary_contact_status": "available",
+            "primary_contact_name": name,
+        }
+        for lead, name in zip(
+            leads,
+            (
+                "Lola Low",
+                "Pete Phone",
+                "Dana Medium",
+                "Gina Generic",
+                "Alice Morgan",
+                "Alice Morgan",
+            ),
+            strict=True,
+        )
+    ]
+    contacts = [
+        {
+            "contact_id": "contact-direct-other",
+            "company_id": "company-direct",
+            "company_name": "Direct High Ltd",
+            "contact_name": "Bob Taylor",
+            "contact_emails": "bob@direct-high.example.org",
+            "contact_phones": "+64 21 555 0102",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/bob-taylor",
+        },
+        {
+            "contact_id": "contact-low",
+            "company_id": "company-low",
+            "company_name": "Low Rank Ltd",
+            "contact_name": "Lola Low",
+            "contact_emails": "lola@low-rank.example.org",
+        },
+        {
+            "contact_id": "contact-phone",
+            "company_id": "company-phone",
+            "company_name": "Phone Only Ltd",
+            "contact_name": "Pete Phone",
+            "contact_phones": "+64 21 555 0103",
+        },
+        {
+            "contact_id": "contact-medium",
+            "company_id": "company-medium",
+            "company_name": "Medium Direct Ltd",
+            "contact_name": "Dana Medium",
+            "contact_emails": "dana@medium-direct.example.org",
+        },
+        {
+            "contact_id": "contact-generic",
+            "company_id": "company-generic",
+            "company_name": "Generic High Ltd",
+            "contact_name": "Gina Generic",
+            "contact_phones": "+64 21 555 0104",
+            "contact_linkedin_urls": (
+                "https://www.linkedin.com/in/gina-generic; "
+                "https://www.linkedin.com/in/gina-generic-adviser"
+            ),
+        },
+        {
+            "contact_id": "contact-generic-other",
+            "company_id": "company-generic",
+            "company_name": "Generic High Ltd",
+            "contact_name": "Otto Other",
+            "contact_emails": "'+otto@generic-high.example.org",
+        },
+        {
+            "contact_id": "contact-direct",
+            "company_id": "company-direct",
+            "company_name": "Direct High Ltd",
+            "contact_name": "Alice Morgan",
+            "contact_emails": ("alice@direct-high.example.org; alice.alt@direct-high.example.org"),
+        },
+        {
+            "contact_id": "contact-orphan",
+            "company_id": "company-orphan",
+            "company_name": "Orphan Profiles Ltd",
+            "primary_domain": "orphan.example.org",
+            "contact_name": "Olivia Orphan",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/olivia-orphan",
+        },
+    ]
+    companies = list(
+        {
+            lead["company_id"]: {
+                "company_id": lead["company_id"],
+                "company_name": lead["company_name"],
+            }
+            for lead in leads
+        }.values()
+    )
+    companies.append({"company_id": "company-orphan", "company_name": "Orphan Profiles Ltd"})
+    for path, fields, rows in (
+        (leads_path, LEAD_FIELDS, leads),
+        (primary_contacts_path, PRIMARY_CONTACT_FIELDS, primary_contacts),
+        (contacts_path, CONTACT_FIELDS, contacts),
+        (companies_path, COMPANY_FIELDS, companies),
+    ):
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    workbook = load_workbook(workbook_path, read_only=False, data_only=False)
+    sheet = workbook["Leads"]
+    headers = [cell.value for cell in sheet[1]]
+    assert headers[:13] == [
+        "Company",
+        "Domain",
+        "Rank",
+        "Score",
+        "Lead title",
+        "Outreach type",
+        "Contact name",
+        "Contact title",
+        "Person email(s)",
+        "Unattributed email",
+        "Person phone(s)",
+        "Company phone",
+        "Person LinkedIn profile(s)",
+    ]
+    assert sheet.max_row == 7
+    assert [
+        (
+            sheet.cell(row=row, column=headers.index("Rank") + 1).value,
+            sheet.cell(row=row, column=1).value,
+            sheet.cell(row=row, column=headers.index("Outreach type") + 1).value,
+            sheet.cell(row=row, column=headers.index("Contact name") + 1).value,
+            sheet.cell(row=row, column=headers.index("Person email(s)") + 1).value,
+            sheet.cell(row=row, column=headers.index("Unattributed email") + 1).value,
+        )
+        for row in range(2, 8)
+    ] == [
+        (
+            "High",
+            "Direct High Ltd",
+            "Primary",
+            "Alice Morgan",
+            "alice@direct-high.example.org; alice.alt@direct-high.example.org",
+            None,
+        ),
+        (
+            "High",
+            "Direct High Ltd",
+            "Additional",
+            "Bob Taylor",
+            "bob@direct-high.example.org",
+            None,
+        ),
+        (
+            "High",
+            "Generic High Ltd",
+            "Additional",
+            "Otto Other",
+            "'+otto@generic-high.example.org",
+            None,
+        ),
+        (
+            "Medium",
+            "Medium Direct Ltd",
+            "Primary",
+            "Dana Medium",
+            "dana@medium-direct.example.org",
+            None,
+        ),
+        (
+            "High",
+            "Generic High Ltd",
+            "Primary",
+            "Gina Generic",
+            None,
+            "office@generic-high.example.org",
+        ),
+        (
+            None,
+            "Orphan Profiles Ltd",
+            "Additional",
+            "Olivia Orphan",
+            None,
+            None,
+        ),
+    ]
+    location_column = headers.index("Location") + 1
+    assert sheet.cell(row=2, column=location_column).value == "New Zealand"
+    assert workbook["Primary Contacts"].max_row == 7
+    assert workbook["Contacts"].max_row == 9
+    assert workbook["Companies"].max_row == 7
+    contact_rows = list(workbook["Contacts"].iter_rows(min_row=2, values_only=True))
+    contact_headers = [cell.value for cell in workbook["Contacts"][1]]
+    contact_people = {
+        (
+            row[contact_headers.index("Contact name")],
+            row[contact_headers.index("Person email(s)")],
+        )
+        for row in contact_rows
+    }
+    assert {
+        ("Bob Taylor", "bob@direct-high.example.org"),
+        ("Otto Other", "'+otto@generic-high.example.org"),
+    } <= contact_people
+    lead_contact_names = {
+        sheet.cell(row=row, column=headers.index("Contact name") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    }
+    assert {"Alice Morgan", "Bob Taylor", "Otto Other"} <= lead_contact_names
+    assert [
+        sheet.cell(row=row, column=headers.index("Contact name") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    ].count("Alice Morgan") == 1
+    expected_linkedin = sorted(
+        url.strip()
+        for contact in contacts
+        for url in contact.get("contact_linkedin_urls", "").split(";")
+        if url.strip()
+    )
+    displayed_linkedin = sorted(
+        url.strip()
+        for row in range(2, sheet.max_row + 1)
+        for url in str(
+            sheet.cell(row=row, column=headers.index("Person LinkedIn profile(s)") + 1).value or ""
+        ).split(";")
+        if url.strip()
+    )
+    assert displayed_linkedin == expected_linkedin
+    orphan_row = next(
+        row
+        for row in range(2, sheet.max_row + 1)
+        if sheet.cell(row=row, column=headers.index("Contact name") + 1).value == "Olivia Orphan"
+    )
+    assert sheet.cell(row=orphan_row, column=headers.index("Lead ID") + 1).value is None
+    outreach_target_ids = [
+        sheet.cell(row=row, column=headers.index("Outreach target ID") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    ]
+    assert all(outreach_target_ids)
+    assert len(outreach_target_ids) == len(set(outreach_target_ids))
+    for row in range(2, sheet.max_row + 1):
+        if sheet.cell(row=row, column=headers.index("Outreach type") + 1).value == "Additional":
+            for field in (
+                "Primary contact ID",
+                "Selected primary name",
+                "Selected primary title",
+                "Selected primary email",
+                "Selected primary phone",
+                "Selected primary LinkedIn",
+            ):
+                assert sheet.cell(row=row, column=headers.index(field) + 1).value is None
+    for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
+        column = headers.index(field) + 1
+        letter = sheet.cell(row=1, column=column).column_letter
+        assert sheet.column_dimensions[letter].hidden
+
+
+def test_workbook_assigns_an_exact_name_matched_email_to_the_person(tmp_path: Path) -> None:
+    leads_path = tmp_path / "leads.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
+    companies_path = tmp_path / "companies.csv"
+    workbook_path = tmp_path / "leads.xlsx"
+    _write_csv(
+        leads_path,
+        LEAD_FIELDS,
+        {
+            "lead_id": "lead-alice",
+            "company_id": "company-alice",
+            "primary_contact_id": "contact-alice",
+            "company_name": "Alice Advisory",
+            "company_email": "alice.morgan@alice.example.org",
+            "qualification_score": "90",
+            "rank": "High",
+        },
+    )
+    _write_csv(
+        primary_contacts_path,
+        PRIMARY_CONTACT_FIELDS,
+        {
+            "lead_id": "lead-alice",
+            "company_id": "company-alice",
+            "primary_contact_id": "contact-alice",
+            "company_name": "Alice Advisory",
+            "primary_contact_status": "available",
+            "primary_contact_name": "Alice Morgan",
+        },
+    )
+    _write_csv(
+        contacts_path,
+        CONTACT_FIELDS,
+        {
+            "contact_id": "contact-alice",
+            "company_id": "company-alice",
+            "company_name": "Alice Advisory",
+            "contact_name": "Alice Morgan",
+        },
+    )
+    _write_csv(
+        companies_path,
+        COMPANY_FIELDS,
+        {"company_id": "company-alice", "company_name": "Alice Advisory"},
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_leads_workbook.py",
+            "--leads",
+            str(leads_path),
+            "--primary-contacts",
+            str(primary_contacts_path),
+            "--contacts",
+            str(contacts_path),
+            "--companies",
+            str(companies_path),
+            "--output",
+            str(workbook_path),
+        ],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    sheet = load_workbook(workbook_path, read_only=True)["Leads"]
+    headers = [cell.value for cell in sheet[1]]
+    row = {
+        header: sheet.cell(row=2, column=index + 1).value for index, header in enumerate(headers)
+    }
+    assert row["Outreach type"] == "Primary"
+    assert row["Contact name"] == "Alice Morgan"
+    assert row["Person email(s)"] == "alice.morgan@alice.example.org"
+    assert row["Unattributed email"] is None

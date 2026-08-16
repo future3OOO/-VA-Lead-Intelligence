@@ -3,7 +3,7 @@
 VA Lead Intelligence builds a ranked list of Australian and New Zealand
 businesses that may benefit from remote administrative support. It collects
 business listings, finds contact details on official company websites, scores
-the results, and exports readable CSV files plus a three-sheet Excel workbook.
+the results, and exports readable CSV files plus a four-sheet Excel workbook.
 
 This is a targeted prospecting tool. It is **not** a complete directory of every
 business in Australia or New Zealand, and a lead does not mean that the company
@@ -87,33 +87,45 @@ The normal run has four steps:
 1. **Discover companies** from OpenStreetMap and the two finance directories.
 2. **Enrich contacts** from official company websites using three parallel
    shards.
-3. **Export** ranked leads, companies, and one-row-per-person named contacts.
-4. **Build the workbook** from those three canonical CSV exports.
+3. **Export** ranked leads, one primary-contact row per lead, one row per
+   validated person discovered in company or source-hit routes, and companies.
+4. **Build the workbook** from those four canonical CSV exports.
 
 The final files are written under `exports/`:
 
 | File | Contents |
 |---|---|
-| `anz_remote_leads_with_contacts.csv` | Complete ranked lead export with named-person and company contact fields |
+| `anz_remote_leads_with_contacts.csv` | One row per ranked lead with snapshot lead, company, and primary-contact IDs plus selected-person and generic-company fields |
 | `anz_remote_leads_with_targeted_contacts.csv` | Byte-identical alias of the complete lead export |
+| `anz_primary_contacts.csv` | Exactly one row per lead; selected person details or `primary_contact_status=unavailable` |
+| `anz_contacts.csv` | One row per validated person discovered in company or source-hit routes, with every associated email, phone, and LinkedIn URL |
 | `anz_all_companies.csv` | One row per company with the best collected routes |
 | `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
-| `anz_named_contacts.csv` | One row per validated person, with separate email, phone, and LinkedIn columns |
-| `anz_full_leads_with_targeted_contacts.xlsx` | Three sheets: complete Leads, one-row-per-person Named Contacts, and Companies |
+| `anz_full_leads_with_targeted_contacts.xlsx` | Four-sheet prospecting workbook; Leads is a deduplicated outreach-target view containing every validated person LinkedIn profile, ranked email targets, and clearly separated person-owned and unattributed emails |
 
 Everything under `exports/` is a generated local artifact. CSV and XLSX output
 files are intentionally ignored by Git and must not be committed or pushed.
 
-Named-person fields are kept separate from generic office details:
+Person fields are kept separate from generic office details:
 
-- `named_contact_name`, `named_contact_title`, `named_contact_email`,
-  `named_contact_phone`, `named_contact_linkedin`
+- join Leads to Primary Contacts on `lead_id`
+- join Leads or Primary Contacts to Contacts where
+  `primary_contact_id = contact_id`
+- join any nonblank `company_id` to Companies; a lead that could not be
+  resolved to a company is preserved with blank company/contact references
+- `lead_id` is the winning source-hit ID for the current database/export state;
+  use it for joins within a run, not as a permanent ID across clean re-scrapes
+- `primary_contact_name`, `primary_contact_title`, `primary_contact_email`,
+  `primary_contact_phone`, `primary_contact_linkedin`
 - `company_email`, `company_phone`, `company_form`
 - `best_email`, `best_phone`, `best_form` use a named route first and fall back
   to a company route
 
-Multiple contact values in the named-contact export are deduplicated and
+Multiple values for one person in the Contacts export are deduplicated and
 separated with semicolons. Phone numbers retain their international `+` prefix.
+A person may appear with no email, phone, or LinkedIn route when only a
+validated name/title was published; Contacts is intentionally a superset of the
+people chosen as lead primaries.
 
 ## Run the full configured scrape
 
@@ -243,19 +255,21 @@ mkdir -p exports
   --region anz \
   --min-rank medium \
   --leads-path exports/anz_remote_leads_with_contacts.csv \
+  --primary-contacts-path exports/anz_primary_contacts.csv \
+  --contacts-path exports/anz_contacts.csv \
   --companies-path exports/anz_all_companies.csv \
-  --named-contacts-path exports/anz_named_contacts.csv \
   --leads-alias-path exports/anz_remote_leads_with_targeted_contacts.csv \
   --companies-alias-path exports/anz_all_companies_targeted.csv
 ```
 
 Open `exports/anz_remote_leads_with_targeted_contacts.csv` for the complete
-lead list and `exports/anz_named_contacts.csv` for the clean person-level view.
+lead list, `exports/anz_primary_contacts.csv` for one selected person per lead,
+and `exports/anz_contacts.csv` for the complete person-level view.
 Re-running the export replaces those files from the current database state.
 
 ### 6. Build the readable workbook
 
-Build the workbook from the three canonical CSVs:
+Build the workbook from the four canonical CSVs:
 
 ```bash
 .venv/bin/python scripts/build_leads_workbook.py
@@ -266,13 +280,29 @@ This writes
 
 | Sheet | Contents |
 |---|---|
-| `Leads` | Every ranked lead and all 24 lead-export columns, including targeted-person and generic-company contact lanes |
-| `Named Contacts` | One readable row per validated person with separate name, title, email, phone, and LinkedIn columns |
+| `Leads` | One row per actionable outreach target: validated people with email or LinkedIn, plus deduplicated unattributed emails from High/Medium leads. Email targets sort before LinkedIn-only targets |
+| `Primary Contacts` | Exactly one row per lead with its selected person or an explicit unavailable status |
+| `Contacts` | Complete person directory, including phone-only and name-only contacts that are not actionable in Leads |
 | `Companies` | One row per company with its best company routes and selected named-contact routes |
 
-The builder validates the exact CSV headers before writing, freezes the header
-row, enables filters, keeps contact values as text, uses compact non-wrapped
-rows, and does not re-score, re-match, or otherwise change export data.
+The builder validates the exact CSV headers and ID consistency before writing,
+freezes the header row, enables filters, keeps contact values as text, and uses
+compact non-wrapped rows. The visible columns are human-first. Technical IDs
+and raw mapped coordinates remain in hidden columns at the far right, and
+single LinkedIn/form/source URLs are clickable. The workbook does not re-score
+the exports and never rewrites the four input CSVs. In `Leads`, a person appears
+once by contact ID even when the company has several lead records. A published
+LinkedIn profile can create an additional contact row, including when no ranked
+lead exists for that company; lead-specific fields are blank on that row.
+Unattributed emails remain separate unless an address exactly and uniquely
+matches a validated person's name, in which case it is shown only in that
+person's email column. Use `Leads` for email or LinkedIn outreach, `Contacts` for
+every validated person and route, and
+`anz_remote_leads_with_contacts.csv` for the complete exported lead list. Missing,
+unreadable, malformed, or relationally inconsistent inputs make it exit with
+status 2 without replacing the workbook. An older workbook may still exist and
+must not be treated as current. Rerun the complete export instead of repairing
+CSV headers or references manually.
 
 ## Safe reruns and partial runs
 

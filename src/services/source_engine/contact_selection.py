@@ -130,6 +130,7 @@ def _parse_named_route(value: str) -> dict[str, str]:
 
 
 class _NamedPersonRoutes(TypedDict):
+    key: str
     name: str
     title: str
     emails: set[str]
@@ -193,6 +194,7 @@ def _collect_named_people(
         existing = candidates.get(key)
         if not existing:
             existing = {
+                "key": key,
                 "name": name,
                 "title": title,
                 "emails": set(),
@@ -248,6 +250,7 @@ def _collect_named_people(
 
 
 class NamedContact(TypedDict):
+    key: str
     name: str
     title: str
     emails: tuple[str, ...]
@@ -260,6 +263,7 @@ def list_named_contacts(routes: list[dict[str, str]], company_name: str = "") ->
     candidates, _ = _collect_named_people(routes, company_name)
     return [
         {
+            "key": candidate["key"],
             "name": candidate["name"],
             "title": candidate["title"],
             "emails": tuple(sorted(candidate["emails"], key=str.lower)),
@@ -269,7 +273,6 @@ def list_named_contacts(routes: list[dict[str, str]], company_name: str = "") ->
         for candidate in sorted(
             candidates.values(), key=lambda item: (item["name"].lower(), item["title"].lower())
         )
-        if candidate["emails"] or candidate["phones"] or candidate["linkedins"]
     ]
 
 
@@ -306,6 +309,7 @@ def select_named_person(
             name, title = person
             matching = [
                 {
+                    "key": " ".join(_name_key(name)),
                     "name": name,
                     "title": title,
                     "emails": {generic_emails[0]},
@@ -414,6 +418,7 @@ def select_named_person(
         key=lambda c: (_score(c), c["name"]),
     )
     return {
+        "key": best["key"],
         "name": best["name"],
         "title": best["title"],
         "email": sorted(best["emails"], key=str.lower)[0] if best["emails"] else "",

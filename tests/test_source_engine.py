@@ -9,7 +9,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from sqlalchemy import select
@@ -63,7 +63,7 @@ def test_source_registry_loads() -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_writes_one_readable_row_per_named_person(
+async def test_export_writes_relational_leads_primary_contacts_and_people(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     spec = importlib.util.spec_from_file_location(
@@ -98,9 +98,136 @@ async def test_export_writes_one_readable_row_per_named_person(
             industry="Real Estate",
             employee_count=5,
         )
-        session.add_all([first, second])
+        third = DBCompany(
+            workspace_id=workspace.id,
+            canonical_name="Gamma Realty",
+            primary_domain="gamma.example.org",
+            country_code="NZ",
+            industry="Real Estate",
+            employee_count=5,
+        )
+        session.add_all([first, second, third])
         await session.flush()
         first_email = "Alice Morgan (Property Manager) <alice@alpha.example.org>"
+        first_hit = DBSourceHit(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
+            workspace_id=workspace.id,
+            company_id=first.id,
+            source_key="openstreetmap",
+            source_native_id=f"test-{uuid4().hex}",
+            source_url="https://www.openstreetmap.org/node/1",
+            observed_at=datetime.now(timezone.utc),
+            published_at=datetime.now(timezone.utc),
+            title="Property Management Administration Support",
+            body_excerpt="Remote-friendly property administration and tenant support.",
+            company_name_raw="Alpha Realty",
+            company_domain_raw="alpha.example.org",
+            location_raw="Auckland, New Zealand",
+            workplace_type="inferred_remote_friendly",
+            intent_label="company_existence_only",
+            contact_routes_raw=[
+                {
+                    "type": "business_phone",
+                    "value": "Alice Morgan (Property Manager) <+64 21 555 0199>",
+                }
+            ],
+            content_hash=uuid4().hex,
+            access_policy_version="source-policy-v1",
+        )
+        displaced_hit = DBSourceHit(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            workspace_id=workspace.id,
+            company_id=first.id,
+            source_key="openstreetmap",
+            source_native_id=f"test-{uuid4().hex}",
+            source_url="https://www.openstreetmap.org/node/displaced",
+            observed_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            published_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            title="Property Management Administration Support",
+            body_excerpt="Remote-friendly property administration and tenant support.",
+            company_name_raw="Alpha Realty",
+            company_domain_raw="alpha.example.org",
+            location_raw="Auckland, New Zealand",
+            workplace_type="inferred_remote_friendly",
+            intent_label="company_existence_only",
+            contact_routes_raw=[
+                {
+                    "type": "business_phone",
+                    "value": "Carol Evans (Property Manager) <+64 21 555 0188>",
+                },
+                {"type": "named_contact", "value": "Nina Cole (Assistant)"},
+            ],
+            content_hash=uuid4().hex,
+            access_policy_version="source-policy-v1",
+        )
+        enrichment_hit = DBSourceHit(
+            id=UUID("00000000-0000-0000-0000-000000000003"),
+            workspace_id=workspace.id,
+            company_id=first.id,
+            source_key="company_web",
+            source_native_id=f"test-{uuid4().hex}",
+            source_url="https://alpha.example.org/team",
+            observed_at=datetime.now(timezone.utc),
+            published_at=datetime.now(timezone.utc),
+            title="Company contact enrichment",
+            body_excerpt="Official company website contact.",
+            company_name_raw="Alpha Realty",
+            company_domain_raw="alpha.example.org",
+            location_raw="Auckland, New Zealand",
+            workplace_type="inferred_remote_friendly",
+            intent_label="company_existence_only",
+            contact_routes_raw=[
+                {
+                    "type": "business_phone",
+                    "value": "Dana Ruiz (Administration Manager) <+64 21 555 0177>",
+                }
+            ],
+            content_hash=uuid4().hex,
+            access_policy_version="source-policy-v1",
+        )
+        unresolved_hit = DBSourceHit(
+            workspace_id=workspace.id,
+            company_id=None,
+            source_key="openstreetmap",
+            source_native_id=f"test-{uuid4().hex}",
+            source_url="https://www.openstreetmap.org/node/unresolved",
+            observed_at=datetime.now(timezone.utc),
+            published_at=datetime.now(timezone.utc),
+            title="Property Management Administration Support",
+            body_excerpt="Remote-friendly property administration and tenant support.",
+            company_name_raw="Unresolved Services",
+            company_domain_raw="",
+            location_raw="Auckland, New Zealand",
+            workplace_type="inferred_remote_friendly",
+            intent_label="company_existence_only",
+            contact_routes_raw=[
+                {
+                    "type": "business_phone",
+                    "value": "Erin Blake (Office Manager) <+64 21 555 0166>",
+                }
+            ],
+            content_hash=uuid4().hex,
+            access_policy_version="source-policy-v1",
+        )
+        third_hit = DBSourceHit(
+            workspace_id=workspace.id,
+            company_id=third.id,
+            source_key="openstreetmap",
+            source_native_id=f"test-{uuid4().hex}",
+            source_url="https://www.openstreetmap.org/node/2",
+            observed_at=datetime.now(timezone.utc),
+            published_at=datetime.now(timezone.utc),
+            title="Property Management Administration Support",
+            body_excerpt="Remote-friendly property administration and tenant support.",
+            company_name_raw="Gamma Realty",
+            company_domain_raw="gamma.example.org",
+            location_raw="Auckland, New Zealand",
+            workplace_type="inferred_remote_friendly",
+            intent_label="company_existence_only",
+            contact_routes_raw=[],
+            content_hash=uuid4().hex,
+            access_policy_version="source-policy-v1",
+        )
         session.add_all(
             [
                 DBContactRoute(
@@ -143,6 +270,20 @@ async def test_export_writes_one_readable_row_per_named_person(
                 DBContactRoute(
                     workspace_id=workspace.id,
                     company_id=first.id,
+                    route_type="named_contact",
+                    value="Dana Ruiz",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
+                    route_type="named_contact",
+                    value="Name Only (Property Manager)",
+                    is_verified=False,
+                ),
+                DBContactRoute(
+                    workspace_id=workspace.id,
+                    company_id=first.id,
                     route_type="generic_email",
                     value="office@alpha.example.org",
                     is_verified=False,
@@ -163,35 +304,23 @@ async def test_export_writes_one_readable_row_per_named_person(
                     ),
                     is_verified=False,
                 ),
-                DBSourceHit(
-                    workspace_id=workspace.id,
-                    company_id=first.id,
-                    source_key="openstreetmap",
-                    source_native_id=f"test-{uuid4().hex}",
-                    source_url="https://www.openstreetmap.org/node/1",
-                    observed_at=datetime.now(timezone.utc),
-                    published_at=datetime.now(timezone.utc),
-                    title="Property Management Administration Support",
-                    body_excerpt="Remote-friendly property administration and tenant support.",
-                    company_name_raw="Alpha Realty",
-                    company_domain_raw="alpha.example.org",
-                    location_raw="Auckland, New Zealand",
-                    workplace_type="inferred_remote_friendly",
-                    intent_label="company_existence_only",
-                    contact_routes_raw=[],
-                    content_hash=uuid4().hex,
-                    access_policy_version="source-policy-v1",
-                ),
+                displaced_hit,
+                first_hit,
+                enrichment_hit,
+                third_hit,
+                unresolved_hit,
             ]
         )
         await session.commit()
         workspace_id = workspace.id
         first_id = first.id
         second_id = second.id
+        first_hit_id = first_hit.id
 
     leads_path = tmp_path / "leads.csv"
     companies_path = tmp_path / "companies.csv"
-    contacts_path = tmp_path / "named_contacts.csv"
+    primary_contacts_path = tmp_path / "primary_contacts.csv"
+    contacts_path = tmp_path / "contacts.csv"
     leads_alias_path = tmp_path / "targeted_leads.csv"
     companies_alias_path = tmp_path / "targeted_companies.csv"
     base_argv = [
@@ -205,15 +334,17 @@ async def test_export_writes_one_readable_row_per_named_person(
     ]
     monkeypatch.setattr(sys, "argv", base_argv)
     await module.main()
-    leads_without_named_export = leads_path.read_bytes()
-    companies_without_named_export = companies_path.read_bytes()
+    leads_without_contact_exports = leads_path.read_bytes()
+    companies_without_contact_exports = companies_path.read_bytes()
 
     monkeypatch.setattr(
         sys,
         "argv",
         base_argv
         + [
-            "--named-contacts-path",
+            "--primary-contacts-path",
+            str(primary_contacts_path),
+            "--contacts-path",
             str(contacts_path),
             "--leads-alias-path",
             str(leads_alias_path),
@@ -223,62 +354,146 @@ async def test_export_writes_one_readable_row_per_named_person(
     )
     await module.main()
 
-    assert leads_path.read_bytes() == leads_without_named_export
-    assert companies_path.read_bytes() == companies_without_named_export
+    assert leads_path.read_bytes() == leads_without_contact_exports
+    assert companies_path.read_bytes() == companies_without_contact_exports
     assert leads_alias_path.read_bytes() == leads_path.read_bytes()
     assert companies_alias_path.read_bytes() == companies_path.read_bytes()
     assert b"\r\n" in leads_path.read_bytes()
     assert b"\n" not in leads_path.read_bytes().replace(b"\r\n", b"")
     with leads_path.open(newline="", encoding="utf-8") as handle:
         lead_rows = list(csv.DictReader(handle))
-    assert len(lead_rows) == 1
+    assert len(lead_rows) == 3
     assert lead_rows[0]["company_name"] == "Alpha Realty"
+    assert lead_rows[0]["lead_id"] == str(first_hit_id)
+    assert lead_rows[0]["company_id"] == str(first_id)
+    assert lead_rows[0]["primary_contact_id"]
+    with primary_contacts_path.open(newline="", encoding="utf-8") as handle:
+        primary_rows = list(csv.DictReader(handle))
+    assert len(primary_rows) == len(lead_rows)
+    assert primary_rows[0]["lead_id"] == lead_rows[0]["lead_id"]
+    assert primary_rows[0]["company_id"] == lead_rows[0]["company_id"]
+    assert primary_rows[0]["primary_contact_id"] == lead_rows[0]["primary_contact_id"]
+    assert primary_rows[0]["primary_contact_status"] == "available"
+    assert primary_rows[0]["primary_contact_name"] == "Alice Morgan"
+    gamma_primary = next(row for row in primary_rows if row["company_name"] == "Gamma Realty")
+    assert gamma_primary["primary_contact_status"] == "unavailable"
+    assert gamma_primary["primary_contact_id"] == ""
+    assert gamma_primary["primary_contact_name"] == ""
+    unresolved_lead = next(row for row in lead_rows if row["company_name"] == "Unresolved Services")
+    unresolved_primary = next(
+        row for row in primary_rows if row["company_name"] == "Unresolved Services"
+    )
+    assert unresolved_lead["company_id"] == unresolved_lead["primary_contact_id"] == ""
+    assert unresolved_lead["primary_contact_name"] == ""
+    assert unresolved_lead["best_phone"] == "+64 21 555 0166"
+    assert unresolved_primary["company_id"] == unresolved_primary["primary_contact_id"] == ""
+    assert unresolved_primary["primary_contact_status"] == "unavailable"
+    assert unresolved_primary["primary_contact_name"] == ""
+    assert [row["lead_id"] for row in primary_rows] == [row["lead_id"] for row in lead_rows]
+    assert [row["company_id"] for row in primary_rows] == [row["company_id"] for row in lead_rows]
     with contacts_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
-    assert rows == [
+    assert [{key: value for key, value in row.items() if key != "contact_id"} for row in rows] == [
         {
             "company_id": str(first_id),
             "company_name": "Alpha Realty",
             "primary_domain": "alpha.example.org",
-            "named_contact_name": "Alice Morgan",
-            "named_contact_title": "Property Manager",
-            "named_contact_emails": ("a.morgan@alpha.example.org; alice@alpha.example.org"),
-            "named_contact_phones": "",
-            "named_contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan",
+            "contact_name": "Alice Morgan",
+            "contact_title": "Property Manager",
+            "contact_emails": "a.morgan@alpha.example.org; alice@alpha.example.org",
+            "contact_phones": "+64 21 555 0199",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan",
         },
         {
             "company_id": str(first_id),
             "company_name": "Alpha Realty",
             "primary_domain": "alpha.example.org",
-            "named_contact_name": "Bob Taylor",
-            "named_contact_title": "Director",
-            "named_contact_emails": "",
-            "named_contact_phones": "+64 21 555 0102",
-            "named_contact_linkedin_urls": "",
+            "contact_name": "Bob Taylor",
+            "contact_title": "Director",
+            "contact_emails": "",
+            "contact_phones": "+64 21 555 0102",
+            "contact_linkedin_urls": "",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "contact_name": "Carol Evans",
+            "contact_title": "Property Manager",
+            "contact_emails": "",
+            "contact_phones": "+64 21 555 0188",
+            "contact_linkedin_urls": "",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "contact_name": "Dana Ruiz",
+            "contact_title": "Administration Manager",
+            "contact_emails": "",
+            "contact_phones": "+64 21 555 0177",
+            "contact_linkedin_urls": "",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "contact_name": "Name Only",
+            "contact_title": "Property Manager",
+            "contact_emails": "",
+            "contact_phones": "",
+            "contact_linkedin_urls": "",
+        },
+        {
+            "company_id": str(first_id),
+            "company_name": "Alpha Realty",
+            "primary_domain": "alpha.example.org",
+            "contact_name": "Nina Cole",
+            "contact_title": "Assistant",
+            "contact_emails": "",
+            "contact_phones": "",
+            "contact_linkedin_urls": "",
         },
         {
             "company_id": str(second_id),
             "company_name": "Beta Realty",
             "primary_domain": "beta.example.org",
-            "named_contact_name": "Alice Morgan",
-            "named_contact_title": "Principal",
-            "named_contact_emails": "",
-            "named_contact_phones": "",
-            "named_contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan-beta",
+            "contact_name": "Alice Morgan",
+            "contact_title": "Principal",
+            "contact_emails": "",
+            "contact_phones": "",
+            "contact_linkedin_urls": "https://www.linkedin.com/in/alice-morgan-beta",
         },
     ]
-    keys = [(row["company_id"], row["named_contact_name"].casefold()) for row in rows]
-    assert len(keys) == len(set(keys))
-    for row in rows:
-        assert any(
-            row[field]
-            for field in (
-                "named_contact_emails",
-                "named_contact_phones",
-                "named_contact_linkedin_urls",
-            )
+    contact_ids = {row["contact_id"] for row in rows}
+    assert len(contact_ids) == len(rows)
+    expected_contact_id = str(
+        uuid5(
+            UUID("02779786-bdba-4c41-9c01-b1a0fa0685d2"),
+            f"{first_id}:alice morgan",
         )
+    )
+    assert lead_rows[0]["primary_contact_id"] == expected_contact_id
+    assert expected_contact_id in contact_ids
+    with companies_path.open(newline="", encoding="utf-8") as handle:
+        company_rows = list(csv.DictReader(handle))
+    company_ids = {row["company_id"] for row in company_rows}
+    assert {row["company_id"] for row in lead_rows if row["company_id"]} <= company_ids
+    assert {row["company_id"] for row in primary_rows if row["company_id"]} <= company_ids
+    assert {row["company_id"] for row in rows} <= company_ids
+    for row in rows:
+        assert row["contact_name"]
         assert "<" not in "".join(row.values())
+
+    first_export = {
+        path: path.read_bytes()
+        for path in (leads_path, primary_contacts_path, contacts_path, companies_path)
+    }
+    await module.main()
+    assert first_export == {
+        path: path.read_bytes()
+        for path in (leads_path, primary_contacts_path, contacts_path, companies_path)
+    }
 
 
 @pytest.mark.asyncio

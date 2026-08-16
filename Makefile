@@ -66,7 +66,7 @@ security-test: test-security
 handover: install ## Regenerate, validate and bundle all release artifacts
 	$(PYTHON) scripts/build_handover_bundle.py
 
-workbook: install ## Build the three-sheet workbook from local CSV exports
+workbook: install ## Build the four-sheet workbook from local CSV exports
 	$(PYTHON) scripts/build_leads_workbook.py
 
 clean: ## Remove build artifacts and venv

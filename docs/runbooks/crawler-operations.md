@@ -11,7 +11,7 @@ A current workbook requires all four steps to succeed for the same workspace:
 1. `openstreetmap`, `finance_directory`, and `nz_finance_advisers`
 2. `extract_targeted_contacts.py --shards 3` with no `--max-domains` limit
 3. `export_leads_csv.py` after phases 1 and 2 finish
-4. `build_leads_workbook.py` from the three canonical CSV exports
+4. `build_leads_workbook.py` from the four canonical CSV exports
 
 The result is a full run of the checked-in bounds. It is not an exhaustive list
 of all Australian and New Zealand companies.
@@ -77,8 +77,9 @@ mkdir -p exports
   --region anz \
   --min-rank medium \
   --leads-path exports/anz_remote_leads_with_contacts.csv \
+  --primary-contacts-path exports/anz_primary_contacts.csv \
+  --contacts-path exports/anz_contacts.csv \
   --companies-path exports/anz_all_companies.csv \
-  --named-contacts-path exports/anz_named_contacts.csv \
   --leads-alias-path exports/anz_remote_leads_with_targeted_contacts.csv \
   --companies-alias-path exports/anz_all_companies_targeted.csv
 ```
@@ -91,9 +92,20 @@ mkdir -p exports
 
 The output is
 `exports/anz_full_leads_with_targeted_contacts.xlsx`. It contains `Leads`,
-`Named Contacts`, and `Companies` sheets sourced directly from the three
-canonical CSV files. Generated CSV and XLSX files remain local under
-`exports/`; they are ignored by Git.
+`Primary Contacts`, `Contacts`, and `Companies` sheets sourced directly from
+the four canonical CSV files. `Leads` contains one row per actionable outreach
+target: validated people with email or LinkedIn, plus distinct unattributed
+emails from High/Medium leads. A contact is never multiplied by the number of
+lead records at its company. Contact-only LinkedIn rows may have blank
+lead-specific fields. `Primary Contacts` stays one row per exported lead. Raw join
+IDs and mapped coordinates are retained in hidden columns at the far right.
+Generated CSV and XLSX files remain local under `exports/`; they are ignored by
+Git.
+
+The builder exits with status 2 without replacing the workbook if any CSV is
+missing, unreadable, malformed, or does not join consistently by ID. An older
+workbook may still exist and must not be treated as current. Rerun the complete
+export; do not repair generated headers or references manually.
 
 ## Resume after a failure
 
@@ -135,6 +147,7 @@ For a bounded diagnostic—not a final drain—use:
 | Contact shard fails | Rerun the complete contact command with the same IDs; completed hits remain deduplicated |
 | Contact fields remain blank | The website may not publish a validated person-linked route; retain the separate company route |
 | Export is unexpectedly small | Confirm the correct workspace, `--region`, `--min-rank`, and successful upstream phases |
+| Workbook Leads has fewer rows than the lead CSV | Expected when leads lack a valid person or generic company email; inspect the canonical lead CSV and `Contacts` before diagnosing scrape loss |
 
 Do not increase configured request rates as the first response to rate limiting.
 Faster runs should come from the supported three-shard contact command and from
@@ -142,17 +155,27 @@ measured adapter concurrency changes with tests.
 
 ## Post-run verification
 
-Check that all six files exist and are non-empty:
+Check that all seven files exist and are non-empty:
 
 ```bash
+for file in \
+  exports/anz_remote_leads_with_contacts.csv \
+  exports/anz_remote_leads_with_targeted_contacts.csv \
+  exports/anz_primary_contacts.csv \
+  exports/anz_contacts.csv \
+  exports/anz_all_companies.csv \
+  exports/anz_all_companies_targeted.csv \
+  exports/anz_full_leads_with_targeted_contacts.xlsx; do
+  test -s "$file" || { echo "Missing or empty: $file" >&2; exit 1; }
+done
+
 wc -l \
   exports/anz_remote_leads_with_contacts.csv \
   exports/anz_remote_leads_with_targeted_contacts.csv \
+  exports/anz_primary_contacts.csv \
+  exports/anz_contacts.csv \
   exports/anz_all_companies.csv \
-  exports/anz_all_companies_targeted.csv \
-  exports/anz_named_contacts.csv
-
-test -s exports/anz_full_leads_with_targeted_contacts.xlsx
+  exports/anz_all_companies_targeted.csv
 ```
 
 Confirm each alias is byte-identical to its canonical export:
@@ -164,8 +187,14 @@ cmp exports/anz_all_companies.csv \
   exports/anz_all_companies_targeted.csv
 ```
 
-Open both the complete lead file and the named-contact file. Spot-check:
+Open the complete lead, Primary Contacts, and Contacts files. Spot-check:
 
+- every workbook Leads row has a person email, an unattributed email, or a person LinkedIn profile
+- every unique LinkedIn URL in Contacts is present in Leads
+- each outreach target ID is unique; contacts are not repeated for every company lead
+- an exact, unique name-matched address is in the person lane and absent from the unattributed lane
+- unmatched addresses remain labelled `Unattributed email`, never assigned to a named person
+- contact-only rows have blank lead fields; nonblank Lead IDs identify the representative canonical lead
 - named emails, phones, and LinkedIn URLs belong to the displayed person
 - generic office routes stay in company fields
 - phone and email columns contain clean values rather than page text
