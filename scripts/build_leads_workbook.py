@@ -378,7 +378,12 @@ def _operational_leads(
             continue
         represented_contacts.add(contact_id)
         append_row(
-            {**representative, "company_email": "", "primary_contact_id": ""}
+            {
+                **representative,
+                "company_email": "",
+                "primary_contact_id": "",
+                **dict.fromkeys(PRIMARY_PERSON_FIELDS, ""),
+            }
             if representative
             else {
                 "company_id": contact["company_id"],

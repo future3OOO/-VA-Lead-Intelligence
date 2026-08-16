@@ -799,9 +799,23 @@ def test_workbook_leads_is_a_deduplicated_outreach_target_view(
         if sheet.cell(row=row, column=headers.index("Contact name") + 1).value == "Olivia Orphan"
     )
     assert sheet.cell(row=orphan_row, column=headers.index("Lead ID") + 1).value is None
+    outreach_target_ids = [
+        sheet.cell(row=row, column=headers.index("Outreach target ID") + 1).value
+        for row in range(2, sheet.max_row + 1)
+    ]
+    assert all(outreach_target_ids)
+    assert len(outreach_target_ids) == len(set(outreach_target_ids))
     for row in range(2, sheet.max_row + 1):
         if sheet.cell(row=row, column=headers.index("Outreach type") + 1).value == "Additional":
-            assert sheet.cell(row=row, column=headers.index("Primary contact ID") + 1).value is None
+            for field in (
+                "Primary contact ID",
+                "Selected primary name",
+                "Selected primary title",
+                "Selected primary email",
+                "Selected primary phone",
+                "Selected primary LinkedIn",
+            ):
+                assert sheet.cell(row=row, column=headers.index(field) + 1).value is None
     for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
         column = headers.index(field) + 1
         letter = sheet.cell(row=1, column=column).column_letter
