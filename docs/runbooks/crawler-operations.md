@@ -176,8 +176,6 @@ wc -l \
   exports/anz_contacts.csv \
   exports/anz_all_companies.csv \
   exports/anz_all_companies_targeted.csv
-
-test -s exports/anz_full_leads_with_targeted_contacts.xlsx
 ```
 
 Confirm each alias is byte-identical to its canonical export:

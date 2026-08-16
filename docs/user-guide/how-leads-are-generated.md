@@ -105,6 +105,7 @@ or source-hit routes, including people not selected as a lead's primary
 contact. The email, phone, and LinkedIn columns remain blank when only a
 validated name/title was published; otherwise they contain every associated
 route for that person.
+
 Use `anz_remote_leads_with_targeted_contacts.csv` when you need the normalized
 one-row-per-lead export. It contains the selected person and generic-company
 contact lanes. The workbook never removes or rewrites rows in this CSV.
@@ -120,9 +121,10 @@ shown in its own column; it moves to a person's email column only when it
 exactly and uniquely matches that validated person's name. A contact without a
 ranked lead may therefore have blank lead-specific fields. The canonical lead
 CSV remains the complete one-row-per-lead export.
-Use `Primary Contacts`
-for exactly one selected person per lead, `Contacts` for all validated people
-including phone-only and name-only records, and `Companies` for the company
+
+Use `Primary Contacts` for exactly one selected person per lead, `Contacts` for
+all validated people including phone-only and name-only records, and
+`Companies` for the company
 directory. Technical IDs and raw mapped coordinates are retained in hidden
 columns at the far right. The
 workbook and CSVs are local generated artifacts under `exports/`; none are

@@ -611,7 +611,7 @@ def test_workbook_leads_is_a_deduplicated_outreach_target_view(
             "company_id": "company-generic",
             "company_name": "Generic High Ltd",
             "contact_name": "Otto Other",
-            "contact_emails": "otto@generic-high.example.org",
+            "contact_emails": "'+otto@generic-high.example.org",
         },
         {
             "contact_id": "contact-direct",
@@ -723,7 +723,7 @@ def test_workbook_leads_is_a_deduplicated_outreach_target_view(
             "Generic High Ltd",
             "Additional",
             "Otto Other",
-            "otto@generic-high.example.org",
+            "'+otto@generic-high.example.org",
             None,
         ),
         (
@@ -767,7 +767,7 @@ def test_workbook_leads_is_a_deduplicated_outreach_target_view(
     }
     assert {
         ("Bob Taylor", "bob@direct-high.example.org"),
-        ("Otto Other", "otto@generic-high.example.org"),
+        ("Otto Other", "'+otto@generic-high.example.org"),
     } <= contact_people
     lead_contact_names = {
         sheet.cell(row=row, column=headers.index("Contact name") + 1).value
@@ -799,6 +799,9 @@ def test_workbook_leads_is_a_deduplicated_outreach_target_view(
         if sheet.cell(row=row, column=headers.index("Contact name") + 1).value == "Olivia Orphan"
     )
     assert sheet.cell(row=orphan_row, column=headers.index("Lead ID") + 1).value is None
+    for row in range(2, sheet.max_row + 1):
+        if sheet.cell(row=row, column=headers.index("Outreach type") + 1).value == "Additional":
+            assert sheet.cell(row=row, column=headers.index("Primary contact ID") + 1).value is None
     for field in ("Lead ID", "Company ID", "Contact ID", "Primary contact ID", "Coordinates"):
         column = headers.index(field) + 1
         letter = sheet.cell(row=1, column=column).column_letter

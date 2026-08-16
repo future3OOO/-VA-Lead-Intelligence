@@ -241,10 +241,12 @@ WIDE_COLUMNS = {
 
 
 def _has_exported_email(value: str) -> bool:
-    emails = [candidate.strip() for candidate in value.split(";") if candidate.strip()]
-    return bool(emails) and all(
-        extract_email(candidate) == candidate.casefold() for candidate in emails
-    )
+    emails = [
+        candidate.strip().removeprefix("'").casefold()
+        for candidate in value.split(";")
+        if candidate.strip()
+    ]
+    return bool(emails) and all(extract_email(email) == email for email in emails)
 
 
 def _operational_leads(
@@ -376,7 +378,7 @@ def _operational_leads(
             continue
         represented_contacts.add(contact_id)
         append_row(
-            {**representative, "company_email": ""}
+            {**representative, "company_email": "", "primary_contact_id": ""}
             if representative
             else {
                 "company_id": contact["company_id"],
