@@ -106,7 +106,7 @@ contact. The email, phone, and LinkedIn columns remain blank when only a
 validated name/title was published; otherwise they contain every associated
 route for that person.
 
-Use `anz_remote_leads_with_targeted_contacts.csv` when you need the normalized
+Use `anz_remote_leads_with_contacts.csv` when you need the normalized
 one-row-per-lead export. It contains the selected person and generic-company
 contact lanes. The workbook never removes or rewrites rows in this CSV.
 

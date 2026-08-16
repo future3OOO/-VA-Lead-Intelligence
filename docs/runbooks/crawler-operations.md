@@ -79,9 +79,7 @@ mkdir -p exports
   --leads-path exports/anz_remote_leads_with_contacts.csv \
   --primary-contacts-path exports/anz_primary_contacts.csv \
   --contacts-path exports/anz_contacts.csv \
-  --companies-path exports/anz_all_companies.csv \
-  --leads-alias-path exports/anz_remote_leads_with_targeted_contacts.csv \
-  --companies-alias-path exports/anz_all_companies_targeted.csv
+  --companies-path exports/anz_all_companies.csv
 ```
 
 ### 4. Build the workbook
@@ -155,36 +153,23 @@ measured adapter concurrency changes with tests.
 
 ## Post-run verification
 
-Check that all seven files exist and are non-empty:
+Check that all five generated files exist and are non-empty:
 
 ```bash
 for file in \
   exports/anz_remote_leads_with_contacts.csv \
-  exports/anz_remote_leads_with_targeted_contacts.csv \
   exports/anz_primary_contacts.csv \
   exports/anz_contacts.csv \
   exports/anz_all_companies.csv \
-  exports/anz_all_companies_targeted.csv \
   exports/anz_full_leads_with_targeted_contacts.xlsx; do
   test -s "$file" || { echo "Missing or empty: $file" >&2; exit 1; }
 done
 
 wc -l \
   exports/anz_remote_leads_with_contacts.csv \
-  exports/anz_remote_leads_with_targeted_contacts.csv \
   exports/anz_primary_contacts.csv \
   exports/anz_contacts.csv \
-  exports/anz_all_companies.csv \
-  exports/anz_all_companies_targeted.csv
-```
-
-Confirm each alias is byte-identical to its canonical export:
-
-```bash
-cmp exports/anz_remote_leads_with_contacts.csv \
-  exports/anz_remote_leads_with_targeted_contacts.csv
-cmp exports/anz_all_companies.csv \
-  exports/anz_all_companies_targeted.csv
+  exports/anz_all_companies.csv
 ```
 
 Open the complete lead, Primary Contacts, and Contacts files. Spot-check:

@@ -96,11 +96,9 @@ The final files are written under `exports/`:
 | File | Contents |
 |---|---|
 | `anz_remote_leads_with_contacts.csv` | One row per ranked lead with snapshot lead, company, and primary-contact IDs plus selected-person and generic-company fields |
-| `anz_remote_leads_with_targeted_contacts.csv` | Byte-identical alias of the complete lead export |
 | `anz_primary_contacts.csv` | Exactly one row per lead; selected person details or `primary_contact_status=unavailable` |
 | `anz_contacts.csv` | One row per validated person discovered in company or source-hit routes, with every associated email, phone, and LinkedIn URL |
 | `anz_all_companies.csv` | One row per company with the best collected routes |
-| `anz_all_companies_targeted.csv` | Byte-identical alias of the company export |
 | `anz_full_leads_with_targeted_contacts.xlsx` | Four-sheet prospecting workbook; Leads is a deduplicated outreach-target view containing every validated person LinkedIn profile, ranked email targets, and clearly separated person-owned and unattributed emails |
 
 Everything under `exports/` is a generated local artifact. CSV and XLSX output
@@ -134,19 +132,26 @@ WSL2 rather than native PowerShell.
 
 ### 1. Install and start the services
 
-Requirements: Python 3.11+, GNU Make, Docker, Docker Compose, and `curl`.
+Requirements: Linux or WSL2, Python 3.11+, GNU Make, Docker with Compose, Git,
+and `curl`.
 
 ```bash
+git clone https://github.com/future3OOO/-VA-Lead-Intelligence.git
+cd -- -VA-Lead-Intelligence
 cp .env.example .env
 make install
 docker compose up -d postgres redis temporal
-make migration-check
+docker compose ps
+.venv/bin/python -m alembic upgrade head
 ```
+
+Wait until PostgreSQL is healthy before running the migration. The database is
+local Docker state; generated exports are not downloaded from GitHub.
 
 Start the API locally so you can create a workspace and campaign:
 
 ```bash
-.venv/bin/python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8000
+.venv/bin/python -m uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
 
 Leave that process running and open a second terminal in the repository.
@@ -257,12 +262,10 @@ mkdir -p exports
   --leads-path exports/anz_remote_leads_with_contacts.csv \
   --primary-contacts-path exports/anz_primary_contacts.csv \
   --contacts-path exports/anz_contacts.csv \
-  --companies-path exports/anz_all_companies.csv \
-  --leads-alias-path exports/anz_remote_leads_with_targeted_contacts.csv \
-  --companies-alias-path exports/anz_all_companies_targeted.csv
+  --companies-path exports/anz_all_companies.csv
 ```
 
-Open `exports/anz_remote_leads_with_targeted_contacts.csv` for the complete
+Open `exports/anz_remote_leads_with_contacts.csv` for the complete
 lead list, `exports/anz_primary_contacts.csv` for one selected person per lead,
 and `exports/anz_contacts.csv` for the complete person-level view.
 Re-running the export replaces those files from the current database state.
